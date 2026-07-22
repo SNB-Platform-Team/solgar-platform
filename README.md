@@ -9,7 +9,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # 3. Requirements
 pip install -r requirements.txt
 
-# 4. Create .env file 
+# 4. Create .env file
 cp .env.example .env
 
 # 5. DB
