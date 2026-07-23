@@ -50,28 +50,7 @@ authorization code flow, keeping the client secret and tokens on the server.
 
 ---
 
-## Project structure
-solgar-platform/
-├── accounts/ # Authentication and user management
-│ ├── models.py # Custom User model
-│ ├── forms.py # Login form
-│ ├── views.py # Login, logout, home, Azure SSO stub
-│ ├── urls.py # Routes namespaced under 'accounts'
-│ ├── admin.py # Admin registration
-│ └── migrations/
-├── config/ # Project configuration
-│ ├── settings.py # Settings, reads from .env
-│ ├── urls.py # Root URL config
-│ └── wsgi.py
-├── templates/accounts/ # login.html, home.html
-├── static/css/ # style.css
-├── docker-compose.yml # Local MySQL
-├── .env.example # Configuration template
-├── requirements.txt
-└── manage.py
 
-
----
 
 ## Local setup
 
