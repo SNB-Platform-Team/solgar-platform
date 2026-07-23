@@ -1,0 +1,31 @@
+{% comment %}
+Authenticated landing page — placeholder until real modules are added.
+{% endcomment %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Solgar Internal Platform</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <header class="app-header">
+        <span class="app-brand">Solgar</span>
+        <nav class="app-nav">
+            <span class="app-user">{{ user.get_full_name|default:user.username }}</span>
+            <form method="post" action="{% url 'accounts:logout' %}" class="logout-form">
+                {% csrf_token %}
+                <button type="submit" class="btn-link">Log out</button>
+            </form>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        <h1>Welcome, {{ user.username }}</h1>
+        <p>You are signed in to the Solgar internal platform.</p>
+        <p class="meta">Account type: {{ user.get_user_type_display }}</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+{% comment %}
+Solgar Internal Platform — login page.
+
+Microsoft SSO button (stubbed until Azure AD is configured) plus a local
+username/password form protected by invisible reCAPTCHA v3.
+{% endcomment %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Solgar Internal Platform</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% if recaptcha_site_key %}
+    <script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
+    {% endif %}
+</head>
+<body class="login-page">
+    <main class="login-box">
+        <h1 class="login-title">Solgar</h1>
+        <p class="login-subtitle">Internal Platform</p>
+
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="message {{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <a href="{% url 'accounts:azure_login' %}" class="btn btn-microsoft">
+            Sign in with Microsoft
+        </a>
+
+        <div class="divider"><span>or</span></div>
+
+        <form method="post" id="loginForm" novalidate>
+            {% csrf_token %}
+
+            <label for="{{ form.username.id_for_label }}">Username</label>
+            {{ form.username }}
+            {% for error in form.username.errors %}
+            <p class="field-error">{{ error }}</p>
+            {% endfor %}
+
+            <label for="{{ form.password.id_for_label }}">Password</label>
+            {{ form.password }}
+            {% for error in form.password.errors %}
+            <p class="field-error">{{ error }}</p>
+            {% endfor %}
+
+            {{ form.recaptcha_token }}
+
+            <button type="submit" class="btn btn-primary">Sign In</button>
+        </form>
+
+        <p class="privacy-note">This platform is for Solgar employees only.</p>
+    </main>
+
+    {% if recaptcha_site_key %}
+    <script>
+        // reCAPTCHA v3: fetch a token, then submit the form.
+        const form = document.getElementById("loginForm");
+        form.addEventListener("submit", function (event) {
+            event.preventDefault();
+            grecaptcha.ready(function () {
+                grecaptcha
+                    .execute("{{ recaptcha_site_key }}", { action: "login" })
+                    .then(function (token) {
+                        document.getElementById("id_recaptcha_token").value = token;
+                        form.submit();
+                    });
+            });
+        });
+    </script>
+    {% endif %}
+</body>
+</html>

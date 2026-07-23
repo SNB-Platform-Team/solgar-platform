@@ -1,0 +1,165 @@
+/* Solgar Internal Platform — base styles. */
+
+:root {
+    --color-primary: #6a2c8f;
+    --color-primary-dark: #542370;
+    --color-bg: #f4f4f7;
+    --color-surface: #ffffff;
+    --color-text: #1e1e24;
+    --color-border: #d9d9e0;
+    --color-error: #c0392b;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: var(--font);
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.5;
+}
+
+/* --- Login --- */
+.login-page {
+    display: flex;
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.login-box {
+    width: 100%;
+    max-width: 380px;
+    background: var(--color-surface);
+    padding: 2rem;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.login-title {
+    margin: 0;
+    text-align: center;
+    color: var(--color-primary);
+    font-size: 2rem;
+    letter-spacing: 0.5px;
+}
+
+.login-subtitle {
+    margin: 0.25rem 0 1.5rem;
+    text-align: center;
+    color: #77778a;
+    font-size: 0.95rem;
+}
+
+/* --- Form --- */
+label {
+    display: block;
+    margin: 0.75rem 0 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(106, 44, 143, 0.15);
+}
+
+.field-error {
+    margin: 0.25rem 0 0;
+    color: var(--color-error);
+    font-size: 0.8rem;
+}
+
+/* --- Buttons --- */
+.btn {
+    display: block;
+    width: 100%;
+    padding: 0.7rem 1rem;
+    margin-top: 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-primary:hover { background: var(--color-primary-dark); }
+
+.btn-microsoft { background: #2f2f2f; color: #fff; }
+.btn-microsoft:hover { background: #000; }
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+}
+
+/* --- Divider --- */
+.divider {
+    display: flex;
+    align-items: center;
+    color: #9a9aac;
+    margin: 1.25rem 0;
+    font-size: 0.85rem;
+}
+.divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid var(--color-border);
+}
+.divider span { padding: 0 0.75rem; }
+
+/* --- Messages --- */
+.messages { list-style: none; padding: 0; margin: 0 0 1rem; }
+.message {
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+.message.error { background: #fdecea; color: var(--color-error); }
+.message.info { background: #eef2fb; color: #2c3e80; }
+.message.success { background: #eafaf1; color: #1e8449; }
+
+.privacy-note {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.78rem;
+    color: #9a9aac;
+}
+
+/* --- App shell --- */
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1.25rem;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+}
+.app-brand { font-weight: 700; color: var(--color-primary); }
+.app-nav { display: flex; align-items: center; gap: 1rem; }
+.app-user { font-size: 0.9rem; color: #55556a; }
+.app-main { max-width: 900px; margin: 2rem auto; padding: 0 1.25rem; }
+.logout-form { margin: 0; }
+.meta { color: #77778a; font-size: 0.9rem; }
