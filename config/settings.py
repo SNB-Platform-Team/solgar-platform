@@ -60,6 +60,7 @@ INSTALLED_APPS: list[str] = [
 
 MIDDLEWARE: list[str] = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -145,4 +146,28 @@ STATIC_URL: str = "/static/"
 STATICFILES_DIRS: list[Path] = [BASE_DIR / "static"]
 STATIC_ROOT: Path = BASE_DIR / "staticfiles"
 
+STORAGES: dict[str, dict[str, str]] = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 DEFAULT_AUTO_FIELD: str = "django.db.models.BigAutoField"
+
+# --- Production security (enabled only when DEBUG is off) ---
+if not DEBUG:
+    SECURE_SSL_REDIRECT: bool = True
+    SESSION_COOKIE_SECURE: bool = True
+    CSRF_COOKIE_SECURE: bool = True
+    SECURE_HSTS_SECONDS: int = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS: bool = True
+    SECURE_HSTS_PRELOAD: bool = True
+    SECURE_PROXY_SSL_HEADER: tuple[str, str] = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_CONTENT_TYPE_NOSNIFF: bool = True
+    X_FRAME_OPTIONS: str = "DENY"
+    CSRF_TRUSTED_ORIGINS: list[str] = [
+        f"https://{host}" for host in ALLOWED_HOSTS if host
+    ]
