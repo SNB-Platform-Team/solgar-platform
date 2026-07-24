@@ -1,0 +1,34 @@
+# Solgar Internal Platform — systemd service unit for Gunicorn.
+#
+# Install:
+#   sudo cp deploy/gunicorn.service /etc/systemd/system/solgar.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now solgar
+#
+# Adjust User, WorkingDirectory and paths if the deployment layout differs.
+
+[Unit]
+Description=Solgar Internal Platform (Gunicorn)
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/solgar-platform
+Environment="PATH=/var/www/solgar-platform/venv/bin"
+EnvironmentFile=/var/www/solgar-platform/.env
+ExecStart=/var/www/solgar-platform/venv/bin/gunicorn \
+    --workers 3 \
+    --bind unix:/run/solgar/gunicorn.sock \
+    --access-logfile /var/log/solgar/access.log \
+    --error-logfile /var/log/solgar/error.log \
+    config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+RuntimeDirectory=solgar
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
