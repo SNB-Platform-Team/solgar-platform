@@ -56,3 +56,36 @@ class User(AbstractUser):
     def __str__(self) -> str:
         """Readable representation for admin and logs."""
         return f"{self.get_full_name() or self.username} ({self.get_user_type_display()})"
+
+
+class LoginLog(models.Model):
+    """Audit record of a user login or logout event."""
+
+    class EventType(models.TextChoices):
+        """Type of authentication event."""
+
+        LOGIN = "LOGIN", "Вход"
+        LOGOUT = "LOGOUT", "Выход"
+
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="login_logs",
+        verbose_name="User",
+    )
+    event_type = models.CharField(
+        "Event type", max_length=10, choices=EventType.choices
+    )
+    ip_address = models.GenericIPAddressField("IP address", null=True, blank=True)
+    user_agent = models.CharField("User agent", max_length=300, blank=True)
+    timestamp = models.DateTimeField("Timestamp", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Login log"
+        verbose_name_plural = "Login logs"
+        db_table = "accounts_login_log"
+        ordering = ["-timestamp"]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return f"{self.user} — {self.get_event_type_display()} — {self.timestamp}"
