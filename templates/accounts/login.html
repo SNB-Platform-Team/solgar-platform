@@ -1,79 +1,132 @@
 {% comment %}
 Solgar Internal Platform — login page.
-
-Microsoft SSO button (stubbed until Azure AD is configured) plus a local
-username/password form protected by invisible reCAPTCHA v3.
+Microsoft SSO (primary) plus a local username/password form with
+invisible reCAPTCHA v3.
 {% endcomment %}
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — Solgar Internal Platform</title>
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <title>Solgar — Вход</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
     {% if recaptcha_site_key %}
     <script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
     {% endif %}
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --gold: #c9a84c; --gold-light: #e8c96a; --gold-dim: #a8873a;
+            --cream: #f5efe0; --dark: #0d0b08; --dark2: #1a1610;
+            --text-dim: rgba(245,239,224,0.5);
+        }
+        html, body { height: 100%; font-family: 'Jost', sans-serif; background: var(--dark); color: var(--cream); }
+        .hero { position: relative; min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+        .hero-visual { position: relative; overflow: hidden; }
+        .hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: brightness(0.65); animation: zoom 20s ease-in-out infinite alternate; }
+        @keyframes zoom { from { transform: scale(1.03); } to { transform: scale(1.08); } }
+        .hero-overlay { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(13,11,8,0.2) 60%, rgba(13,11,8,0.97) 100%); }
+        .hero-panel { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px 70px; background: var(--dark2); border-left: 1px solid rgba(201,168,76,0.15); z-index: 2; animation: slide-in 0.9s cubic-bezier(0.16,1,0.3,1) both; }
+        @keyframes slide-in { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+        .hero-panel::before, .hero-panel::after { content: ''; position: absolute; width: 60px; height: 60px; border-color: var(--gold); border-style: solid; opacity: 0.4; }
+        .hero-panel::before { top: 30px; left: 30px; border-width: 1px 0 0 1px; }
+        .hero-panel::after { bottom: 30px; right: 30px; border-width: 0 1px 1px 0; }
+        .panel-inner { width: 100%; max-width: 380px; }
+        .logo-wrap { text-align: center; margin-bottom: 44px; animation: fade-up 0.7s 0.2s both; }
+        .logo-wrap img { width: 160px; filter: drop-shadow(0 4px 20px rgba(201,168,76,0.3)); }
+        @keyframes fade-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .tagline { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-style: italic; color: var(--gold); text-align: center; margin-bottom: 36px; animation: fade-up 0.7s 0.3s both; }
+        .form-title { font-family: 'Cormorant Garamond', serif; font-size: 1.9rem; font-weight: 300; margin-bottom: 6px; animation: fade-up 0.7s 0.4s both; }
+        .form-subtitle { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 28px; font-weight: 300; animation: fade-up 0.7s 0.45s both; }
+        .alert-error { background: rgba(224,85,85,0.12); border: 1px solid rgba(224,85,85,0.35); border-radius: 4px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.85rem; color: #f4a0a0; }
+        .alert-info { background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.85rem; color: var(--gold-light); }
+        .btn-microsoft { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 13px; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; color: var(--cream); font-family: 'Jost', sans-serif; font-size: 0.9rem; font-weight: 400; text-decoration: none; cursor: pointer; transition: border-color 0.3s, background 0.3s; animation: fade-up 0.7s 0.5s both; }
+        .btn-microsoft:hover { border-color: var(--gold); background: rgba(201,168,76,0.08); }
+        .btn-microsoft svg { width: 18px; height: 18px; }
+        .field { margin-bottom: 20px; animation: fade-up 0.7s 0.6s both; }
+        .field label { display: block; font-size: 0.78rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+        .field input { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 13px 16px; color: var(--cream); font-family: 'Jost', sans-serif; font-size: 0.95rem; font-weight: 300; outline: none; transition: border-color 0.3s, background 0.3s, box-shadow 0.3s; }
+        .field input::placeholder { color: var(--text-dim); }
+        .field input:focus { border-color: var(--gold); background: rgba(201,168,76,0.06); box-shadow: 0 0 0 3px rgba(201,168,76,0.08); }
+        .btn-submit { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--gold-dim), var(--gold), var(--gold-light)); border: none; border-radius: 4px; color: var(--dark); font-family: 'Jost', sans-serif; font-size: 0.88rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: opacity 0.3s, transform 0.2s, box-shadow 0.3s; animation: fade-up 0.7s 0.72s both; }
+        .btn-submit:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(201,168,76,0.35); }
+        .divider { display: flex; align-items: center; gap: 12px; margin: 28px 0; animation: fade-up 0.7s 0.55s both; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(201,168,76,0.2); }
+        .divider span { font-size: 0.75rem; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+        .privacy-note { text-align: center; font-size: 0.78rem; color: var(--text-dim); margin-top: 28px; animation: fade-up 0.7s 0.83s both; }
+        @media (max-width: 900px) {
+            .hero { grid-template-columns: 1fr; }
+            .hero-visual { height: 220px; }
+            .hero-overlay { background: linear-gradient(180deg, transparent 0%, rgba(13,11,8,0.9) 100%); }
+            .hero-panel { border-left: none; border-top: 1px solid rgba(201,168,76,0.15); padding: 48px 28px; }
+        }
+    </style>
 </head>
-<body class="login-page">
-    <main class="login-box">
-        <h1 class="login-title">Solgar</h1>
-        <p class="login-subtitle">Internal Platform</p>
+<body>
+<div class="hero">
+    <div class="hero-visual">
+        <div class="hero-bg" style="background-image: url('{% static "images/arka-plan.jpg" %}');"></div>
+        <div class="hero-overlay"></div>
+    </div>
+    <div class="hero-panel">
+        <div class="panel-inner">
+            <div class="logo-wrap">
+                <img src="{% static 'images/logo_inline_gold.png' %}" alt="Solgar">
+            </div>
+            <p class="tagline">Внутренняя платформа</p>
+            <h2 class="form-title">Добро пожаловать</h2>
+            <p class="form-subtitle">Войдите в систему для продолжения</p>
 
-        {% if messages %}
-        <ul class="messages">
             {% for message in messages %}
-            <li class="message {{ message.tags }}">{{ message }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        <a href="{% url 'accounts:azure_login' %}" class="btn btn-microsoft">
-            Sign in with Microsoft
-        </a>
-
-        <div class="divider"><span>or</span></div>
-
-        <form method="post" id="loginForm" novalidate>
-            {% csrf_token %}
-
-            <label for="{{ form.username.id_for_label }}">Username</label>
-            {{ form.username }}
-            {% for error in form.username.errors %}
-            <p class="field-error">{{ error }}</p>
+            <div class="alert-{{ message.tags }}">{{ message }}</div>
             {% endfor %}
 
-            <label for="{{ form.password.id_for_label }}">Password</label>
-            {{ form.password }}
-            {% for error in form.password.errors %}
-            <p class="field-error">{{ error }}</p>
-            {% endfor %}
+            <a href="{% url 'accounts:azure_login' %}" class="btn-microsoft">
+                <svg viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                    <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                    <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                    <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                </svg>
+                Войти через Microsoft
+            </a>
 
-            {{ form.recaptcha_token }}
+            <div class="divider"><span>или</span></div>
 
-            <button type="submit" class="btn btn-primary">Sign In</button>
-        </form>
+            <form method="post" id="loginForm">
+                {% csrf_token %}
+                <input type="hidden" name="recaptcha_token" id="recaptchaToken">
+                <div class="field">
+                    <label>Имя пользователя</label>
+                    <input type="text" name="username" placeholder="Ваш логин" autocomplete="username" required>
+                </div>
+                <div class="field">
+                    <label>Пароль</label>
+                    <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-submit">Войти</button>
+            </form>
 
-        <p class="privacy-note">This platform is for Solgar employees only.</p>
-    </main>
+            <p class="privacy-note">Только для сотрудников Solgar.</p>
+        </div>
+    </div>
+</div>
 
-    {% if recaptcha_site_key %}
-    <script>
-        // reCAPTCHA v3: fetch a token, then submit the form.
-        const form = document.getElementById("loginForm");
-        form.addEventListener("submit", function (event) {
-            event.preventDefault();
-            grecaptcha.ready(function () {
-                grecaptcha
-                    .execute("{{ recaptcha_site_key }}", { action: "login" })
-                    .then(function (token) {
-                        document.getElementById("id_recaptcha_token").value = token;
-                        form.submit();
-                    });
-            });
+{% if recaptcha_site_key %}
+<script>
+    const form = document.getElementById("loginForm");
+    form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        grecaptcha.ready(function () {
+            grecaptcha.execute("{{ recaptcha_site_key }}", { action: "login" })
+                .then(function (token) {
+                    document.getElementById("recaptchaToken").value = token;
+                    form.submit();
+                });
         });
-    </script>
-    {% endif %}
+    });
+</script>
+{% endif %}
 </body>
 </html>
