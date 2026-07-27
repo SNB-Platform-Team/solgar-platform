@@ -75,7 +75,9 @@ Base layout for authenticated pages. Extend with {% block content %}.
         <aside class="sidebar">
             <div class="nav-section">Меню</div>
             <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
-            {% comment %} Модули будут добавлены здесь по мере разработки {% endcomment %}
+
+            <div class="nav-section">Организация</div>
+            <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
         </aside>
 
         <main class="content">

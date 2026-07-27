@@ -101,3 +101,9 @@ ipython_config.py
 .pdm-build/
 .pixi
 __pypackages__/
+
+
+# ---- Kişisel veri (çalışan listeleri) ----
+data/
+*.xlsx
+*.csv
