@@ -1,31 +1,43 @@
-{% comment %}
-Authenticated landing page — placeholder until real modules are added.
-{% endcomment %}
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard — Solgar Internal Platform</title>
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
-</head>
-<body>
-    <header class="app-header">
-        <span class="app-brand">Solgar</span>
-        <nav class="app-nav">
-            <span class="app-user">{{ user.get_full_name|default:user.username }}</span>
-            <form method="post" action="{% url 'accounts:logout' %}" class="logout-form">
-                {% csrf_token %}
-                <button type="submit" class="btn-link">Log out</button>
-            </form>
-        </nav>
-    </header>
+{% extends "base.html" %}
 
-    <main class="app-main">
-        <h1>Welcome, {{ user.username }}</h1>
-        <p>You are signed in to the Solgar internal platform.</p>
-        <p class="meta">Account type: {{ user.get_user_type_display }}</p>
-    </main>
-</body>
-</html>
+{% block title %}Главная{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<style>
+    .welcome-card { background: var(--dark2); border: 1px solid var(--border); border-radius: 6px; padding: 32px 36px; margin-bottom: 28px; }
+    .welcome-card h2 { font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: 1.6rem; color: var(--gold-light); margin-bottom: 8px; }
+    .welcome-card p { color: var(--text-dim); font-size: 0.92rem; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+    .module-card { background: var(--dark2); border: 1px solid var(--border); border-radius: 6px; padding: 24px; opacity: 0.5; }
+    .module-card h3 { font-size: 1rem; font-weight: 500; color: var(--gold); margin-bottom: 6px; }
+    .module-card p { font-size: 0.82rem; color: var(--text-dim); }
+    .soon { display: inline-block; margin-top: 12px; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-dim); border: 1px solid var(--gold-dim); border-radius: 3px; padding: 3px 8px; }
+</style>
+
+<h1 class="page-title">Главная</h1>
+<p class="page-subtitle">Добро пожаловать во внутреннюю платформу Solgar</p>
+
+<div class="welcome-card">
+    <h2>Здравствуйте, {{ user.get_full_name|default:user.username }}</h2>
+    <p>Вы вошли в систему. Модули появятся здесь по мере разработки.</p>
+</div>
+
+<div class="card-grid">
+    <div class="module-card">
+        <h3>Сотрудники</h3>
+        <p>Справочник сотрудников компании</p>
+        <span class="soon">Скоро</span>
+    </div>
+    <div class="module-card">
+        <h3>Заявки на отпуск</h3>
+        <p>Управление заявками и согласованием</p>
+        <span class="soon">Скоро</span>
+    </div>
+    <div class="module-card">
+        <h3>Объявления</h3>
+        <p>Внутренние объявления компании</p>
+        <span class="soon">Скоро</span>
+    </div>
+</div>
+{% endblock %}
