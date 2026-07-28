@@ -40,14 +40,14 @@ def get_secret(key: str, default: Any = _SENTINEL) -> str:
     return default
 
 
-#  Core 
+#  Core
 SECRET_KEY: str = get_secret("DJANGO_SECRET_KEY")
 DEBUG: bool = get_secret("DJANGO_DEBUG", "False") == "True"
 ALLOWED_HOSTS: list[str] = [
     h.strip() for h in get_secret("ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
 
-#  Applications 
+#  Applications
 INSTALLED_APPS: list[str] = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -56,6 +56,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "accounts",
+    "employees",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -89,25 +90,44 @@ TEMPLATES: list[dict[str, Any]] = [
 
 WSGI_APPLICATION: str = "config.wsgi.application"
 
-# --- Database (MySQL via Docker) ---
-DATABASES: dict[str, dict[str, Any]] = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": get_secret("DB_NAME"),
-        "USER": get_secret("DB_USER"),
-        "PASSWORD": get_secret("DB_PASSWORD"),
-        "HOST": get_secret("DB_HOST", "127.0.0.1"),
-        "PORT": get_secret("DB_PORT", "3307"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
-    }
-}
+# --- Database ---
+# USE_AZURE_MYSQL=True  → Azure MySQL with Entra ID token auth (production)
+# otherwise             → local Docker MySQL with a static password
+USE_AZURE_MYSQL: bool = get_secret("USE_AZURE_MYSQL", "False") == "True"
 
-#  Custom user model 
+if USE_AZURE_MYSQL:
+    DATABASES: dict[str, dict[str, Any]] = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": get_secret("DB_NAME"),
+            "USER": get_secret("DB_USER"),
+            "PASSWORD": "",  # injected per-connection via config/db_token.py
+            "HOST": get_secret("DB_HOST"),
+            "PORT": get_secret("DB_PORT", "3306"),
+            "OPTIONS": {
+                "ssl": {"ssl-mode": "REQUIRED"},
+            },
+        }
+    }
+else:
+    DATABASES: dict[str, dict[str, Any]] = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": get_secret("DB_NAME"),
+            "USER": get_secret("DB_USER"),
+            "PASSWORD": get_secret("DB_PASSWORD"),
+            "HOST": get_secret("DB_HOST", "127.0.0.1"),
+            "PORT": get_secret("DB_PORT", "3307"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
+
+#  Custom user model
 AUTH_USER_MODEL: str = "accounts.User"
 
-#  Password validation 
+#  Password validation
 AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -115,19 +135,19 @@ AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-#  Auth redirects 
+#  Auth redirects
 LOGIN_URL: str = "accounts:login"
 LOGIN_REDIRECT_URL: str = "accounts:home"
 LOGOUT_REDIRECT_URL: str = "accounts:login"
 
-#  reCAPTCHA v3 (disabled locally while keys are empty) 
+#  reCAPTCHA v3 (disabled locally while keys are empty)
 RECAPTCHA: dict[str, str] = {
     "SITE_KEY": get_secret("RECAPTCHA_SITE_KEY", ""),
     "SECRET_KEY": get_secret("RECAPTCHA_SECRET_KEY", ""),
     "MIN_SCORE": get_secret("RECAPTCHA_MIN_SCORE", "0.5"),
 }
 
-#  Azure AD (filled in when SSO is wired up) 
+#  Azure AD (filled in when SSO is wired up)
 AZURE_AD: dict[str, str] = {
     "CLIENT_ID": get_secret("AZURE_AD_CLIENT_ID", ""),
     "TENANT_ID": get_secret("AZURE_AD_TENANT_ID", ""),
@@ -135,13 +155,13 @@ AZURE_AD: dict[str, str] = {
     "REDIRECT_URI": get_secret("AZURE_AD_REDIRECT_URI", ""),
 }
 
-#  Internationalization 
+#  Internationalization
 LANGUAGE_CODE: str = "en-us"
 TIME_ZONE: str = "Europe/Istanbul"
 USE_I18N: bool = True
 USE_TZ: bool = True
 
-#  Static files 
+#  Static files
 STATIC_URL: str = "/static/"
 STATICFILES_DIRS: list[Path] = [BASE_DIR / "static"]
 STATIC_ROOT: Path = BASE_DIR / "staticfiles"
@@ -173,13 +193,6 @@ if not DEBUG:
     ]
 
 
-INSTALLED_APPS: list[str] = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "accounts",
-    "employees",
-]
+# Load the Azure MySQL token injector (no-op unless USE_AZURE_MYSQL=True)
+if USE_AZURE_MYSQL:
+    import config.db_token  # noqa: F401
