@@ -17,11 +17,28 @@ Base layout for authenticated pages. Extend with {% block content %}.
             --text-dim: rgba(245,239,224,0.5);
             --border: rgba(201,168,76,0.15);
         }
-        html, body { height: 100%; font-family: 'Jost', sans-serif; background: var(--dark); color: var(--cream); }
+        html, body { height: 100%; font-family: 'Jost', sans-serif; color: var(--cream); }
         body { display: flex; flex-direction: column; min-height: 100vh; }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url('{% static "images/background.jpg" %}');
+            background-size: cover;
+            background-position: center;
+            filter: blur(0px) brightness(0.55); /*background picture blur*/
+            z-index: -2;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(13,11,8,0.35);
+            z-index: -1;
+        }
 
         /* Top bar */
-        .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 64px; background: var(--dark2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 64px; background: rgba(26,22,16,0.6); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
         .topbar-brand { display: flex; align-items: center; gap: 12px; }
         .topbar-brand img { height: 32px; }
         .topbar-user { display: flex; align-items: center; gap: 18px; font-size: 0.9rem; }
@@ -32,14 +49,24 @@ Base layout for authenticated pages. Extend with {% block content %}.
 
         /* Layout */
         .layout { display: flex; flex: 1; }
-        .sidebar { width: 230px; background: var(--dark2); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
+        .sidebar { width: 230px; background: rgba(26,22,16,0.55); backdrop-filter: blur(10px); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
         .nav-section { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); padding: 0 24px; margin: 20px 0 10px; }
         .nav-link { display: flex; align-items: center; gap: 12px; padding: 11px 24px; color: var(--cream); text-decoration: none; font-size: 0.92rem; font-weight: 300; border-left: 2px solid transparent; transition: background 0.2s, border-color 0.2s; }
         .nav-link:hover { background: rgba(201,168,76,0.06); border-left-color: var(--gold-dim); }
         .nav-link.active { background: rgba(201,168,76,0.1); border-left-color: var(--gold); color: var(--gold-light); }
 
+        /* Açılır menü grupları */
+        .nav-group { position: relative; }
+        .nav-group-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 24px; color: var(--gold); cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.72rem; user-select: none; }
+        .nav-group-title::after { content: '⌄'; font-size: 0.9rem; transition: transform 0.3s; opacity: 0.6; }
+        .nav-group:hover .nav-group-title::after { transform: rotate(180deg); }
+        .nav-submenu { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+        .nav-group:hover .nav-submenu { max-height: 300px; }
+        .nav-submenu .nav-link { padding-left: 40px; font-size: 0.88rem; }
+
         /* Content */
         .content { flex: 1; padding: 36px 44px; }
+        .panel { background: rgba(26,22,16,0.82); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 10px; padding: 36px 40px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
         .page-title { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 300; margin-bottom: 4px; }
         .page-subtitle { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 32px; }
 
@@ -51,6 +78,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
         @media (max-width: 800px) {
             .sidebar { display: none; }
             .content { padding: 24px 20px; }
+            .panel { padding: 24px 22px; }
         }
     </style>
 </head>
@@ -76,8 +104,12 @@ Base layout for authenticated pages. Extend with {% block content %}.
             <div class="nav-section">Меню</div>
             <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
 
-            <div class="nav-section">Организация</div>
-            <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
+            <div class="nav-group">
+                <div class="nav-group-title">Организация</div>
+                <div class="nav-submenu">
+                    <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
+                </div>
+            </div>
         </aside>
 
         <main class="content">
@@ -85,7 +117,9 @@ Base layout for authenticated pages. Extend with {% block content %}.
             <div class="alert-{{ message.tags }}">{{ message }}</div>
             {% endfor %}
 
-            {% block content %}{% endblock %}
+            <div class="panel">
+                {% block content %}{% endblock %}
+            </div>
         </main>
     </div>
 </body>

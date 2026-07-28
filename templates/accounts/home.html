@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Главная{% endblock %}
 {% block nav_home %}active{% endblock %}
 
 {% block content %}
 <style>
-    .welcome-card { background: var(--dark2); border: 1px solid var(--border); border-radius: 6px; padding: 32px 36px; margin-bottom: 28px; }
+    .welcome-card { background: rgba(13,11,8,0.5); border: 1px solid var(--border); border-radius: 6px; padding: 28px 32px; margin-bottom: 28px; }
     .welcome-card h2 { font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: 1.6rem; color: var(--gold-light); margin-bottom: 8px; }
     .welcome-card p { color: var(--text-dim); font-size: 0.92rem; }
     .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
-    .module-card { background: var(--dark2); border: 1px solid var(--border); border-radius: 6px; padding: 24px; opacity: 0.5; }
+    .module-card { background: rgba(13,11,8,0.5); border: 1px solid var(--border); border-radius: 6px; padding: 24px; }
     .module-card h3 { font-size: 1rem; font-weight: 500; color: var(--gold); margin-bottom: 6px; }
     .module-card p { font-size: 0.82rem; color: var(--text-dim); }
     .soon { display: inline-block; margin-top: 12px; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-dim); border: 1px solid var(--gold-dim); border-radius: 3px; padding: 3px 8px; }
