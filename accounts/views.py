@@ -111,5 +111,25 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def home_view(request: HttpRequest) -> HttpResponse:
-    """Minimal authenticated landing page."""
-    return render(request, "accounts/home.html")
+    """Dashboard with live stats: employee counts and recent logins."""
+    from employees.models import Employee
+    from .models import LoginLog
+
+    employee_total = Employee.objects.filter(is_active=True).count()
+    unit_total = (
+        Employee.objects.filter(is_active=True)
+        .exclude(unit="")
+        .values("unit")
+        .distinct()
+        .count()
+    )
+    recent_logins = LoginLog.objects.select_related("user").filter(
+        event_type=LoginLog.EventType.LOGIN
+    )[:5]
+
+    context: dict[str, Any] = {
+        "employee_total": employee_total,
+        "unit_total": unit_total,
+        "recent_logins": recent_logins,
+    }
+    return render(request, "accounts/home.html", context)
