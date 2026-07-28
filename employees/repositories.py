@@ -48,3 +48,14 @@ class EmployeeRepository:
             The Employee instance.
         """
         return get_object_or_404(Employee, pk=pk, is_active=True)
+
+    def distinct_units(self) -> list[str]:
+        """Return the sorted list of distinct, non-empty unit names."""
+        units = (
+            Employee.objects.filter(is_active=True)
+            .exclude(unit="")
+            .values_list("unit", flat=True)
+            .distinct()
+            .order_by("unit")
+        )
+        return list(units)

@@ -4,30 +4,38 @@
 
 {% block content %}
 <style>
-    .search-bar { margin-bottom: 24px; }
-    .search-bar input { width: 100%; max-width: 420px; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 12px 16px; color: var(--cream); font-family: 'Jost', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.3s; }
-    .search-bar input:focus { border-color: var(--gold); }
-    .search-bar input::placeholder { color: var(--text-dim); }
+    .filters { display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+    .filters input, .filters select { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 12px 16px; color: var(--cream); font-family: 'Jost', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.3s; }
+    .filters input { flex: 1; min-width: 260px; }
+    .filters input:focus, .filters select:focus { border-color: var(--gold); }
+    .filters input::placeholder { color: var(--text-dim); }
+    .filters select { min-width: 220px; cursor: pointer; }
+    .filters select option { background: var(--dark2); color: var(--cream); }
     .count { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 18px; }
     .emp-table { width: 100%; border-collapse: collapse; }
     .emp-table th { text-align: left; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 500; }
     .emp-table td { padding: 14px 16px; border-bottom: 1px solid rgba(201,168,76,0.08); font-size: 0.9rem; font-weight: 300; }
     .emp-table tr:hover td { background: rgba(201,168,76,0.04); }
-    .emp-name { color: var(--cream); font-weight: 400; }
+    .emp-name a { color: var(--cream); text-decoration: none; font-weight: 400; transition: color 0.2s; }
+    .emp-name a:hover { color: var(--gold-light); }
     .emp-email { color: var(--gold-dim); }
     .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
-    .emp-name a { color: var(--cream); text-decoration: none; transition: color 0.2s; }
-    .emp-name a:hover { color: var(--gold-light); }
     .no-result { display: none; text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
 </style>
 
 <h1 class="page-title">Сотрудники</h1>
 <p class="page-subtitle">Справочник сотрудников компании</p>
 
-<div class="search-bar">
+<div class="filters">
     <input type="text" id="searchInput"
            placeholder="Поиск по имени, отделу, должности или email..."
            autocomplete="off">
+    <select id="unitFilter">
+        <option value="">Все отделы</option>
+        {% for unit in units %}
+        <option value="{{ unit|lower }}">{{ unit }}</option>
+        {% endfor %}
+    </select>
 </div>
 
 <p class="count">Найдено: <span id="countValue">{{ total }}</span></p>
@@ -43,8 +51,9 @@
     </thead>
     <tbody id="empBody">
         {% for emp in employees %}
-        <tr class="emp-row">
-            <td class="emp-name"><a href="{% url 'employees:detail' emp.pk %}">{{ emp.full_name }}</a></td>            <td>{{ emp.unit }}</td>
+        <tr class="emp-row" data-unit="{{ emp.unit|lower }}">
+            <td class="emp-name"><a href="{% url 'employees:detail' emp.pk %}">{{ emp.full_name }}</a></td>
+            <td>{{ emp.unit }}</td>
             <td>{{ emp.title }}</td>
             <td class="emp-email">{{ emp.email }}</td>
         </tr>
@@ -57,25 +66,35 @@
 <p class="no-result" id="noResult">Ничего не найдено</p>
 
 <script>
-    // Client-side live filtering — no server round-trip for 120 rows.
+    // Client-side live filtering — search text + unit dropdown combined.
     const input = document.getElementById("searchInput");
+    const unitFilter = document.getElementById("unitFilter");
     const rows = document.querySelectorAll(".emp-row");
     const countValue = document.getElementById("countValue");
     const noResult = document.getElementById("noResult");
 
-    input.addEventListener("input", function () {
-        const term = this.value.trim().toLowerCase();
+    function applyFilters() {
+        const term = input.value.trim().toLowerCase();
+        const unit = unitFilter.value;
         let visible = 0;
 
         rows.forEach(function (row) {
             const text = row.textContent.toLowerCase();
-            const match = text.includes(term);
-            row.style.display = match ? "" : "none";
-            if (match) visible++;
+            const rowUnit = row.getAttribute("data-unit");
+
+            const matchText = text.includes(term);
+            const matchUnit = unit === "" || rowUnit === unit;
+
+            const show = matchText && matchUnit;
+            row.style.display = show ? "" : "none";
+            if (show) visible++;
         });
 
         countValue.textContent = visible;
         noResult.style.display = visible === 0 ? "block" : "none";
-    });
+    }
+
+    input.addEventListener("input", applyFilters);
+    unitFilter.addEventListener("change", applyFilters);
 </script>
 {% endblock %}

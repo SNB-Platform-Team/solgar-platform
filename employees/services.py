@@ -38,8 +38,9 @@ class EmployeeService:
 
         Returns:
             The Employee instance.
-
-        Raises:
-            Http404: If no employee has that ID.
         """
         return self.repository.get_by_id(pk)
+
+    def list_units(self) -> list[str]:
+        """Return the distinct unit names for the filter dropdown."""
+        return self.repository.distinct_units()

@@ -13,12 +13,14 @@ from .services import EmployeeService
 def employee_list_view(request: HttpRequest) -> HttpResponse:
     """Render the employee directory with optional search."""
     search_term: str = request.GET.get("q", "")
-    employees = EmployeeService().list_employees(search_term)
+    service = EmployeeService()
+    employees = service.list_employees(search_term)
 
     context: dict[str, Any] = {
         "employees": employees,
         "search_term": search_term,
         "total": employees.count(),
+        "units": service.list_units(),
     }
     return render(request, "employees/list.html", context)
 
