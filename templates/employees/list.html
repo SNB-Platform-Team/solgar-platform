@@ -16,6 +16,8 @@
     .emp-name { color: var(--cream); font-weight: 400; }
     .emp-email { color: var(--gold-dim); }
     .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
+    .emp-name a { color: var(--cream); text-decoration: none; transition: color 0.2s; }
+    .emp-name a:hover { color: var(--gold-light); }
     .no-result { display: none; text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
 </style>
 
@@ -42,8 +44,7 @@
     <tbody id="empBody">
         {% for emp in employees %}
         <tr class="emp-row">
-            <td class="emp-name">{{ emp.full_name }}</td>
-            <td>{{ emp.unit }}</td>
+            <td class="emp-name"><a href="{% url 'employees:detail' emp.pk %}">{{ emp.full_name }}</a></td>            <td>{{ emp.unit }}</td>
             <td>{{ emp.title }}</td>
             <td class="emp-email">{{ emp.email }}</td>
         </tr>

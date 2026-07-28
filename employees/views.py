@@ -21,3 +21,10 @@ def employee_list_view(request: HttpRequest) -> HttpResponse:
         "total": employees.count(),
     }
     return render(request, "employees/list.html", context)
+
+
+@login_required
+def employee_detail_view(request: HttpRequest, pk: int) -> HttpResponse:
+    """Render a single employee's details."""
+    employee = EmployeeService().get_employee(pk)
+    return render(request, "employees/detail.html", {"employee": employee})

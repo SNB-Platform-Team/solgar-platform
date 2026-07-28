@@ -5,6 +5,7 @@ The only place employee records are queried. ORM only, no raw SQL.
 """
 
 from django.db.models import Q, QuerySet
+from django.shortcuts import get_object_or_404
 
 from .models import Employee
 
@@ -35,3 +36,15 @@ class EmployeeRepository:
             | Q(title__icontains=term)
             | Q(email__icontains=term)
         )
+
+    def get_by_id(self, pk: int) -> Employee:
+        """
+        Return a single employee by ID, or raise 404 if not found.
+
+        Args:
+            pk: The employee's database ID.
+
+        Returns:
+            The Employee instance.
+        """
+        return get_object_or_404(Employee, pk=pk, is_active=True)

@@ -1,12 +1,12 @@
 """
 employees app — business logic layer.
 
-Views call services; services call the repository. Keeps query logic
-out of the views and business rules in one place.
+Views call services; services call the repository.
 """
 
 from django.db.models import QuerySet
 
+from .models import Employee
 from .repositories import EmployeeRepository
 
 
@@ -28,3 +28,18 @@ class EmployeeService:
             A QuerySet of active employees.
         """
         return self.repository.search(search_term.strip())
+
+    def get_employee(self, pk: int) -> Employee:
+        """
+        Return a single employee by primary key.
+
+        Args:
+            pk: The employee's database ID.
+
+        Returns:
+            The Employee instance.
+
+        Raises:
+            Http404: If no employee has that ID.
+        """
+        return self.repository.get_by_id(pk)
