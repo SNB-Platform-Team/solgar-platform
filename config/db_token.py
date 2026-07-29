@@ -1,16 +1,14 @@
 """
-Azure MySQL — Entra ID token injection.
+Azure MySQL — Entra ID token injection + TLS.
 
-Azure MySQL runs in Entra-ID-only auth mode: there is no static password.
-Each connection authenticates with a short-lived (60 min) access token obtained
-through the App Service's Managed Identity.
+Azure MySQL runs in Entra-ID-only auth mode (no static password) and requires
+TLS. Each connection authenticates with a short-lived token from the App
+Service's Managed Identity, and must use a secure transport.
 
-The token must be present *before* the connection is opened, so we wrap the
-database wrapper's get_new_connection to inject a fresh token into the
-connection params each time a new connection is created. azure-identity caches
-and renews the token internally.
+We wrap the MySQL backend's get_new_connection to inject a fresh token as the
+password and enable SSL, before the connection is opened.
 
-Active only when USE_AZURE_MYSQL=True (imported from settings under that guard).
+Active only when USE_AZURE_MYSQL=True.
 """
 
 from typing import Any
@@ -31,15 +29,17 @@ def _get_token() -> str:
     return _credential.get_token(_TOKEN_RESOURCE).token
 
 
-# Keep a reference to the original method.
 _original_get_new_connection = DatabaseWrapper.get_new_connection
 
 
 def _patched_get_new_connection(self, conn_params: dict[str, Any]):
-    """Inject a fresh token as the password before opening the connection."""
+    """Inject a fresh token and enable TLS before opening the connection."""
     conn_params["passwd"] = _get_token()
+    # Azure MySQL requires a secure transport. Enable SSL without a CA file
+    # (server certificate is trusted via the platform CA bundle).
+    conn_params["ssl_mode"] = "REQUIRED"
+    conn_params["ssl"] = {"ca": None}
     return _original_get_new_connection(self, conn_params)
 
 
-# Apply the patch once at import time.
 DatabaseWrapper.get_new_connection = _patched_get_new_connection

@@ -104,9 +104,7 @@ if USE_AZURE_MYSQL:
             "PASSWORD": "",  # injected per-connection via config/db_token.py
             "HOST": get_secret("DB_HOST"),
             "PORT": get_secret("DB_PORT", "3306"),
-            "OPTIONS": {
-                "ssl": {"ssl-mode": "REQUIRED"},
-            },
+            "OPTIONS": {},
         }
     }
 else:
