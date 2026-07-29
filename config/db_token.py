@@ -2,41 +2,44 @@
 Azure MySQL — Entra ID token injection.
 
 Azure MySQL runs in Entra-ID-only auth mode: there is no static password.
-Each connection uses a short-lived (60 min) access token obtained through the
-App Service's Managed Identity.
+Each connection authenticates with a short-lived (60 min) access token obtained
+through the App Service's Managed Identity.
 
-Django reads settings once at startup, so a token placed in DATABASES would go
-stale. This module hooks the `connection_created` signal and sets a fresh token
-as the connection password each time, letting azure-identity cache and renew it.
+The token must be present *before* the connection is opened, so we wrap the
+database wrapper's get_new_connection to inject a fresh token into the
+connection params each time a new connection is created. azure-identity caches
+and renews the token internally.
 
 Active only when USE_AZURE_MYSQL=True (imported from settings under that guard).
 """
 
 from typing import Any
 
-from django.conf import settings
-from django.db.backends.signals import connection_created
-from django.dispatch import receiver
+from django.db.backends.mysql.base import DatabaseWrapper
 
 _TOKEN_RESOURCE = "https://ossrdbms-aad.database.windows.net/.default"
+_credential = None
 
 
-def _get_credential():
-    """Return a cached Managed Identity credential."""
-    from azure.identity import DefaultAzureCredential
+def _get_token() -> str:
+    """Return a fresh Entra ID access token via Managed Identity."""
+    global _credential
+    if _credential is None:
+        from azure.identity import DefaultAzureCredential
 
-    if not hasattr(_get_credential, "_cred"):
-        _get_credential._cred = DefaultAzureCredential()
-    return _get_credential._cred
+        _credential = DefaultAzureCredential()
+    return _credential.get_token(_TOKEN_RESOURCE).token
 
 
-@receiver(connection_created)
-def inject_token(sender: Any, connection: Any, **kwargs: Any) -> None:
-    """Refresh the Entra ID token used as the DB password on each connection."""
-    if not getattr(settings, "USE_AZURE_MYSQL", False):
-        return
-    if connection.vendor != "mysql":
-        return
+# Keep a reference to the original method.
+_original_get_new_connection = DatabaseWrapper.get_new_connection
 
-    token = _get_credential().get_token(_TOKEN_RESOURCE)
-    connection.settings_dict["PASSWORD"] = token.token
+
+def _patched_get_new_connection(self, conn_params: dict[str, Any]):
+    """Inject a fresh token as the password before opening the connection."""
+    conn_params["passwd"] = _get_token()
+    return _original_get_new_connection(self, conn_params)
+
+
+# Apply the patch once at import time.
+DatabaseWrapper.get_new_connection = _patched_get_new_connection
