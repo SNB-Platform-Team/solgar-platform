@@ -2,11 +2,11 @@
 accounts app — authentication views.
 
 Local username/password login with optional reCAPTCHA v3 verification,
-logout, and a minimal authenticated landing page. Azure AD SSO is stubbed
-until app registration is available.
+Microsoft SSO (Azure AD authorization-code flow), logout, and a dashboard.
 """
 
 import json
+import secrets
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -97,9 +97,66 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
 @require_http_methods(["GET"])
 def azure_login_view(request: HttpRequest) -> HttpResponse:
-    """Placeholder for Azure AD SSO until app registration is completed."""
-    messages.info(request, "Microsoft sign-in will be enabled soon.")
-    return redirect("accounts:login")
+    """Start the Microsoft SSO flow by redirecting to the identity provider."""
+    if not settings.AZURE_AD["CLIENT_ID"]:
+        messages.info(request, "Microsoft sign-in will be enabled soon.")
+        return redirect("accounts:login")
+
+    from . import azure_auth
+
+    state = secrets.token_urlsafe(24)
+    request.session["azure_auth_state"] = state
+    return redirect(azure_auth.build_auth_url(state))
+
+
+@require_http_methods(["GET"])
+def azure_callback_view(request: HttpRequest) -> HttpResponse:
+    """Handle Microsoft's redirect: verify state, sign the user in."""
+    from . import azure_auth
+    from .models import User, UserType
+
+    # CSRF protection: the returned state must match what we stored.
+    expected_state = request.session.pop("azure_auth_state", None)
+    if not expected_state or request.GET.get("state") != expected_state:
+        messages.error(request, "Authentication failed. Please try again.")
+        return redirect("accounts:login")
+
+    code = request.GET.get("code")
+    if not code:
+        messages.error(request, "Authentication was cancelled.")
+        return redirect("accounts:login")
+
+    claims = azure_auth.acquire_user_claims(code)
+    if claims is None:
+        messages.error(request, "Could not verify your Microsoft account.")
+        return redirect("accounts:login")
+
+    oid = claims.get("oid")
+    email = claims.get("email") or claims.get("preferred_username", "")
+    name = claims.get("name", "")
+
+    if not oid:
+        messages.error(request, "Microsoft account is missing required information.")
+        return redirect("accounts:login")
+
+    # Match by Azure object ID; create the account on first sign-in.
+    user, created = User.objects.get_or_create(
+        azure_object_id=oid,
+        defaults={
+            "username": email or oid,
+            "email": email,
+            "first_name": name.split(" ")[0] if name else "",
+            "last_name": " ".join(name.split(" ")[1:]) if " " in name else "",
+            "user_type": UserType.EMPLOYEE,
+        },
+    )
+
+    if not user.is_enabled:
+        messages.error(request, "This account is disabled.")
+        return redirect("accounts:login")
+
+    login(request, user)
+    return redirect("accounts:home")
 
 
 @require_http_methods(["POST"])
