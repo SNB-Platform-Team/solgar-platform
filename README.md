@@ -1,41 +1,43 @@
 # Solgar Internal Platform
 
-Internal web platform for Solgar employees. Django + MySQL, deployed on Azure.
+Internal web platform for Solgar employees. Django + MySQL, deployed on Azure App Service.
 
-> **Status:** Early development — authentication layer only.
+> **Status:** Active development — authentication, employee directory, and audit logging live on Azure.
 
 ---
 
 ## Overview
 
-A server-rendered Django application intended for internal use by Solgar staff.
-Authentication will run on Azure AD SSO once app registration is available; a
-local username/password path exists as a fallback during development.
+A server-rendered Django application for internal use by Solgar staff. It runs on
+Azure App Service and connects to Azure Database for MySQL. Authentication uses a
+local username/password path today; Azure AD SSO is implemented in code and
+activates once app registration details are supplied.
 
 **Stack**
 
 | Layer | Technology |
 |---|---|
 | Backend | Django 5.1 (server-side rendering) |
-| Database | MySQL 8.0 (Docker locally, Azure MySQL Flexible in production) |
-| Auth | Django sessions; Azure AD SSO planned |
-| Bot protection | reCAPTCHA v3 ML (invisible) |
-| Hosting | Azure App Service (planned) |
-| Secrets | `.env` locally, Azure Key Vault in production |
+| Database | MySQL 8.0 (Docker locally, Azure Database for MySQL in production) |
+| Auth | Django sessions; Azure AD SSO (code ready, pending registration) |
+| Bot protection | reCAPTCHA v3 (invisible, activates when keys are set) |
+| Hosting | Azure App Service (Linux, Python 3.10) |
+| Deployment | GitHub Actions (automatic on push to `main`) |
+| Secrets | `.env` locally, App Service application settings in production |
 
 ---
 
 ## Architectural decisions
 
-**ORM only — no raw SQL.** All database access goes through the Django ORM.
-Raw SQL with string interpolation is the primary source of SQL injection
-vulnerabilities; the ORM parameterizes queries automatically and keeps the code
-portable across database backends.
+**ORM only — no raw SQL.** All database access goes through the Django ORM,
+organized behind a repository/service layer. Raw SQL with string interpolation is
+the primary source of SQL injection vulnerabilities; the ORM parameterizes
+queries automatically and keeps the code portable across database backends.
 
 **No secrets in source control.** Configuration is read from environment
 variables via a `get_secret()` helper. `.env` is gitignored; `.env.example`
 documents the required keys without exposing values. In production the same
-variables will be supplied by Azure Key Vault references.
+variables are supplied through App Service application settings.
 
 **Custom user model from day one.** `accounts.User` extends `AbstractUser` with
 `azure_object_id`, `user_type`, `department`, `phone`, and `is_enabled`.
@@ -43,14 +45,21 @@ Swapping the user model after the first migration is disruptive, so it was
 introduced before any tables were created.
 
 **Server-side rendering.** No SPA. Pages are rendered by Django and sessions are
-held in an HTTP-only cookie. When Azure AD SSO is added it will use the OAuth2
-authorization code flow, keeping the client secret and tokens on the server.
+held in an HTTP-only cookie. Azure AD SSO uses the OAuth2 authorization code
+flow, keeping the client secret and tokens on the server.
 
-**We plan to open the platform to consumers, not only staff as well in the future.
+**Azure MySQL via Entra ID token auth.** The production database runs in
+Entra-ID-only mode (no static password). The application authenticates with a
+short-lived token obtained through the App Service's Managed Identity; the token
+is injected into each new database connection and refreshed automatically.
+
+**Repository/service layering.** Feature apps (e.g. `employees`) separate data
+access (repository), business logic (service), and presentation (views), keeping
+the ORM calls in one place and the views thin.
+
+We plan to open the platform to consumers in the future, not only staff.
 
 ---
-
-
 
 ## Local setup
 
@@ -79,7 +88,8 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 ```
 
 Set `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD` to values of your choosing — the
-MySQL container is initialized with them on first run.
+MySQL container is initialized with them on first run. Keep `USE_AZURE_MYSQL=False`
+locally so the app uses the Docker database.
 
 ```bash
 # 5. Start MySQL
@@ -89,7 +99,10 @@ docker compose up -d
 python manage.py migrate
 python manage.py createsuperuser
 
-# 7. Run
+# 7. Import employees (optional, if you have the source file)
+python manage.py import_employees data/List_AccsessesHHHH.xlsx
+
+# 8. Run
 python manage.py runserver
 ```
 
@@ -97,6 +110,7 @@ python manage.py runserver
 |---|---|
 | http://127.0.0.1:8000/login/ | Login page |
 | http://127.0.0.1:8000/ | Dashboard (requires login) |
+| http://127.0.0.1:8000/employees/ | Employee directory |
 | http://127.0.0.1:8000/admin/ | Django admin |
 
 MySQL runs on host port **3307** to avoid clashing with a locally installed
@@ -111,7 +125,8 @@ MySQL instance on 3306.
 | `DJANGO_SECRET_KEY` | Django cryptographic signing key |
 | `DJANGO_DEBUG` | `True` locally, `False` in production |
 | `ALLOWED_HOSTS` | Comma-separated list of permitted hostnames |
-| `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MySQL credentials |
+| `USE_AZURE_MYSQL` | `False` locally (Docker), `True` in production (token auth) |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MySQL credentials (no password in Azure mode) |
 | `DB_HOST`, `DB_PORT` | MySQL connection target |
 | `MYSQL_ROOT_PASSWORD` | Root password for the Docker container |
 | `RECAPTCHA_SITE_KEY` | Public reCAPTCHA key (client-side) |
@@ -122,9 +137,31 @@ MySQL instance on 3306.
 | `AZURE_AD_CLIENT_SECRET` | Azure AD client secret |
 | `AZURE_AD_REDIRECT_URI` | OAuth2 callback URL |
 
-reCAPTCHA verification is skipped while `RECAPTCHA_SECRET_KEY` is empty, so
-local development is not blocked before keys are issued. It activates
-automatically once the key is set.
+reCAPTCHA verification is skipped while `RECAPTCHA_SECRET_KEY` is empty, so local
+development is not blocked before keys are issued. It activates automatically once
+the key is set. The same pattern applies to Azure AD SSO: the Microsoft sign-in
+button shows a "coming soon" message until `AZURE_AD_CLIENT_ID` is set.
+
+---
+
+## Deployment (Azure App Service)
+
+The app deploys automatically via GitHub Actions on every push to `main`.
+
+**Key configuration:**
+
+- **Startup command:** `gunicorn config.wsgi:application`
+- **Application settings:** same variables as `.env`, with `USE_AZURE_MYSQL=True`
+  and no `DB_PASSWORD` (token auth is used instead)
+- **Managed Identity:** must be enabled so the app can obtain database tokens
+- **Migrations:** run once from the App Service SSH console after the first deploy:
+```bash
+  python manage.py migrate
+```
+
+The production database uses Entra ID token authentication, so the app's Managed
+Identity must be granted access to the target database, and outbound network
+access to the MySQL host must be permitted.
 
 ---
 
@@ -136,17 +173,22 @@ automatically once the key is set.
 - Local username/password login with session handling
 - Logout, disabled-account rejection, form validation
 - reCAPTCHA v3 integration (activates when keys are configured)
+- Azure AD SSO via OAuth2 authorization code flow (activates when registered)
+- Login/logout audit logging (viewable in Django admin)
+- Employee directory: list, live search, department filter, detail pages
+- Repository/service architecture (ORM only)
 - Django admin with custom user fields
-- MySQL via Docker Compose
+- MySQL via Docker Compose (local) and Azure MySQL with token auth (production)
+- Deployed on Azure App Service with automatic GitHub Actions deployment
 
 **Pending**
 
-- Azure AD SSO (blocked on app registration)
+- Azure AD SSO activation (blocked on app registration details)
 - reCAPTCHA keys (blocked on a company Google account)
-- Role-based authorization (approach not yet decided)
-- Azure deployment (App Service, Key Vault, MySQL Flexible)
+- Role-based authorization and approval workflows (design in progress)
+- Employee data import to production
+- Multi-language support (planned)
+- Power BI report embedding (planned)
 - Test suite
 
 ---
-
-
