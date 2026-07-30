@@ -185,10 +185,9 @@ access to the MySQL host must be permitted.
 
 - Azure AD SSO activation (blocked on app registration details)
 - reCAPTCHA keys (blocked on a company Google account)
-- Role-based authorization and approval workflows (design in progress)
+- Role-based authorization and approval workflows (design in progress) (backend)
 - Employee data import to production
-- Multi-language support (planned)
-- Power BI report embedding (planned)
+- Multi-language support 
+- Power BI report embedding 
 - Test suite
-
 ---
