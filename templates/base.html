@@ -34,7 +34,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
             position: fixed;
             inset: 0;
             background: rgba(13,11,8,0.35);
-            z-index: -1;
+            z-index: -1; /* rengi arka plana, gorseli one attik. */
         }
 
         /* Top bar */
@@ -102,14 +102,19 @@ Base layout for authenticated pages. Extend with {% block content %}.
     <div class="layout">
         <aside class="sidebar">
             <div class="nav-section">Меню</div>
-            <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
 
+            {% if "DASHBOARD" in accessible_screens %}
+            <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
+            {% endif %}
+
+            {% if "EMPLOYEES" in accessible_screens %}
             <div class="nav-group">
                 <div class="nav-group-title">Организация</div>
                 <div class="nav-submenu">
                     <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
                 </div>
             </div>
+            {% endif %}
         </aside>
 
         <main class="content">

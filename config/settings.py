@@ -57,6 +57,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.staticfiles",
     "accounts",
     "employees",
+    "authorization",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -83,6 +84,7 @@ TEMPLATES: list[dict[str, Any]] = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "authorization.context_processors.accessible_screens",
             ],
         },
     },

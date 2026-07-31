@@ -19,6 +19,8 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
+from authorization.decorators import require_screen
+
 from .forms import LoginForm
 
 
@@ -167,6 +169,7 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_screen("DASHBOARD")
 def home_view(request: HttpRequest) -> HttpResponse:
     """Dashboard with live stats: employee counts and recent logins."""
     from employees.models import Employee

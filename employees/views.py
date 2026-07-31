@@ -6,10 +6,13 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
+from authorization.decorators import require_screen
+
 from .services import EmployeeService
 
 
 @login_required
+@require_screen("EMPLOYEES")
 def employee_list_view(request: HttpRequest) -> HttpResponse:
     """Render the employee directory with optional search."""
     search_term: str = request.GET.get("q", "")
@@ -26,6 +29,7 @@ def employee_list_view(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_screen("EMPLOYEES")
 def employee_detail_view(request: HttpRequest, pk: int) -> HttpResponse:
     """Render a single employee's details."""
     employee = EmployeeService().get_employee(pk)

@@ -32,6 +32,16 @@ class User(AbstractUser):
         blank=True,
         help_text="Azure AD 'oid' claim. Empty for local accounts.",
     )
+
+    access_level = models.ForeignKey(
+        "authorization.AccessLevel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+        verbose_name="Access level",
+    )
+
     user_type = models.CharField(
         "User Type",
         max_length=10,
