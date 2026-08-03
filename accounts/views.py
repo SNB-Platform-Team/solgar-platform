@@ -171,8 +171,9 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 @login_required
 @require_screen("DASHBOARD")
 def home_view(request: HttpRequest) -> HttpResponse:
-    """Dashboard with live stats: employee counts and recent logins."""
+    """Dashboard with live stats: employees, logins, and approval activity."""
     from employees.models import Employee
+    from approvals.models import EquipmentRequest
     from .models import LoginLog
 
     employee_total = Employee.objects.filter(is_active=True).count()
@@ -187,9 +188,24 @@ def home_view(request: HttpRequest) -> HttpResponse:
         event_type=LoginLog.EventType.LOGIN
     )[:5]
 
+    # Approval activity for the current user (as approver).
+    my_pending = EquipmentRequest.objects.filter(
+        approver=request.user, status=EquipmentRequest.Status.PENDING
+    ).count()
+    # Overall approval counts (platform-wide).
+    approved_total = EquipmentRequest.objects.filter(
+        status=EquipmentRequest.Status.APPROVED
+    ).count()
+    pending_total = EquipmentRequest.objects.filter(
+        status=EquipmentRequest.Status.PENDING
+    ).count()
+
     context: dict[str, Any] = {
         "employee_total": employee_total,
         "unit_total": unit_total,
         "recent_logins": recent_logins,
+        "my_pending": my_pending,
+        "approved_total": approved_total,
+        "pending_total": pending_total,
     }
     return render(request, "accounts/home.html", context)

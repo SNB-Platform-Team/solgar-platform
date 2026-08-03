@@ -86,6 +86,8 @@ TEMPLATES: list[dict[str, Any]] = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "authorization.context_processors.accessible_screens",
+                "authorization.context_processors.accessible_screens",
+                "approvals.context_processors.pending_approvals_count",
             ],
         },
     },

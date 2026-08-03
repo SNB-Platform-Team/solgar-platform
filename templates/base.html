@@ -63,6 +63,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
         .nav-submenu { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
         .nav-group:hover .nav-submenu { max-height: 300px; }
         .nav-submenu .nav-link { padding-left: 40px; font-size: 0.88rem; }
+        .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto; background: var(--gold); color: var(--dark); font-size: 0.72rem; font-weight: 600; border-radius: 10px; }
 
         /* Content */
         .content { flex: 1; padding: 36px 44px; }
@@ -121,7 +122,10 @@ Base layout for authenticated pages. Extend with {% block content %}.
             {% endif %}
 
             {% if "APPROVALS" in accessible_screens %}
-            <a href="{% url 'approvals:inbox' %}" class="nav-link {% block nav_approvals %}{% endblock %}">Согласование</a>
+            <a href="{% url 'approvals:inbox' %}" class="nav-link {% block nav_approvals %}{% endblock %}">
+                Согласование
+                {% if pending_approvals_count > 0 %}<span class="nav-badge">{{ pending_approvals_count }}</span>{% endif %}
+            </a>
             {% endif %}
         </aside>
 
@@ -136,4 +140,4 @@ Base layout for authenticated pages. Extend with {% block content %}.
         </main>
     </div>
 </body>
-</html>
+</html>    
