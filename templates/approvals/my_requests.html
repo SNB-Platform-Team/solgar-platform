@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Мои заявки{% endblock %}
+{% block nav_requests %}active{% endblock %}
+
+{% block content %}
+<style>
+    .top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .btn-new { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); text-decoration: none; border-radius: 4px; padding: 10px 20px; font-size: 0.88rem; font-weight: 500; }
+    .btn-new:hover { opacity: 0.9; }
+    .req-table { width: 100%; border-collapse: collapse; }
+    .req-table th { text-align: left; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 500; }
+    .req-table td { padding: 14px 16px; border-bottom: 1px solid rgba(201,168,76,0.08); font-size: 0.9rem; font-weight: 300; }
+    .badge { display: inline-block; font-size: 0.72rem; padding: 3px 10px; border-radius: 3px; letter-spacing: 0.04em; }
+    .badge-PENDING { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.3); }
+    .badge-APPROVED { background: rgba(120,190,120,0.15); color: #a8e0a8; border: 1px solid rgba(120,190,120,0.35); }
+    .badge-REJECTED { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
+    .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
+</style>
+
+<div class="top-row">
+    <div>
+        <h1 class="page-title">Мои заявки</h1>
+        <p class="page-subtitle" style="margin-bottom:0;">Заявки на оборудование и их статус</p>
+    </div>
+    <a href="{% url 'approvals:create' %}" class="btn-new">+ Новая заявка</a>
+</div>
+
+<table class="req-table">
+    <thead>
+        <tr>
+            <th>Оборудование</th>
+            <th>Руководитель</th>
+            <th>Статус</th>
+            <th>Дата</th>
+            <th>Комментарий</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for req in requests %}
+        <tr>
+            <td>{{ req.item }}</td>
+            <td>{{ req.approver.get_full_name|default:req.approver.username|default:"—" }}</td>
+            <td><span class="badge badge-{{ req.status }}">{{ req.get_status_display }}</span></td>
+            <td>{{ req.created_at|date:"d.m.Y H:i" }}</td>
+            <td>{{ req.decision_comment|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="empty">У вас пока нет заявок</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

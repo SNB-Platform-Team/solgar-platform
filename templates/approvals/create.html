@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Новая заявка{% endblock %}
+{% block nav_requests %}active{% endblock %}
+
+{% block content %}
+<style>
+    .form-wrap { max-width: 560px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+    .form-group input, .form-group textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 12px 16px; color: var(--cream); font-family: 'Jost', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.3s; }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--gold); }
+    .form-group textarea { min-height: 90px; resize: vertical; }
+    .btn-submit { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border: none; border-radius: 4px; padding: 12px 28px; font-family: 'Jost', sans-serif; font-size: 0.9rem; font-weight: 500; letter-spacing: 0.05em; cursor: pointer; transition: opacity 0.2s; }
+    .btn-submit:hover { opacity: 0.9; }
+    .btn-back { display: inline-block; margin-left: 14px; color: var(--gold-dim); text-decoration: none; font-size: 0.88rem; }
+    .btn-back:hover { color: var(--gold-light); }
+</style>
+
+<h1 class="page-title">Новая заявка на оборудование</h1>
+<p class="page-subtitle">Заявка будет направлена вашему руководителю на согласование</p>
+
+<form method="post" class="form-wrap">
+    {% csrf_token %}
+    <div class="form-group">
+        <label for="item">Оборудование</label>
+        <input type="text" id="item" name="item" value="{{ item|default:'' }}"
+               placeholder="Например: ноутбук, монитор, телефон" autocomplete="off">
+    </div>
+    <div class="form-group">
+        <label for="reason">Обоснование</label>
+        <textarea id="reason" name="reason" placeholder="Кратко опишите, зачем нужно">{{ reason|default:'' }}</textarea>
+    </div>
+    <button type="submit" class="btn-submit">Отправить</button>
+    <a href="{% url 'approvals:my_requests' %}" class="btn-back">Отмена</a>
+</form>
+{% endblock %}

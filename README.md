@@ -57,6 +57,8 @@ is injected into each new database connection and refreshed automatically.
 access (repository), business logic (service), and presentation (views), keeping
 the ORM calls in one place and the views thin.
 
+**Screen-based authorization.** Access is controlled by named screens and access levels, kept separate from the organizational hierarchy. Each screen has a code; each access level grants a set of screens; each user has one access level. The sidebar shows only permitted screens, and views are guarded by a require_screen decorator so direct URL access is also blocked. Superusers bypass the checks.
+
 We plan to open the platform to consumers in the future, not only staff.
 
 ---
@@ -180,14 +182,17 @@ access to the MySQL host must be permitted.
 - Django admin with custom user fields
 - MySQL via Docker Compose (local) and Azure MySQL with token auth (production)
 - Deployed on Azure App Service with automatic GitHub Actions deployment
+- Screen-based access levels (menu filtering + URL-level protection)
 
 **Pending**
 
 - Azure AD SSO activation (blocked on app registration details)
 - reCAPTCHA keys (blocked on a company Google account)
-- Role-based authorization and approval workflows (design in progress) (backend)
+- Approval workflows built on the hierarchy (design in progress)
 - Employee data import to production
 - Multi-language support 
 - Power BI report embedding 
 - Test suite
 ---
+
+

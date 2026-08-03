@@ -42,6 +42,16 @@ class User(AbstractUser):
         verbose_name="Access level",
     )
 
+    manager = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subordinates",
+        verbose_name="Manager",
+        help_text="This user's direct manager, for approval routing.",
+    )
+
     user_type = models.CharField(
         "User Type",
         max_length=10,

@@ -17,7 +17,7 @@ class UserAdmin(BaseUserAdmin):
     fieldsets = BaseUserAdmin.fieldsets + (
         (
             "Solgar Platform",
-            {"fields": ("user_type", "access_level", "azure_object_id", "department", "phone", "is_enabled")},
+            {"fields": ("user_type", "access_level", "manager", "azure_object_id", "department", "phone", "is_enabled")},
         ),
     )
 

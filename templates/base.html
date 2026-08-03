@@ -26,7 +26,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
             background-image: url('{% static "images/background.jpg" %}');
             background-size: cover;
             background-position: center;
-            filter: blur(0px) brightness(0.55); /*background picture blur*/
+            filter: blur(2px) brightness(0.55);
             z-index: -2;
         }
         body::after {
@@ -34,7 +34,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
             position: fixed;
             inset: 0;
             background: rgba(13,11,8,0.35);
-            z-index: -1; /* rengi arka plana, gorseli one attik. */
+            z-index: -1;
         }
 
         /* Top bar */
@@ -114,6 +114,14 @@ Base layout for authenticated pages. Extend with {% block content %}.
                     <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
                 </div>
             </div>
+            {% endif %}
+
+            {% if "REQUESTS" in accessible_screens %}
+            <a href="{% url 'approvals:my_requests' %}" class="nav-link {% block nav_requests %}{% endblock %}">Мои заявки</a>
+            {% endif %}
+
+            {% if "APPROVALS" in accessible_screens %}
+            <a href="{% url 'approvals:inbox' %}" class="nav-link {% block nav_approvals %}{% endblock %}">Согласование</a>
             {% endif %}
         </aside>
 
