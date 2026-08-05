@@ -24,6 +24,8 @@ def employee_list_view(request: HttpRequest) -> HttpResponse:
         "search_term": search_term,
         "total": employees.count(),
         "units": service.list_units(),
+        "countries": service.list_countries(),
+        "brand": service.list_brands(),
     }
     return render(request, "employees/list.html", context)
 

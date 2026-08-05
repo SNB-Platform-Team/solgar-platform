@@ -59,3 +59,25 @@ class EmployeeRepository:
             .order_by("unit")
         )
         return list(units)
+
+    def distinct_countries(self) -> list[str]:
+        """Return the sorted list of distinct, non-empty country names."""
+        countries = (
+            Employee.objects.filter(is_active=True)
+            .exclude(country="")
+            .values_list("country", flat=True)
+            .distinct()
+            .order_by("country")
+        )
+        return list(countries)
+
+    def distinct_brands(self) -> list[str]:
+        """Return the sorted list of distinct, non-empty brand names."""
+        brands = (
+            Employee.objects.filter(is_active=True)
+            .exclude(brand="")
+            .values_list("brand", flat=True)
+            .distinct()
+            .order_by("brand")
+        )
+        return list(brands)

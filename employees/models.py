@@ -17,6 +17,8 @@ class Employee(models.Model):
     email = models.EmailField("Email", max_length=254, blank=True)
     activation_date = models.DateField("Activation date", null=True, blank=True)
     region = models.CharField("Region", max_length=100, blank=True)
+    country = models.CharField("Country", max_length=100, blank=True)
+    brand = models.CharField("Brand", max_length=100, blank=True)
     is_active = models.BooleanField("Is active", default=True)
     created_at = models.DateTimeField("Created at", auto_now_add=True)
     updated_at = models.DateTimeField("Updated at", auto_now=True)

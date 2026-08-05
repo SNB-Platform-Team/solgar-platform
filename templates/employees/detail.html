@@ -53,6 +53,18 @@
         </div>
     </div>
     <div class="info-item">
+        <div class="info-label">Страна</div>
+        <div class="info-value {% if not employee.country %}empty{% endif %}">
+            {{ employee.country|default:"не указана" }}
+        </div>
+    </div>
+    <div class="info-item">
+        <div class="info-label">Бренд</div>
+        <div class="info-value {% if not employee.brand %}empty{% endif %}">
+            {{ employee.brand|default:"не указан" }}
+        </div>
+    </div>
+    <div class="info-item">
         <div class="info-label">Дата активации</div>
         <div class="info-value {% if not employee.activation_date %}empty{% endif %}">
             {{ employee.activation_date|date:"d.m.Y"|default:"не указана" }}

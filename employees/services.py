@@ -44,3 +44,11 @@ class EmployeeService:
     def list_units(self) -> list[str]:
         """Return the distinct unit names for the filter dropdown."""
         return self.repository.distinct_units()
+
+    def list_countries(self) -> list[str]:
+        """Return the distinct country names for the filter dropdown."""
+        return self.repository.distinct_countries()
+
+    def list_brands(self) -> list[str]:
+        """Return the distinct brand names for the filter dropdown."""
+        return self.repository.distinct_brands()
