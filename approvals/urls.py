@@ -12,4 +12,5 @@ urlpatterns = [
     path("inbox/", views.approval_inbox_view, name="inbox"),
     path("<int:pk>/approve/", views.approve_view, name="approve"),
     path("<int:pk>/reject/", views.reject_view, name="reject"),
+    path("<int:pk>/cancel/", views.cancel_view, name="cancel"),
 ]

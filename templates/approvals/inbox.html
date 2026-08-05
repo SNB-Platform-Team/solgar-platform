@@ -10,6 +10,7 @@
     .badge { display: inline-block; font-size: 0.72rem; padding: 3px 10px; border-radius: 3px; }
     .badge-APPROVED { background: rgba(120,190,120,0.15); color: #a8e0a8; border: 1px solid rgba(120,190,120,0.35); }
     .badge-REJECTED { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
+    .badge-CANCELLED { background: rgba(150,150,150,0.15); color: #b0b0b0; border: 1px solid rgba(150,150,150,0.35); }
     .actions { display: flex; gap: 8px; }
     .actions input[type=text] { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; padding: 7px 10px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.82rem; outline: none; width: 150px; }
     .btn-approve, .btn-reject { border: none; border-radius: 4px; padding: 7px 14px; font-size: 0.82rem; font-weight: 500; cursor: pointer; font-family: 'Jost',sans-serif; }
@@ -18,14 +19,26 @@
     .btn-reject { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.4); }
     .btn-reject:hover { background: rgba(224,85,85,0.25); }
     .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
+    .no-result { display: none; text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
     .section-title { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 300; color: var(--cream); margin-bottom: 16px; }
     .form-inline { display: flex; gap: 8px; align-items: center; }
+    .inbox-search { margin-bottom: 18px; }
+    .inbox-search input { width: 100%; max-width: 380px; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 11px 15px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.92rem; outline: none; transition: border-color 0.3s; }
+    .inbox-search input:focus { border-color: var(--gold); }
+    .inbox-search input::placeholder { color: var(--text-dim); }
+    .pending-count { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 14px; }
 </style>
 
 <h1 class="page-title">Согласование заявок</h1>
 <p class="page-subtitle">Заявки, ожидающие вашего решения</p>
 
 <h2 class="section-title">Ожидают решения</h2>
+
+<div class="inbox-search">
+    <input type="text" id="inboxSearch" placeholder="Поиск по сотруднику или оборудованию..." autocomplete="off">
+</div>
+<p class="pending-count">Найдено: <span id="pendingCount">{{ pending|length }}</span></p>
+
 <table class="req-table">
     <thead>
         <tr>
@@ -36,9 +49,9 @@
             <th>Действие</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="pendingBody">
         {% for req in pending %}
-        <tr>
+        <tr class="pending-row">
             <td>{{ req.requester.get_full_name|default:req.requester.username }}</td>
             <td>{{ req.item }}</td>
             <td>{{ req.reason|default:"—" }}</td>
@@ -62,6 +75,7 @@
         {% endfor %}
     </tbody>
 </table>
+<p class="no-result" id="inboxNoResult">Ничего не найдено</p>
 
 <h2 class="section-title">Обработанные</h2>
 <table class="req-table">
@@ -86,4 +100,29 @@
         {% endfor %}
     </tbody>
 </table>
+
+<script>
+    // Client-side live filtering for the pending requests table.
+    const search = document.getElementById("inboxSearch");
+    const rows = document.querySelectorAll(".pending-row");
+    const countEl = document.getElementById("pendingCount");
+    const noResult = document.getElementById("inboxNoResult");
+
+    search.addEventListener("input", function () {
+        const term = this.value.trim().toLowerCase();
+        let visible = 0;
+
+        rows.forEach(function (row) {
+            // Match against employee name and equipment (first two cells).
+            const cells = row.querySelectorAll("td");
+            const text = (cells[0].textContent + " " + cells[1].textContent).toLowerCase();
+            const show = text.includes(term);
+            row.style.display = show ? "" : "none";
+            if (show) visible++;
+        });
+
+        countEl.textContent = visible;
+        noResult.style.display = visible === 0 ? "block" : "none";
+    });
+</script>
 {% endblock %}

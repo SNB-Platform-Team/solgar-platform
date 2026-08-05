@@ -19,6 +19,7 @@ class EquipmentRequest(models.Model):
         PENDING = "PENDING", "На рассмотрении"
         APPROVED = "APPROVED", "Одобрено"
         REJECTED = "REJECTED", "Отклонено"
+        CANCELLED = "CANCELLED", "Отменено"
 
     requester = models.ForeignKey(
         settings.AUTH_USER_MODEL,

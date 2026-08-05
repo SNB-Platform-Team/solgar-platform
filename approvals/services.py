@@ -77,6 +77,24 @@ class EquipmentRequestService:
         request_obj.decided_at = timezone.now()
         request_obj.save(update_fields=["status", "decision_comment", "decided_at"])
 
+    def cancel(self, request_obj: EquipmentRequest, requester) -> None:
+        """
+        Cancel a pending request. Only the original requester may cancel,
+        and only while the request is still pending.
+
+        Raises:
+            ApprovalError: If the user is not the requester, or the request
+                is not pending.
+        """
+        if request_obj.requester_id != requester.id:
+            raise ApprovalError("Вы можете отменить только свои заявки.")
+        if not request_obj.is_pending:
+            raise ApprovalError("Заявка уже обработана и не может быть отменена.")
+
+        request_obj.status = EquipmentRequest.Status.CANCELLED
+        request_obj.decided_at = timezone.now()
+        request_obj.save(update_fields=["status", "decided_at"])
+
     def _guard_decision(self, request_obj: EquipmentRequest, approver) -> None:
         """Ensure the user may decide on this request."""
         if request_obj.approver_id != approver.id:

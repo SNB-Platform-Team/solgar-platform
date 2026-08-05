@@ -94,3 +94,20 @@ def reject_view(request: HttpRequest, pk: int) -> HttpResponse:
         messages.error(request, str(exc))
 
     return redirect("approvals:inbox")
+
+
+@login_required
+@require_screen("REQUESTS")
+@require_http_methods(["POST"])
+def cancel_view(request: HttpRequest, pk: int) -> HttpResponse:
+    """Cancel the current user's own pending request."""
+    repo = EquipmentRequestRepository()
+    obj = repo.get_by_id(pk)
+
+    try:
+        EquipmentRequestService().cancel(obj, request.user)
+        messages.success(request, "Заявка отменена.")
+    except ApprovalError as exc:
+        messages.error(request, str(exc))
+
+    return redirect("approvals:my_requests")

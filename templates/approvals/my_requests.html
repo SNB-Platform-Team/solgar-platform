@@ -14,6 +14,9 @@
     .badge-PENDING { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.3); }
     .badge-APPROVED { background: rgba(120,190,120,0.15); color: #a8e0a8; border: 1px solid rgba(120,190,120,0.35); }
     .badge-REJECTED { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
+    .badge-CANCELLED { background: rgba(150,150,150,0.15); color: #b0b0b0; border: 1px solid rgba(150,150,150,0.35); }
+    .btn-cancel { background: rgba(224,85,85,0.12); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.3); border-radius: 4px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer; font-family: 'Jost',sans-serif; }
+    .btn-cancel:hover { background: rgba(224,85,85,0.22); }
     .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
 </style>
 
@@ -33,6 +36,7 @@
             <th>Статус</th>
             <th>Дата</th>
             <th>Комментарий</th>
+            <th>Действие</th>
         </tr>
     </thead>
     <tbody>
@@ -43,9 +47,20 @@
             <td><span class="badge badge-{{ req.status }}">{{ req.get_status_display }}</span></td>
             <td>{{ req.created_at|date:"d.m.Y H:i" }}</td>
             <td>{{ req.decision_comment|default:"—" }}</td>
+            <td>
+                {% if req.is_pending %}
+                <form method="post" action="{% url 'approvals:cancel' req.pk %}"
+                      onsubmit="return confirm('Отменить эту заявку?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-cancel">Отменить</button>
+                </form>
+                {% else %}
+                —
+                {% endif %}
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="empty">У вас пока нет заявок</td></tr>
+        <tr><td colspan="6" class="empty">У вас пока нет заявок</td></tr>
         {% endfor %}
     </tbody>
 </table>
