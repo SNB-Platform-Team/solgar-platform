@@ -59,6 +59,8 @@ the ORM calls in one place and the views thin.
 
 **Screen-based authorization.** Access is controlled by named screens and access levels, kept separate from the organizational hierarchy. Each screen has a code; each access level grants a set of screens; each user has one access level. The sidebar shows only permitted screens, and views are guarded by a require_screen decorator so direct URL access is also blocked. Superusers bypass the checks.
 
+**Approval workflow with hierarchy routing.** Equipment requests move through a state machine (pending → approved / rejected / cancelled). When an employee submits a request, the system automatically routes it to their manager (a self-referential manager field on the user model) for a decision. Business rules live in a service layer: only the assigned approver may decide, only pending requests can be acted on, and only the original requester may cancel.
+
 We plan to open the platform to consumers in the future, not only staff.
 
 ---
@@ -183,12 +185,13 @@ access to the MySQL host must be permitted.
 - MySQL via Docker Compose (local) and Azure MySQL with token auth (production)
 - Deployed on Azure App Service with automatic GitHub Actions deployment
 - Screen-based access levels (menu filtering + URL-level protection)
+- Dashboard approval statistics and pending-count badge in the sidebar
 
 **Pending**
 
 - Azure AD SSO activation (blocked on app registration details)
 - reCAPTCHA keys (blocked on a company Google account)
-- Approval workflows built on the hierarchy (design in progress)
+- Legacy desktop app (Java) migration — screen inventory in progress
 - Employee data import to production
 - Multi-language support 
 - Power BI report embedding 
