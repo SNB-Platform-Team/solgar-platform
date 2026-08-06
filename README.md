@@ -61,6 +61,8 @@ the ORM calls in one place and the views thin.
 
 **Approval workflow with hierarchy routing.** Equipment requests move through a state machine (pending → approved / rejected / cancelled). When an employee submits a request, the system automatically routes it to their manager (a self-referential manager field on the user model) for a decision. Business rules live in a service layer: only the assigned approver may decide, only pending requests can be acted on, and only the original requester may cancel.
 
+**Legacy desktop migration (Solgar Intern).** Screens from the legacy Java desktop application are being rebuilt as web modules rather than translated line by line. The first migrated screen is the chain sales upload: an Excel file (.xls or .xlsx) is parsed, each product line is classified as Solgar or Bounty by its name, brand totals are computed, and the data is previewed before saving. A companion report screen filters saved sales server-side and aggregates totals.
+
 We plan to open the platform to consumers in the future, not only staff.
 
 ---
@@ -186,12 +188,18 @@ access to the MySQL host must be permitted.
 - Deployed on Azure App Service with automatic GitHub Actions deployment
 - Screen-based access levels (menu filtering + URL-level protection)
 - Dashboard approval statistics and pending-count badge in the sidebar
+- Sales module: chain Excel upload (MFO format), Solgar/Bounty classification, preview-then-save
+- Sales report screen with server-side filtering and brand totals
+- .xls and .xlsx support for old versions (before 2003)
+- "Solgar Intern" grouped navigation menu
 
 **Pending**
 
 - Azure AD SSO activation (blocked on app registration details)
 - reCAPTCHA keys (blocked on a company Google account)
-- Legacy desktop app (Java) migration — screen inventory in progress
+- Legacy migration: additional chain formats beyond MFO
+- Legacy migration: remaining screens (marketing expenses, evaluation, etc.)
+- 1C integration (if required by migrated screens)
 - Employee data import to production
 - Multi-language support 
 - Power BI report embedding 
