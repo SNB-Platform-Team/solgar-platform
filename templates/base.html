@@ -127,6 +127,20 @@ Base layout for authenticated pages. Extend with {% block content %}.
                 {% if pending_approvals_count > 0 %}<span class="nav-badge">{{ pending_approvals_count }}</span>{% endif %}
             </a>
             {% endif %}
+
+            {% if "SALES_UPLOAD" in accessible_screens or "SALES_VIEW" in accessible_screens %}
+            <div class="nav-group">
+                <div class="nav-group-title">Solgar Intern</div>
+                <div class="nav-submenu">
+                    {% if "SALES_VIEW" in accessible_screens %}
+                    <a href="{% url 'sales:report' %}" class="nav-link {% block nav_sales_report %}{% endblock %}">Отчёт по продажам</a>
+                    {% endif %}
+                    {% if "SALES_UPLOAD" in accessible_screens %}
+                    <a href="{% url 'sales:upload' %}" class="nav-link {% block nav_sales %}{% endblock %}">Загрузка продаж</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </aside>
 
         <main class="content">

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Загрузка продаж{% endblock %}
+{% block nav_sales %}active{% endblock %}
+
+{% block content %}
+<style>
+    .upload-form { margin-bottom: 32px; }
+    .form-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+    .form-group input, .form-group select { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 11px 14px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.92rem; outline: none; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--gold); }
+    .form-group select option { background: var(--dark2); }
+    .btn-row { display: flex; gap: 12px; margin-top: 8px; }
+    .btn-preview, .btn-save { border: none; border-radius: 4px; padding: 12px 26px; font-family: 'Jost',sans-serif; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+    .btn-preview { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.4); }
+    .btn-preview:hover { background: rgba(201,168,76,0.25); }
+    .btn-save { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
+    .btn-save:hover { opacity: 0.9; }
+
+    .totals { display: flex; gap: 14px; flex-wrap: wrap; margin: 24px 0; }
+    .total-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; min-width: 150px; }
+    .total-card .tval { font-size: 1.5rem; font-family: 'Cormorant Garamond',serif; color: var(--gold-light); }
+    .total-card .tlbl { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+    .preview-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .preview-table th { text-align: left; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); padding: 10px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .preview-table td { padding: 10px 12px; border-bottom: 1px solid rgba(201,168,76,0.08); font-size: 0.85rem; font-weight: 300; }
+    .badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 3px; }
+    .badge-SOLGAR { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.3); }
+    .badge-BOUNTY { background: rgba(120,160,220,0.15); color: #a8c4e0; border: 1px solid rgba(120,160,220,0.35); }
+    .table-scroll { max-height: 460px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .preview-head { font-family: 'Cormorant Garamond',serif; font-size: 1.3rem; color: var(--cream); margin: 24px 0 6px; }
+</style>
+
+<h1 class="page-title">Загрузка продаж</h1>
+<p class="page-subtitle">Загрузите Excel-файл сети для разбора и сохранения</p>
+
+<form method="post" enctype="multipart/form-data" class="upload-form">
+    {% csrf_token %}
+    <div class="form-row">
+        <div class="form-group">
+            <label for="excel_file">Файл Excel</label>
+            <input type="file" id="excel_file" name="excel_file" accept=".xls,.xlsx">
+        </div>
+        <div class="form-group">
+            <label for="report_date">Отчётная дата</label>
+            <input type="date" id="report_date" name="report_date" value="{{ report_date|default:'' }}">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="chain_name">Сеть</label>
+            <select id="chain_name" name="chain_name">
+                {% for c in chains %}
+                <option value="{{ c }}" {% if c == selected_chain %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="country">Страна</label>
+            <select id="country" name="country">
+                {% for c in countries %}
+                <option value="{{ c }}" {% if c == selected_country %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="btn-row">
+        <button type="submit" name="action" value="preview" class="btn-preview">Показать данные</button>
+        {% if preview %}
+        <button type="submit" name="action" value="save" class="btn-save">Сохранить</button>
+        {% endif %}
+    </div>
+</form>
+
+{% if preview %}
+<div class="totals">
+    <div class="total-card">
+        <div class="tval">{{ result.solgar_count }}</div>
+        <div class="tlbl">Solgar — кол-во</div>
+    </div>
+    <div class="total-card">
+        <div class="tval">{{ result.solgar_amount }}</div>
+        <div class="tlbl">Solgar — сумма</div>
+    </div>
+    <div class="total-card">
+        <div class="tval">{{ result.bounty_count }}</div>
+        <div class="tlbl">Bounty — кол-во</div>
+    </div>
+    <div class="total-card">
+        <div class="tval">{{ result.bounty_amount }}</div>
+        <div class="tlbl">Bounty — сумма</div>
+    </div>
+    <div class="total-card">
+        <div class="tval">{{ result.product_types }}</div>
+        <div class="tlbl">Видов товара</div>
+    </div>
+</div>
+
+<div class="preview-head">Предпросмотр ({{ result.total_rows }} строк)</div>
+<p class="page-subtitle">Проверьте данные перед сохранением</p>
+
+<div class="table-scroll">
+<table class="preview-table">
+    <thead>
+        <tr>
+            <th>Бренд</th>
+            <th>Товар</th>
+            <th>Город</th>
+            <th>Аптека</th>
+            <th>Кол-во</th>
+            <th>Сумма</th>
+            <th>Остаток</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td><span class="badge badge-{{ row.brand }}">{{ row.brand }}</span></td>
+            <td>{{ row.product_name }}</td>
+            <td>{{ row.city|default:"—" }}</td>
+            <td>{{ row.pharmacy|default:"—" }}</td>
+            <td>{{ row.count }}</td>
+            <td>{{ row.amount }}</td>
+            <td>{{ row.remaining_count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
