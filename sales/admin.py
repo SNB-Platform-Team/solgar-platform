@@ -2,8 +2,16 @@
 
 from django.contrib import admin
 
-from .models import ChainDefinition, SalesRecord
+from .models import BrandDefinition, ChainDefinition, SalesRecord
 
+@admin.register(BrandDefinition)
+class BrandDefinitionAdmin(admin.ModelAdmin):
+    """Manage parametric brand definitions."""
+
+    list_display = ("name", "code", "priority", "is_default", "is_active")
+    list_filter = ("is_active", "is_default")
+    search_fields = ("name", "code")
+    ordering = ("priority", "name")
 
 @admin.register(SalesRecord)
 class SalesRecordAdmin(admin.ModelAdmin):

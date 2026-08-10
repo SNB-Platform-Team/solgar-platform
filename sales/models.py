@@ -8,6 +8,45 @@ Each record is classified as Solgar or Bounty based on the product name.
 from django.conf import settings
 from django.db import models
 
+class BrandDefinition(models.Model):
+    """
+    Parametric brand definition. Instead of hard-coding brand keywords in
+    the parser, each brand's markers live here. Deactivating a brand
+    ('pulling it out') is a data change, not a code change.
+    """
+
+    name = models.CharField("Brand name", max_length=80, unique=True)
+    code = models.CharField("Brand code", max_length=20, unique=True)
+
+    # Keywords that identify this brand in a product name (case-insensitive,
+    # apostrophes normalised). e.g. ["natures bounty", "нэйчес", "нб"]
+    keywords = models.JSONField("Keywords", default=list)
+
+    # If no active brand's keywords match, the product is assigned to the
+    # brand marked as default. Exactly one brand should be default.
+    is_default = models.BooleanField("Default brand", default=False)
+
+    # Lower priority number is checked first when matching keywords.
+    priority = models.IntegerField("Priority", default=100)
+
+    is_active = models.BooleanField("Active", default=True)
+
+    class Meta:
+        verbose_name = "Brand definition"
+        verbose_name_plural = "Brand definitions"
+        db_table = "intern_sls_brand_definition"
+        ordering = ["priority", "name"]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        flags = []
+        if self.is_default:
+            flags.append("default")
+        if not self.is_active:
+            flags.append("inactive")
+        suffix = f" [{', '.join(flags)}]" if flags else ""
+        return f"{self.name}{suffix}"
+
 
 class ChainDefinition(models.Model):
     """

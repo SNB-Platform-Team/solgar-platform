@@ -163,9 +163,6 @@ Base layout for authenticated pages. Extend with {% block content %}.
                             {% if "STORAGE_UPDATE" in accessible_screens %}
                             <a href = "{% url 'sales:storage_stock' %}" class="nav-link {% block nav_storage_stock %}{% endblock%}"Просмотр сток и продажа"</a>
                             {% endif %}
-                            {% if "EXCEL_LINK" in accessible_screens %}
-                            <a href="{% url 'sales:excel_link' %}" class="nav-link" {% block nav_excel_link %}{% endblock %} "Sales Linking"</a>
-                            {% endif %}
                             {%endcomment%}
                         </div>
                         {%comment%}
@@ -186,15 +183,7 @@ Base layout for authenticated pages. Extend with {% block content %}.
                             {% endif %}
                         {%endcomment%}
                         {%comment%}
-                        <div class="nav-subgroup-title">Сеть фармация Расходы</div>
-                        <div class="nav-subgroup-title">Оценка</div>
-                        <div class="nav-subgroup-title">Организация</div>
-                        <div class="nav-subgroup-title">Корнер&Стойка</div>
-                        <div class="nav-subgroup-title">Продукт</div>
-                        <div class="nav-subgroup-title">Срок</div>
-                        <div class="nav-subgroup-title">База данных</div>
-                        <div class="nav-subgroup-title">Административные экраны</div>
-                        <div class="nav-subgroup-title">1C</div>
+                      
                         {%endcomment%}
                     </div>
                 </div>     

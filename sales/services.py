@@ -86,15 +86,39 @@ class ChainParser:
 
     def classify(self, product_name: str) -> str:
         """
-        Classify a product by its name: Bounty if it carries a Bounty
-        marker, otherwise Solgar (these files hold only those two brands).
+        Classify a product by its name using the active BrandDefinition
+        records. Active brands are checked in priority order; the first
+        whose keyword appears in the name wins. If none match, the default
+        brand is used. Fully parametric — no brand is hard-coded.
         """
         name = product_name.lower()
         for apo in ("’", "‘", "`", "'"):
             name = name.replace(apo, "")
-        if any(kw in name for kw in BOUNTY_KEYWORDS):
-            return SalesRecord.Brand.BOUNTY
-        return SalesRecord.Brand.SOLGAR
+
+        brands = self._active_brands()
+
+        default_code = SalesRecord.Brand.SOLGAR  # fallback if no default set
+        for brand in brands:
+            if brand.is_default:
+                default_code = brand.code
+            for kw in brand.keywords:
+                if kw and str(kw).lower() in name:
+                    return brand.code
+
+        return default_code
+
+    def _active_brands(self):
+        """
+        Return active brand definitions in priority order, cached on the
+        instance so we hit the database once per file, not once per row.
+        """
+        if not hasattr(self, "_brands_cache"):
+            from .models import BrandDefinition
+
+            self._brands_cache = list(
+                BrandDefinition.objects.filter(is_active=True).order_by("priority", "name")
+            )
+        return self._brands_cache
 
     def _to_int(self, value) -> int:
         """Best-effort convert a cell value to int; 0 on failure."""
