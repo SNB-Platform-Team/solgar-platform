@@ -63,6 +63,8 @@ the ORM calls in one place and the views thin.
 
 **Legacy desktop migration (Solgar Intern).** Screens from the legacy Java desktop application are being rebuilt as web modules rather than translated line by line. The first migrated screen is the chain sales upload: an Excel file (.xls or .xlsx) is parsed, each product line is classified as Solgar or Bounty by its name, brand totals are computed, and the data is previewed before saving. A companion report screen filters saved sales server-side and aggregates totals.
 
+**Parametric parsing (chains and brands in the database).** Rather than a separate parser per chain, a single parser reads chain "definitions" stored in the database: each defines its column mapping, country, and layout orientation. Adding a chain is a data change (a new row), not new code. Brand classification works the same way — each brand's identifying keywords live in a database table, with one brand marked as the default. Deactivating a brand ("pulling it out") is a single flag change, not a code edit.
+
 We plan to open the platform to consumers in the future, not only staff.
 
 ---
@@ -192,6 +194,10 @@ access to the MySQL host must be permitted.
 - Sales report screen with server-side filtering and brand totals
 - .xls and .xlsx support for old versions (before 2003)
 - "Solgar Intern" grouped navigation menu
+- Parametric chain parser driven by database definitions (ChainDefinition)
+- Parametric brand classification driven by database definitions (BrandDefinition)
+- Two chains configured as definitions: MFO (pharmacy) and APTEKA_RU
+- Excel export of filtered sales
 
 **Pending**
 
@@ -204,6 +210,9 @@ access to the MySQL host must be permitted.
 - Multi-language support 
 - Power BI report embedding 
 - Test suite
+- Distributor sales/stock upload screen (operation type: sale/stock)
+- Migration of sales storage to the intern_sls schema / sales_orders
+- Parametric countries (currently a fixed list)
 ---
 
 
