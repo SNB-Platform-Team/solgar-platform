@@ -12,6 +12,8 @@
     .filter-group input:focus, .filter-group select:focus { border-color: var(--gold); }
     .filter-group select option { background: var(--dark2); }
     .btn-generate { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border: none; border-radius: 4px; padding: 11px 28px; font-family: 'Jost',sans-serif; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+    .btn-export { background: rgba(120,190,120,0.15); color: #a8e0a8; border: 1px solid rgba(120,190,120,0.4); border-radius: 4px; padding: 11px 20px; font-family: 'Jost',sans-serif; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; }
+    .btn-export:hover { background: rgba(120,190,120,0.25); }
     .btn-generate:hover { opacity: 0.9; }
     .btn-reset { margin-left: 10px; color: var(--gold-dim); text-decoration: none; font-size: 0.85rem; }
     .btn-reset:hover { color: var(--gold-light); }
@@ -78,8 +80,9 @@
             <label for="q">Товар</label>
             <input type="text" id="q" name="q" value="{{ f_search }}" placeholder="Поиск по названию">
         </div>
-        <div class="filter-group" style="display:flex; align-items:flex-end;">
+        <div class="filter-group" style="display:flex; align-items:flex-end; gap:10px;">
             <button type="submit" class="btn-generate">Показать</button>
+            <a href="{% url 'sales:export' %}?report_date={{ f_report_date|urlencode }}&chain_name={{ f_chain|urlencode }}&country={{ f_country|urlencode }}&brand={{ f_brand|urlencode }}&city={{ f_city|urlencode }}&q={{ f_search|urlencode }}" class="btn-export">Экспорт в Excel</a>
             <a href="{% url 'sales:report' %}" class="btn-reset">Сбросить</a>
         </div>
     </div>

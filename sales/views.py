@@ -188,3 +188,94 @@ def sales_report_view(request: HttpRequest) -> HttpResponse:
         "f_search": search,
     }
     return render(request, "sales/report.html", context)
+
+
+@login_required
+@require_screen("SALES_VIEW")
+@require_http_methods(["GET"])
+def sales_export_view(request: HttpRequest) -> HttpResponse:
+    """Export the filtered sales records as an .xlsx download."""
+    from io import BytesIO
+
+    service = SalesViewService()
+
+    # Same filter parsing as the report view.
+    filters: dict[str, Any] = {}
+    report_date_str = request.GET.get("report_date", "").strip()
+    if report_date_str:
+        try:
+            filters["report_date"] = datetime.strptime(report_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    for key in ("chain_name", "country", "brand", "city"):
+        value = request.GET.get(key, "").strip()
+        if value:
+            filters[key] = value
+    search = request.GET.get("q", "").strip()
+    if search:
+        filters["search"] = search
+
+    wb = service.export_to_excel(**filters)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="sales_export.xlsx"'
+    return response
+
+@login_required
+@require_screen("SALES_CHAIN")
+@require_http_methods(["GET"])
+def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
+    """
+    Pharmacy chain sales report — Java 'Sales Report Observation' equivalent.
+    Date-range filtering by company type (brand), chain, country, city.
+    """
+    service = SalesViewService()
+
+    filters: dict[str, Any] = {}
+
+    date_from_str = request.GET.get("date_from", "").strip()
+    date_to_str = request.GET.get("date_to", "").strip()
+    if date_from_str:
+        try:
+            filters["date_from"] = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    if date_to_str:
+        try:
+            filters["date_to"] = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    for key in ("chain_name", "country", "brand", "city"):
+        value = request.GET.get(key, "").strip()
+        if value:
+            filters[key] = value
+    search = request.GET.get("q", "").strip()
+    if search:
+        filters["search"] = search
+
+    report = service.chain_report(**filters)
+    options = service.filter_options()
+
+    context: dict[str, Any] = {
+        "report": report,
+        "records": report["records"][:500],
+        "options": options,
+        "countries": COUNTRIES,
+        "brands": SalesRecord.Brand.choices,
+        "f_date_from": date_from_str,
+        "f_date_to": date_to_str,
+        "f_chain": request.GET.get("chain_name", ""),
+        "f_country": request.GET.get("country", ""),
+        "f_brand": request.GET.get("brand", ""),
+        "f_city": request.GET.get("city", ""),
+        "f_search": request.GET.get("q", ""),
+        "has_query": bool(request.GET),
+    }
+    return render(request, "sales/chain_report.html", context)

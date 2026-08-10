@@ -56,6 +56,33 @@ class SalesRepository:
 
         return qs
 
+    def filter_by_range(
+        self, date_from=None, date_to=None, chain_name: str = "",
+        country: str = "", brand: str = "", city: str = "", search: str = "",
+    ) -> QuerySet:
+        """
+        Return sales records within a date range and matching filters.
+        Empty filters are ignored.
+        """
+        qs = SalesRecord.objects.select_related("uploaded_by")
+
+        if date_from:
+            qs = qs.filter(report_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(report_date__lte=date_to)
+        if chain_name:
+            qs = qs.filter(chain_name=chain_name)
+        if country:
+            qs = qs.filter(country=country)
+        if brand:
+            qs = qs.filter(brand=brand)
+        if city:
+            qs = qs.filter(city__icontains=city)
+        if search:
+            qs = qs.filter(product_name__icontains=search)
+
+        return qs.order_by("chain_name", "product_name")    
+
     def distinct_report_dates(self) -> list:
         """Return the distinct report dates present, newest first."""
         return list(

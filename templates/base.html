@@ -54,16 +54,28 @@ Base layout for authenticated pages. Extend with {% block content %}.
         .nav-link { display: flex; align-items: center; gap: 12px; padding: 11px 24px; color: var(--cream); text-decoration: none; font-size: 0.92rem; font-weight: 300; border-left: 2px solid transparent; transition: background 0.2s, border-color 0.2s; }
         .nav-link:hover { background: rgba(201,168,76,0.06); border-left-color: var(--gold-dim); }
         .nav-link.active { background: rgba(201,168,76,0.1); border-left-color: var(--gold); color: var(--gold-light); }
+        .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto; background: var(--gold); color: var(--dark); font-size: 0.72rem; font-weight: 600; border-radius: 10px; }
 
-        /* Açılır menü grupları */
+        /* Açılır menü grupları — birinci katman (Главная ile aynı hizada ve renkte) */
         .nav-group { position: relative; }
-        .nav-group-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 24px; color: var(--gold); cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.72rem; user-select: none; }
-        .nav-group-title::after { content: '⌄'; font-size: 0.9rem; transition: transform 0.3s; opacity: 0.6; }
+        .nav-group-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 24px; color: var(--gold-light); cursor: pointer; font-size: 0.92rem; font-weight: 300; user-select: none; border-left: 2px solid transparent; transition: background 0.2s, border-color 0.2s; }
+        .nav-group-title:hover { background: rgba(201,168,76,0.06); border-left-color: var(--gold-dim); }
+        .nav-group-title::after { content: '⌄'; font-size: 0.9rem; opacity: 0.5; transition: transform 0.3s; }
         .nav-group:hover .nav-group-title::after { transform: rotate(180deg); }
         .nav-submenu { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
-        .nav-group:hover .nav-submenu { max-height: 300px; }
+        .nav-group:hover .nav-submenu { max-height: 400px; }
+        .nav-toplink { color: var(--gold-light); }
+
+        /* İkinci katman (iç içe alt grup) */
+        .nav-subgroup { position: relative; }
+        .nav-subgroup-title { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px 10px 40px; color: var(--cream); cursor: pointer; font-size: 0.88rem; font-weight: 300; user-select: none; }
+        .nav-subgroup-title::after { content: '›'; font-size: 1rem; opacity: 0.5; transition: transform 0.3s; }
+        .nav-subgroup:hover .nav-subgroup-title::after { transform: rotate(90deg); }
+        .nav-subgroup-title:hover { background: rgba(201,168,76,0.06); }
+        .nav-subsubmenu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .nav-subgroup:hover .nav-subsubmenu { max-height: 300px; }
         .nav-submenu .nav-link { padding-left: 40px; font-size: 0.88rem; }
-        .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto; background: var(--gold); color: var(--dark); font-size: 0.72rem; font-weight: 600; border-radius: 10px; }
+        .nav-subsubmenu .nav-link { padding-left: 56px; font-size: 0.85rem; }
 
         /* Content */
         .content { flex: 1; padding: 36px 44px; }
@@ -108,45 +120,60 @@ Base layout for authenticated pages. Extend with {% block content %}.
             <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
             {% endif %}
 
-            {% if "EMPLOYEES" in accessible_screens %}
+
+
+            {% if "EMPLOYEES" in accessible_screens or "REQUESTS" in accessible_screens or "APPROVALS" in accessible_screens %}
             <div class="nav-group">
                 <div class="nav-group-title">Организация</div>
                 <div class="nav-submenu">
+                    {% if "EMPLOYEES" in accessible_screens %}
                     <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
+                    {% endif %}
+                    {% if "REQUESTS" in accessible_screens %}
+                    <a href="{% url 'approvals:my_requests' %}" class="nav-link {% block nav_requests %}{% endblock %}">Мои заявки</a>
+                    {% endif %}
+                    {% if "APPROVALS" in accessible_screens %}
+                    <a href="{% url 'approvals:inbox' %}" class="nav-link {% block nav_approvals %}{% endblock %}">
+                        Согласование
+                        {% if pending_approvals_count > 0 %}<span class="nav-badge">{{ pending_approvals_count }}</span>{% endif %}
+                    </a>
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
-
-            {% if "REQUESTS" in accessible_screens %}
-            <a href="{% url 'approvals:my_requests' %}" class="nav-link {% block nav_requests %}{% endblock %}">Мои заявки</a>
-            {% endif %}
-
-            {% if "APPROVALS" in accessible_screens %}
-            <a href="{% url 'approvals:inbox' %}" class="nav-link {% block nav_approvals %}{% endblock %}">
-                Согласование
-                {% if pending_approvals_count > 0 %}<span class="nav-badge">{{ pending_approvals_count }}</span>{% endif %}
-            </a>
             {% endif %}
 
             {% if "SALES_UPLOAD" in accessible_screens or "SALES_VIEW" in accessible_screens %}
             <div class="nav-group">
                 <div class="nav-group-title">Solgar Intern</div>
                 <div class="nav-submenu">
-                    {% if "SALES_VIEW" in accessible_screens %}
-                    <a href="{% url 'sales:report' %}" class="nav-link {% block nav_sales_report %}{% endblock %}">Отчёт по продажам</a>
-                    {% endif %}
-                    {% if "SALES_UPLOAD" in accessible_screens %}
-                    <a href="{% url 'sales:upload' %}" class="nav-link {% block nav_sales %}{% endblock %}">Загрузка продаж</a>
-                    {% endif %}
+                    <div class="nav-subgroup">
+                        <div class="nav-subgroup-title">Отчет по продажам</div>
+                        <div class="nav-subsubmenu">
+                            {% if "SALES_UPLOAD" in accessible_screens %}
+                            <a href="{% url 'sales:upload' %}" class="nav-link {% block nav_sales %}{% endblock %}">Загрузка Excel</a>
+                            {% endif %}
+                            {% if "SALES_VIEW" in accessible_screens %}
+                            <a href="{% url 'sales:report' %}" class="nav-link {% block nav_sales_report %}{% endblock %}">Просмотр продаж</a>
+                            {% endif %}
+                            {% if "SALES_CHAIN" in accessible_screens %}
+                            <a href="{% url 'sales:chain_report' %}" class="nav-link {% block nav_sales_chain %}{% endblock %}">Аптечная сеть продаж</a>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}
+            
+            <a href="https://solgar.hr-link.ru/employee" target="_blank" rel="noopener" class="nav-link nav-toplink">HRlink</a> <!--HR link simdilik boyle kaliyor, daha ileride api ile entegre edecegiz--> 
+
+            <a href="https://solgar.pro/stream/" target="_blank" rel="noopener" class="nav-link nav-toplink">Битрикс24</a> <!--bitrix de simdilik boyle kalsin, kararlastiracagiz nasil olacagini-->
+
         </aside>
 
         <main class="content">
             {% for message in messages %}
             <div class="alert-{{ message.tags }}">{{ message }}</div>
-            {% endfor %}
+            {% endfor %} 
 
             <div class="panel">
                 {% block content %}{% endblock %}
@@ -155,3 +182,9 @@ Base layout for authenticated pages. Extend with {% block content %}.
     </div>
 </body>
 </html>    
+
+
+
+        <div class="nav-group">
+            <div class="nav-group-title">Отчет по продажам"</div>
+            

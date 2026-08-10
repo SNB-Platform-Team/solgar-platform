@@ -28,6 +28,7 @@ BOUNTY_KEYWORDS = (
     " нб",
     "nb ",
     "nature bounty",
+    "n b",
 )
 
 
@@ -332,6 +333,57 @@ class SalesViewService:
 
         self.repository = SalesRepository()
 
+    def export_to_excel(self, **filters):
+        """
+        Build an .xlsx workbook of the filtered sales records.
+
+        Returns:
+            An openpyxl Workbook ready to be streamed to the client.
+        """
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+
+        records = self.repository.filter_records(**filters)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Продажи"
+
+        headers = [
+            "Бренд", "Товар", "Сеть", "Дата", "Страна",
+            "Город", "Аптека", "Кол-во", "Сумма", "Остаток",
+        ]
+        ws.append(headers)
+
+        # Header styling.
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill("solid", fgColor="1F4E79")
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+
+        # Data rows.
+        for rec in records.iterator():
+            ws.append([
+                rec.get_brand_display(),
+                rec.product_name,
+                rec.chain_name,
+                rec.report_date.strftime("%d.%m.%Y") if rec.report_date else "",
+                rec.country,
+                rec.city,
+                rec.pharmacy,
+                rec.count,
+                float(rec.amount),
+                rec.remaining_count,
+            ])
+
+        # Reasonable column widths.
+        widths = [16, 45, 12, 12, 14, 18, 30, 10, 12, 10]
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[chr(64 + i)].width = w
+
+        return wb
+
     def query(self, **filters) -> dict:
         """
         Run a filtered query and compute brand totals.
@@ -364,3 +416,65 @@ class SalesViewService:
             "report_dates": self.repository.distinct_report_dates(),
             "chains": self.repository.distinct_chains(),
         }
+
+    def chain_report(self, **filters) -> dict:
+        """
+        Run a date-range chain-sales query and compute brand totals.
+
+        Returns a dict with records and aggregated Solgar/Bounty totals.
+        """
+        from django.db.models import Sum
+
+        records = self.repository.filter_by_range(**filters)
+
+        solgar = records.filter(brand=SalesRecord.Brand.SOLGAR).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+        bounty = records.filter(brand=SalesRecord.Brand.BOUNTY).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+
+        return {
+            "records": records,
+            "total_rows": records.count(),
+            "solgar_count": solgar["c"] or 0,
+            "solgar_amount": solgar["a"] or 0,
+            "bounty_count": bounty["c"] or 0,
+            "bounty_amount": bounty["a"] or 0,
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
