@@ -158,9 +158,60 @@ Base layout for authenticated pages. Extend with {% block content %}.
                             {% if "SALES_CHAIN" in accessible_screens %}
                             <a href="{% url 'sales:chain_report' %}" class="nav-link {% block nav_sales_chain %}{% endblock %}">Аптечная сеть продаж</a>
                             {% endif %}
+                            {%comment%}
+                            ОТЧЕТ ПО ПРОДАЖАМ
+                            {% if "STORAGE_UPDATE" in accessible_screens %}
+                            <a href = "{% url 'sales:storage_stock' %}" class="nav-link {% block nav_storage_stock %}{% endblock%}"Просмотр сток и продажа"</a>
+                            {% endif %}
+                            {% if "EXCEL_LINK" in accessible_screens %}
+                            <a href="{% url 'sales:excel_link' %}" class="nav-link" {% block nav_excel_link %}{% endblock %} "Sales Linking"</a>
+                            {% endif %}
+                            {%endcomment%}
                         </div>
+                        {%comment%}
+                        <div class="nav-subgroup-title">Вход расходы на маркетинг</div>
+                            {% if "SALES_UPLOAD" in accessible_screens %}
+                            <a href="{% url 'sales:upload' %}" class="nav-link {% block nav_sales %}{% endblock %}">Обовление маркетинговых расходов</a>
+                            {% endif %}
+                            {% if "SALES_VIEW" in accessible_screens %}
+                            <a href="{% url 'sales:report' %}" class="nav-link {% block nav_sales_report %}{% endblock %}">Расходы на маркетинг утвержденные операции обновления</a>
+                            {% endif %}
+                            {% if "SALES_CHAIN" in accessible_screens %}
+                            <a href="{% url 'sales:chain_report' %}" class="nav-link {% block nav_sales_chain %}{% endblock %}">Расходы на маркетинг Утверкледение</a>
+                            {% endif %}
+                            {%comment%}
+                            ОТЧЕТ ПО ПРОДАЖАМ
+                            {% if "STORAGE_UPDATE" in accessible_screens %}
+                            <a href = "{% url 'sales:storage_stock' %}" class="nav-link {% block nav_storage_stock %}{% endblock%}"Расходы на маркетинг Просмотров"</a>
+                            {% endif %}
+                        {%endcomment%}
+                        {%comment%}
+                        <div class="nav-subgroup-title">Сеть фармация Расходы</div>
+                        <div class="nav-subgroup-title">Оценка</div>
+                        <div class="nav-subgroup-title">Организация</div>
+                        <div class="nav-subgroup-title">Корнер&Стойка</div>
+                        <div class="nav-subgroup-title">Продукт</div>
+                        <div class="nav-subgroup-title">Срок</div>
+                        <div class="nav-subgroup-title">База данных</div>
+                        <div class="nav-subgroup-title">Административные экраны</div>
+                        <div class="nav-subgroup-title">1C</div>
+                        {%endcomment%}
                     </div>
-                </div>
+                </div>     
+            
+                {% comment %}
+            {% if "EXPENSES" in accessible_screens%}    
+            <div class = "nav-group">
+                <div class="nav-group-title">Solgar Intern</div>
+                <div class="sub-menu">
+                    <div class="nav-submenu">
+                        <div class="nav-subgroup">
+                            <div class = "nav-subsubmenu">
+                                {% if EXPENSES in accessible_screens %}
+                                <a href="{% url 'costs:expense_entry'%}" class="nav-link{% block nav_sales_report %}{% endblock%}">Вход расходы на маркетинг</a>
+                {% endcomment%}
+                                      
+
             </div>
             {% endif %}
             

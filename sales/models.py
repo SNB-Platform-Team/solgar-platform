@@ -9,6 +9,53 @@ from django.conf import settings
 from django.db import models
 
 
+class ChainDefinition(models.Model):
+    """
+    Parametric definition of how to parse one chain/distributor's Excel.
+
+    Instead of a separate parser per chain, a single parser reads these
+    definitions. Adding a new chain means adding a row here, not new code.
+    """
+
+    class Orientation(models.TextChoices):
+        """Excel layout: rows stacked vertically or spread horizontally."""
+
+        VERTICAL = "VERTICAL", "Вертикальный"
+        HORIZONTAL = "HORIZONTAL", "Горизонтальный"
+
+    name = models.CharField("Chain / distributor name", max_length=120, unique=True)
+    country = models.CharField("Country", max_length=60, default="Russia")
+    orientation = models.CharField(
+        "Layout orientation", max_length=12,
+        choices=Orientation.choices, default=Orientation.VERTICAL,
+    )
+
+    # Maps logical fields to the Excel header text for this chain, e.g.
+    # {"product": "Номенклатура", "count": "Продажи", "amount": "Сумма в руб.",
+    #  "city": "Город", "pharmacy": "Адрес грузополучателя",
+    #  "remaining_count": "Остаток на конец периода"}
+    # Only "product" and "count" are strictly required.
+    column_map = models.JSONField("Column mapping", default=dict)
+
+    # How many rows from the top to scan when locating the header row.
+    header_search_limit = models.IntegerField("Header search limit", default=30)
+
+    is_active = models.BooleanField("Active", default=True)
+    created_at = models.DateTimeField("Created at", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Chain definition"
+        verbose_name_plural = "Chain definitions"
+        db_table = "intern_sls_chain_definition"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return f"{self.name} ({self.country}, {self.get_orientation_display()})"
+
+
+
+
 class SalesRecord(models.Model):
     """A single product sales line from a chain's Excel report."""
 

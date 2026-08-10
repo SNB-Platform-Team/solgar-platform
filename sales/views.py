@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from authorization.decorators import require_screen
 
-from .models import SalesRecord
+from .models import ChainDefinition, SalesRecord
 from .services import (
     ParsedRow, ParseResult, SalesParseError, SalesUploadService, SalesViewService,
 )
@@ -33,7 +33,9 @@ def sales_upload_view(request: HttpRequest) -> HttpResponse:
     it back from the session, so the user only selects the file once.
     """
     context: dict[str, Any] = {
-        "chains": CHAINS,
+        "chains": list(
+            ChainDefinition.objects.filter(is_active=True).values_list("name", flat=True)
+        ),
         "countries": COUNTRIES,
     }
 
@@ -99,9 +101,16 @@ def sales_upload_view(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Неверный формат даты (ГГГГ-ММ-ДД).")
         return render(request, "sales/upload.html", context)
 
+    # Find the parse definition for the selected chain.
+    try:
+        definition = ChainDefinition.objects.get(name=chain_name, is_active=True)
+    except ChainDefinition.DoesNotExist:
+        messages.error(request, f"Определение для сети «{chain_name}» не найдено.")
+        return render(request, "sales/upload.html", context)
+
     service = SalesUploadService()
     try:
-                result = service.preview(excel_file, excel_file.name)
+        result = service.preview(excel_file, definition, excel_file.name)
     except SalesParseError as exc:
         messages.error(request, str(exc))
         return render(request, "sales/upload.html", context)
