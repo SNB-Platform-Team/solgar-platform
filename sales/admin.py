@@ -2,6 +2,8 @@
 
 from django.contrib import admin
 
+from .models import BrandDefinition, ChainDefinition, DistributorRecord, SalesRecord
+
 from .models import BrandDefinition, ChainDefinition, SalesRecord
 
 @admin.register(BrandDefinition)
@@ -31,6 +33,28 @@ class SalesRecordAdmin(admin.ModelAdmin):
 class ChainDefinitionAdmin(admin.ModelAdmin):
     """Manage parametric chain parse definitions."""
 
-    list_display = ("name", "country", "orientation", "is_active")
-    list_filter = ("country", "orientation", "is_active")
-    search_fields = ("name",)
+    list_display = ("name", "source_type", "country", "orientation", "is_active")
+    list_filter = ("source_type", "country", "orientation", "is_active")
+    search_fields = ("name",)  
+
+
+@admin.register(DistributorRecord)
+class DistributorRecordAdmin(admin.ModelAdmin):
+    """Inspect uploaded distributor sales/stock records."""
+
+    list_display = (
+        "distributor", "operation_type", "product_name", "brand",
+        "count", "amount", "city", "begin_date", "end_date",
+    )
+    list_filter = ("operation_type", "distributor", "brand", "country")
+    search_fields = ("product_name", "client", "city", "inn")
+    date_hierarchy = "begin_date"
+    ordering = ("-begin_date", "distributor")
+
+
+
+# ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# |   |——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# |   |————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# |   |——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————

@@ -8,6 +8,82 @@ Each record is classified as Solgar or Bounty based on the product name.
 from django.conf import settings
 from django.db import models
 
+
+class DistributorRecord(models.Model):
+    """
+    Distributor sales/stock line, uploaded from a distributor Excel file.
+
+    Distinct from SalesRecord (pharmacy data): distributors carry extra
+    fields (INN, segment, client, addresses) and an operation type
+    (sale vs stock). Stored under the solgar_stk schema (table prefix).
+    """
+
+    class Brand(models.TextChoices):
+        """Brand classification (mirrors SalesRecord.Brand)."""
+
+        SOLGAR = "SOLGAR", "Solgar"
+        BOUNTY = "BOUNTY", "Nature's Bounty"
+        OTHER = "OTHER", "Other"
+
+    class Operation(models.TextChoices):
+        """Whether this row is a sale or a stock (inventory) record."""
+
+        SALE = "SALE", "Продажа"
+        STOCK = "STOCK", "Сток"
+
+    # Upload context
+    distributor = models.CharField("Distributor", max_length=120)
+    operation_type = models.CharField(
+        "Operation type", max_length=10,
+        choices=Operation.choices, default=Operation.SALE,
+    )
+    country = models.CharField("Country", max_length=60)
+    begin_date = models.DateField("Begin date", null=True, blank=True)
+    end_date = models.DateField("End date", null=True, blank=True)
+
+    # Product line
+    product_name = models.CharField("Product name", max_length=300)
+    product_type = models.CharField("Product type", max_length=120, blank=True)
+    brand = models.CharField(
+        "Brand", max_length=10, choices=Brand.choices, default=Brand.OTHER
+    )
+    count = models.IntegerField("Count", default=0)
+    amount = models.DecimalField("Amount", max_digits=14, decimal_places=2, default=0)
+
+    # Location / client
+    city = models.CharField("City", max_length=150, blank=True)
+    client = models.CharField("Client", max_length=300, blank=True)
+    legal_address = models.CharField("Legal address", max_length=400, blank=True)
+    actual_address = models.CharField("Actual address", max_length=400, blank=True)
+    inn = models.CharField("INN", max_length=30, blank=True)
+    segment = models.CharField("Segment", max_length=120, blank=True)
+
+    # Bookkeeping
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="distributor_uploads",
+        verbose_name="Uploaded by",
+    )
+    created_at = models.DateTimeField("Created at", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Distributor record"
+        verbose_name_plural = "Distributor records"
+        db_table = "solgar_stk_distributor_record"
+        ordering = ["-begin_date", "distributor", "product_name"]
+        indexes = [
+            models.Index(fields=["distributor", "operation_type"]),
+            models.Index(fields=["begin_date", "end_date"]),
+            models.Index(fields=["brand"]),
+        ]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return f"{self.distributor} — {self.product_name} ({self.get_operation_type_display()})"
+
+
 class BrandDefinition(models.Model):
     """
     Parametric brand definition. Instead of hard-coding brand keywords in
@@ -62,8 +138,18 @@ class ChainDefinition(models.Model):
         VERTICAL = "VERTICAL", "Вертикальный"
         HORIZONTAL = "HORIZONTAL", "Горизонтальный"
 
+    class SourceType(models.TextChoices):
+        """Whether this definition describes a pharmacy chain or a distributor."""
+
+        PHARMACY = "PHARMACY", "Аптечная сеть"
+        DISTRIBUTOR = "DISTRIBUTOR", "Дистрибьютор"
+
     name = models.CharField("Chain / distributor name", max_length=120, unique=True)
     country = models.CharField("Country", max_length=60, default="Russia")
+    source_type = models.CharField(
+        "Source type", max_length=12,
+        choices=SourceType.choices, default=SourceType.PHARMACY,
+    )
     orientation = models.CharField(
         "Layout orientation", max_length=12,
         choices=Orientation.choices, default=Orientation.VERTICAL,
@@ -91,8 +177,6 @@ class ChainDefinition(models.Model):
     def __str__(self) -> str:
         """Readable representation."""
         return f"{self.name} ({self.country}, {self.get_orientation_display()})"
-
-
 
 
 class SalesRecord(models.Model):

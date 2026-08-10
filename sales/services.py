@@ -427,6 +427,42 @@ class SalesViewService:
             "bounty_amount": bounty["a"] or 0,
         }
 
+class DistributorUploadService:
+    """Upload and save distributor sales/stock data (parametric parser)."""
+
+    def preview(self, file_obj, chain_definition, filename: str = "") -> ParseResult:
+        """Parse a distributor file using its chain definition."""
+        parser = ChainParser(chain_definition)
+        return parser.parse(file_obj, filename)
+
+    def save_records(
+        self, parse_result: ParseResult, distributor: str, operation_type: str,
+        country: str, begin_date, end_date, user,
+    ) -> int:
+        """Persist parsed rows as DistributorRecord objects."""
+        from .models import DistributorRecord
+
+        records = [
+            DistributorRecord(
+                distributor=distributor,
+                operation_type=operation_type,
+                country=country,
+                begin_date=begin_date,
+                end_date=end_date,
+                product_name=row.product_name,
+                brand=row.brand,
+                count=row.count,
+                amount=row.amount,
+                city=row.city,
+                client=row.pharmacy,  # parser's 'pharmacy' field maps to client
+            )
+            for row in parse_result.rows
+        ]
+        for rec in records:
+            rec.uploaded_by = user
+        DistributorRecord.objects.bulk_create(records)
+        return len(records)
+
 
 
 

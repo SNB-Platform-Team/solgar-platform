@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from authorization.decorators import require_screen
 
-from .models import ChainDefinition, SalesRecord
+from .models import ChainDefinition, DistributorRecord, SalesRecord
 from .services import (
     ParsedRow, ParseResult, SalesParseError, SalesUploadService, SalesViewService,
 )
@@ -20,7 +20,6 @@ CHAINS = ["MFO"]
 COUNTRIES = ["Russia", "Kazakhstan", "Belarus", "Uzbekistan", "Azerbaijan"]
 
 SESSION_KEY = "sales_preview"
-
 
 @login_required
 @require_screen("SALES_UPLOAD")
@@ -146,7 +145,6 @@ def sales_upload_view(request: HttpRequest) -> HttpResponse:
     })
     return render(request, "sales/upload.html", context)
 
-
 @login_required
 @require_screen("SALES_VIEW")
 @require_http_methods(["GET"])
@@ -197,7 +195,6 @@ def sales_report_view(request: HttpRequest) -> HttpResponse:
         "f_search": search,
     }
     return render(request, "sales/report.html", context)
-
 
 @login_required
 @require_screen("SALES_VIEW")
@@ -288,3 +285,123 @@ def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
         "has_query": bool(request.GET),
     }
     return render(request, "sales/chain_report.html", context)
+
+
+DISTRIBUTOR_SESSION_KEY = "distributor_preview"
+
+
+@login_required
+@require_screen("DIST_UPLOAD")
+@require_http_methods(["GET", "POST"])
+def distributor_upload_view(request: HttpRequest) -> HttpResponse:
+    """Upload a distributor sales/stock Excel, preview, then save."""
+    distributors = list(
+        ChainDefinition.objects.filter(
+            is_active=True, source_type=ChainDefinition.SourceType.DISTRIBUTOR
+        ).values_list("name", flat=True)
+    )
+
+    context: dict[str, Any] = {
+        "distributors": distributors,
+        "countries": COUNTRIES,
+        "operations": DistributorRecord.Operation.choices,
+    }
+
+    if request.method == "GET":
+        return render(request, "sales/distributor_upload.html", context)
+
+    action = request.POST.get("action", "preview")
+
+    # SAVE — read parsed rows from session.
+    if action == "save":
+        stashed = request.session.get(DISTRIBUTOR_SESSION_KEY)
+        if not stashed:
+            messages.error(request, "Данные не найдены. Загрузите файл заново.")
+            return render(request, "sales/distributor_upload.html", context)
+
+        begin_date = (
+            datetime.strptime(stashed["begin_date"], "%Y-%m-%d").date()
+            if stashed["begin_date"] else None
+        )
+        end_date = (
+            datetime.strptime(stashed["end_date"], "%Y-%m-%d").date()
+            if stashed["end_date"] else None
+        )
+        rows = [
+            ParsedRow(
+                product_name=r["product_name"], brand=r["brand"],
+                pharmacy=r["client"], city=r["city"],
+                count=r["count"], amount=Decimal(r["amount"]),
+                remaining_count=0, remaining_amount=Decimal("0"),
+            )
+            for r in stashed["rows"]
+        ]
+        result = ParseResult(rows=rows)
+
+        created = DistributorUploadService().save_records(
+            result, stashed["distributor"], stashed["operation_type"],
+            stashed["country"], begin_date, end_date, request.user,
+        )
+        request.session.pop(DISTRIBUTOR_SESSION_KEY, None)
+        messages.success(request, f"Сохранено записей: {created}.")
+        return redirect("sales:distributor_upload")
+
+    # PREVIEW
+    distributor = request.POST.get("distributor", "").strip()
+    operation_type = request.POST.get("operation_type", "").strip()
+    country = request.POST.get("country", "").strip()
+    begin_date_str = request.POST.get("begin_date", "").strip()
+    end_date_str = request.POST.get("end_date", "").strip()
+    excel_file = request.FILES.get("excel_file")
+
+    context.update({
+        "selected_distributor": distributor,
+        "selected_operation": operation_type,
+        "selected_country": country,
+        "begin_date": begin_date_str,
+        "end_date": end_date_str,
+    })
+
+    if not excel_file:
+        messages.error(request, "Выберите файл Excel.")
+        return render(request, "sales/distributor_upload.html", context)
+    if not distributor or not operation_type or not country:
+        messages.error(request, "Заполните дистрибьютора, тип операции и страну.")
+        return render(request, "sales/distributor_upload.html", context)
+
+    try:
+        definition = ChainDefinition.objects.get(
+            name=distributor, is_active=True,
+            source_type=ChainDefinition.SourceType.DISTRIBUTOR,
+        )
+    except ChainDefinition.DoesNotExist:
+        messages.error(request, f"Определение для «{distributor}» не найдено.")
+        return render(request, "sales/distributor_upload.html", context)
+
+    try:
+        result = DistributorUploadService().preview(
+            excel_file, definition, excel_file.name
+        )
+    except SalesParseError as exc:
+        messages.error(request, str(exc))
+        return render(request, "sales/distributor_upload.html", context)
+
+    if result.total_rows == 0:
+        messages.error(request, "В файле не найдено данных.")
+        return render(request, "sales/distributor_upload.html", context)
+
+    request.session[DISTRIBUTOR_SESSION_KEY] = {
+        "distributor": distributor, "operation_type": operation_type,
+        "country": country, "begin_date": begin_date_str, "end_date": end_date_str,
+        "rows": [
+            {
+                "product_name": r.product_name, "brand": r.brand,
+                "client": r.pharmacy, "city": r.city,
+                "count": r.count, "amount": str(r.amount),
+            }
+            for r in result.rows
+        ],
+    }
+
+    context.update({"result": result, "rows": result.rows, "preview": True})
+    return render(request, "sales/distributor_upload.html", context)
