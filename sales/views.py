@@ -14,7 +14,8 @@ from authorization.decorators import require_screen
 
 from .models import ChainDefinition, DistributorRecord, SalesRecord
 from .services import (
-    ParsedRow, ParseResult, SalesParseError, SalesUploadService, SalesViewService,
+    DistributorUploadService, DistributorViewService, ParsedRow, ParseResult,
+    SalesParseError, SalesUploadService, SalesViewService,
 )
 CHAINS = ["MFO"]
 COUNTRIES = ["Russia", "Kazakhstan", "Belarus", "Uzbekistan", "Azerbaijan"]
@@ -405,3 +406,55 @@ def distributor_upload_view(request: HttpRequest) -> HttpResponse:
 
     context.update({"result": result, "rows": result.rows, "preview": True})
     return render(request, "sales/distributor_upload.html", context)
+
+
+@login_required
+@require_screen("DIST_VIEW")
+@require_http_methods(["GET"])
+def distributor_report_view(request: HttpRequest) -> HttpResponse:
+    """View saved distributor sales/stock data with filters — 'Просмотр Сток и Продажа'."""
+    service = DistributorViewService()
+
+    filters: dict[str, Any] = {}
+
+    date_from_str = request.GET.get("date_from", "").strip()
+    date_to_str = request.GET.get("date_to", "").strip()
+    if date_from_str:
+        try:
+            filters["date_from"] = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    if date_to_str:
+        try:
+            filters["date_to"] = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    for key in ("distributor", "operation_type", "country", "brand", "city"):
+        value = request.GET.get(key, "").strip()
+        if value:
+            filters[key] = value
+    search = request.GET.get("q", "").strip()
+    if search:
+        filters["search"] = search
+
+    report = service.query(**filters)
+    options = service.filter_options()
+
+    context: dict[str, Any] = {
+        "report": report,
+        "records": report["records"][:500],
+        "options": options,
+        "countries": COUNTRIES,
+        "brands": DistributorRecord.Brand.choices,
+        "operations": DistributorRecord.Operation.choices,
+        "f_date_from": date_from_str,
+        "f_date_to": date_to_str,
+        "f_distributor": request.GET.get("distributor", ""),
+        "f_operation": request.GET.get("operation_type", ""),
+        "f_country": request.GET.get("country", ""),
+        "f_brand": request.GET.get("brand", ""),
+        "f_city": request.GET.get("city", ""),
+        "f_search": request.GET.get("q", ""),
+        "has_query": bool(request.GET),
+    }
+    return render(request, "sales/distributor_report.html", context)

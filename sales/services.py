@@ -464,6 +464,75 @@ class DistributorUploadService:
         return len(records)
 
 
+class DistributorViewService:
+    """View and aggregate saved distributor records."""
+
+    def __init__(self) -> None:
+        """Wire up the repository."""
+        from .repositories import DistributorRepository
+
+        self.repository = DistributorRepository()
+
+    def query(self, **filters) -> dict:
+        """Filtered query with Solgar/Bounty totals."""
+        from django.db.models import Sum
+        from .models import DistributorRecord
+
+        records = self.repository.filter_records(**filters)
+        solgar = records.filter(brand=DistributorRecord.Brand.SOLGAR).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+        bounty = records.filter(brand=DistributorRecord.Brand.BOUNTY).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+        return {
+            "records": records,
+            "total_rows": records.count(),
+            "solgar_count": solgar["c"] or 0,
+            "solgar_amount": solgar["a"] or 0,
+            "bounty_count": bounty["c"] or 0,
+            "bounty_amount": bounty["a"] or 0,
+        }
+
+    def filter_options(self) -> dict:
+        """Distinct values for filter dropdowns."""
+        return {"distributors": self.repository.distinct_distributors()}
+
+class DistributorViewService:
+    """View and aggregate saved distributor records."""
+
+    def __init__(self) -> None:
+        """Wire up the repository."""
+        from .repositories import DistributorRepository
+
+        self.repository = DistributorRepository()
+
+    def query(self, **filters) -> dict:
+        """Filtered query with Solgar/Bounty totals."""
+        from django.db.models import Sum
+        from .models import DistributorRecord
+
+        records = self.repository.filter_records(**filters)
+        solgar = records.filter(brand=DistributorRecord.Brand.SOLGAR).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+        bounty = records.filter(brand=DistributorRecord.Brand.BOUNTY).aggregate(
+            c=Sum("count"), a=Sum("amount")
+        )
+        return {
+            "records": records,
+            "total_rows": records.count(),
+            "solgar_count": solgar["c"] or 0,
+            "solgar_amount": solgar["a"] or 0,
+            "bounty_count": bounty["c"] or 0,
+            "bounty_amount": bounty["a"] or 0,
+        }
+
+    def filter_options(self) -> dict:
+        """Distinct values for filter dropdowns."""
+        return {"distributors": self.repository.distinct_distributors()}
+
+
 
 
 

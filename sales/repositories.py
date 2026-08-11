@@ -99,3 +99,44 @@ class SalesRepository:
             .distinct()
             .order_by("chain_name")
         )
+
+
+class DistributorRepository:
+    """Data access for distributor records."""
+
+    def filter_records(
+        self, distributor: str = "", operation_type: str = "",
+        date_from=None, date_to=None, country: str = "",
+        brand: str = "", city: str = "", search: str = "",
+    ) -> QuerySet:
+        """Return distributor records matching the filters. Empty ones ignored."""
+        from .models import DistributorRecord
+
+        qs = DistributorRecord.objects.all()
+        if distributor:
+            qs = qs.filter(distributor=distributor)
+        if operation_type:
+            qs = qs.filter(operation_type=operation_type)
+        if date_from:
+            qs = qs.filter(begin_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(end_date__lte=date_to)
+        if country:
+            qs = qs.filter(country=country)
+        if brand:
+            qs = qs.filter(brand=brand)
+        if city:
+            qs = qs.filter(city__icontains=city)
+        if search:
+            qs = qs.filter(product_name__icontains=search)
+        return qs.order_by("distributor", "product_name")
+
+    def distinct_distributors(self) -> list[str]:
+        """Distinct distributor names present in the data."""
+        from .models import DistributorRecord
+
+        return list(
+            DistributorRecord.objects.exclude(distributor="")
+            .values_list("distributor", flat=True)
+            .distinct().order_by("distributor")
+        )

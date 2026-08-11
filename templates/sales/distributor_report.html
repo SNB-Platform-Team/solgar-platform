@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Сток и Продажа{% endblock %}
+{% block nav_dist_report %}active{% endblock %}
+
+{% block content %}
+<style>
+    .filter-form { margin-bottom: 24px; }
+    .filter-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-group { flex: 1; min-width: 150px; }
+    .filter-group label { display: block; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+    .filter-group input, .filter-group select { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 10px 12px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.88rem; outline: none; }
+    .filter-group input:focus, .filter-group select:focus { border-color: var(--gold); }
+    .filter-group select option { background: var(--dark2); }
+    .btn-generate { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border: none; border-radius: 4px; padding: 11px 28px; font-family: 'Jost',sans-serif; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+    .btn-generate:hover { opacity: 0.9; }
+    .btn-reset { margin-left: 10px; color: var(--gold-dim); text-decoration: none; font-size: 0.85rem; }
+    .btn-reset:hover { color: var(--gold-light); }
+    .totals { display: flex; gap: 14px; flex-wrap: wrap; margin: 22px 0; }
+    .total-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; min-width: 140px; }
+    .total-card .tval { font-size: 1.4rem; font-family: 'Cormorant Garamond',serif; color: var(--gold-light); }
+    .total-card .tlbl { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+    .report-table { width: 100%; border-collapse: collapse; }
+    .report-table th { text-align: left; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); padding: 10px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .report-table td { padding: 10px 12px; border-bottom: 1px solid rgba(201,168,76,0.08); font-size: 0.85rem; font-weight: 300; }
+    .badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 3px; }
+    .badge-SOLGAR { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.3); }
+    .badge-BOUNTY { background: rgba(120,160,220,0.15); color: #a8c4e0; border: 1px solid rgba(120,160,220,0.35); }
+    .op-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-dim); }
+    .table-scroll { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
+    .cap-note { color: var(--text-dim); font-size: 0.8rem; margin-top: 10px; font-style: italic; }
+</style>
+
+<h1 class="page-title">Просмотр Сток и Продажа</h1>
+<p class="page-subtitle">Данные дистрибьюторов: продажи и сток</p>
+
+<form method="get" class="filter-form">
+    <div class="filter-row">
+        <div class="filter-group">
+            <label for="distributor">Дистрибьютор</label>
+            <select id="distributor" name="distributor">
+                <option value="">Все</option>
+                {% for d in options.distributors %}
+                <option value="{{ d }}" {% if d == f_distributor %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="operation_type">Тип операции</label>
+            <select id="operation_type" name="operation_type">
+                <option value="">Все</option>
+                {% for value, label in operations %}
+                <option value="{{ value }}" {% if value == f_operation %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="brand">Бренд</label>
+            <select id="brand" name="brand">
+                <option value="">Все</option>
+                {% for value, label in brands %}
+                <option value="{{ value }}" {% if value == f_brand %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="filter-row">
+        <div class="filter-group">
+            <label for="date_from">Дата с</label>
+            <input type="date" id="date_from" name="date_from" value="{{ f_date_from }}">
+        </div>
+        <div class="filter-group">
+            <label for="date_to">Дата по</label>
+            <input type="date" id="date_to" name="date_to" value="{{ f_date_to }}">
+        </div>
+        <div class="filter-group">
+            <label for="country">Страна</label>
+            <select id="country" name="country">
+                <option value="">Все</option>
+                {% for c in countries %}
+                <option value="{{ c }}" {% if c == f_country %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="city">Город</label>
+            <input type="text" id="city" name="city" value="{{ f_city }}" placeholder="Город">
+        </div>
+        <div class="filter-group">
+            <label for="q">Товар</label>
+            <input type="text" id="q" name="q" value="{{ f_search }}" placeholder="Поиск">
+        </div>
+    </div>
+    <div class="filter-row">
+        <div class="filter-group" style="display:flex; align-items:flex-end;">
+            <button type="submit" class="btn-generate">Сформировать отчёт</button>
+            <a href="{% url 'sales:distributor_report' %}" class="btn-reset">Сбросить</a>
+        </div>
+    </div>
+</form>
+
+{% if has_query %}
+<div class="totals">
+    <div class="total-card"><div class="tval">{{ report.total_rows }}</div><div class="tlbl">Всего строк</div></div>
+    <div class="total-card"><div class="tval">{{ report.solgar_count }}</div><div class="tlbl">Solgar — кол-во</div></div>
+    <div class="total-card"><div class="tval">{{ report.solgar_amount }}</div><div class="tlbl">Solgar — сумма</div></div>
+    <div class="total-card"><div class="tval">{{ report.bounty_count }}</div><div class="tlbl">Bounty — кол-во</div></div>
+    <div class="total-card"><div class="tval">{{ report.bounty_amount }}</div><div class="tlbl">Bounty — сумма</div></div>
+</div>
+
+<div class="table-scroll">
+<table class="report-table">
+    <thead>
+        <tr>
+            <th>Бренд</th>
+            <th>Тип</th>
+            <th>Дистрибьютор</th>
+            <th>Товар</th>
+            <th>Город</th>
+            <th>Клиент</th>
+            <th>Кол-во</th>
+            <th>Сумма</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for rec in records %}
+        <tr>
+            <td><span class="badge badge-{{ rec.brand }}">{{ rec.get_brand_display }}</span></td>
+            <td><span class="op-badge">{{ rec.get_operation_type_display }}</span></td>
+            <td>{{ rec.distributor }}</td>
+            <td>{{ rec.product_name }}</td>
+            <td>{{ rec.city|default:"—" }}</td>
+            <td>{{ rec.client|default:"—" }}</td>
+            <td>{{ rec.count }}</td>
+            <td>{{ rec.amount }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="empty">Нет данных по заданным фильтрам</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% if report.total_rows > 500 %}
+<p class="cap-note">Показаны первые 500 строк из {{ report.total_rows }}.</p>
+{% endif %}
+{% else %}
+<p class="page-subtitle">Задайте фильтры и нажмите «Сформировать отчёт».</p>
+{% endif %}
+{% endblock %}
