@@ -158,6 +158,9 @@ Base layout for authenticated pages. Extend with {% block content %}.
                             {% if "SALES_CHAIN" in accessible_screens %}
                             <a href="{% url 'sales:chain_report' %}" class="nav-link {% block nav_sales_chain %}{% endblock %}">Аптечная сеть продаж</a>
                             {% endif %}
+                            {% if "DIST_UPLOAD" in accessible_screens %}
+                            <a href="{% url 'sales:distributor_upload' %}" class="nav-link {% block nav_dist_upload %}{% endblock %}">Дистрибьюторская и складская нагрузка</a>
+                            {% endif %}
                             {% if "DIST_VIEW" in accessible_screens %}
                             <a href="{% url 'sales:distributor_report' %}" class="nav-link {% block nav_dist_report %}{% endblock %}">Просмотр Сток и Продажа</a>
                             {% endif %}

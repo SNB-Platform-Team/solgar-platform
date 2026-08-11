@@ -11,5 +11,6 @@ urlpatterns = [
     path("report/", views.sales_report_view, name="report"),
     path("export/", views.sales_export_view, name="export"),
     path("chain-report/", views.sales_chain_report_view, name="chain_report"),
+    path("distributor/upload/", views.distributor_upload_view, name="distributor_upload"),
     path("distributor/report/", views.distributor_report_view, name="distributor_report"),
 ]
