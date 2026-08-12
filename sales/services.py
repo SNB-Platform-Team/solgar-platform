@@ -15,22 +15,8 @@ from openpyxl import load_workbook
 
 from .models import SalesRecord
 
-
 # Keywords that classify a product by its name (case-insensitive).
 SOLGAR_KEYWORDS = ("солгар", "solgar", "Solgar", "SOLGAR", "Solgar vitamin") #if there's no any key, then return Solgar
-BOUNTY_KEYWORDS = (
-    "natures bounty",
-    "nature s bounty",
-    "нэйчес",
-    "нэйчерс",
-    "баунти",
-    "нб ",
-    " нб",
-    "nb ",
-    "nature bounty",
-    "n b",
-)
-
 
 @dataclass
 class ParsedRow:
@@ -44,7 +30,6 @@ class ParsedRow:
     amount: Decimal
     remaining_count: int
     remaining_amount: Decimal
-
 
 @dataclass
 class ParseResult:
@@ -62,10 +47,8 @@ class ParseResult:
         """Number of parsed rows."""
         return len(self.rows)
 
-
 class SalesParseError(Exception):
     """Raised when a file cannot be parsed (e.g. header not found)."""
-
 
 class ChainParser:
     """
@@ -394,22 +377,45 @@ class SalesViewService:
             "bounty_amount": bounty["a"] or 0,
         }
 
+    #bu
     def filter_options(self) -> dict:
         """Return distinct values for the filter dropdowns."""
-        return {
+        options = {
             "report_dates": self.repository.distinct_report_dates(),
             "chains": self.repository.distinct_chains(),
         }
+        options.update(self.repository.group_options())
+        return options
 
-    def chain_report(self, **filters) -> dict:
+    def chain_report(self, main_group="", sub_group="", region="", district="", **filters) -> dict:
         """
-        Run a date-range chain-sales query and compute brand totals.
-
-        Returns a dict with records and aggregated Solgar/Bounty totals.
+        Date-range chain-sales query with brand totals, plus optional
+        product-category and geographic filters resolved via reference data.
         """
         from django.db.models import Sum
 
         records = self.repository.filter_by_range(**filters)
+
+        # Product category filter: match sales product_name against ProductGroup.
+        if main_group or sub_group:
+            keys = self.repository.product_names_for_group(main_group, sub_group)
+            # Match case-insensitively: annotate lower(product_name) in Python-safe way.
+            from django.db.models.functions import Lower
+            records = records.annotate(pn_lower=Lower("product_name")).filter(pn_lower__in=keys)
+
+        # Geographic filter: match sales city against AddressGroup.
+        # Sales cities carry settlement suffixes (" г", " с", " пгт"...) that
+        # reference cities lack, so we strip them before matching.
+        if region or district:
+            city_keys = self.repository.cities_for_region(region, district)
+            id_city = list(
+                SalesRecord.objects.filter(id__in=records.values("id")).values_list("id", "city")
+            )
+            matching_ids = [
+                rid for rid, city in id_city
+                if self._normalize_city(city) in city_keys
+            ]
+            records = records.filter(id__in=matching_ids)
 
         solgar = records.filter(brand=SalesRecord.Brand.SOLGAR).aggregate(
             c=Sum("count"), a=Sum("amount")
@@ -417,6 +423,14 @@ class SalesViewService:
         bounty = records.filter(brand=SalesRecord.Brand.BOUNTY).aggregate(
             c=Sum("count"), a=Sum("amount")
         )
+        return {
+            "records": records,
+            "total_rows": records.count(),
+            "solgar_count": solgar["c"] or 0,
+            "solgar_amount": solgar["a"] or 0,
+            "bounty_count": bounty["c"] or 0,
+            "bounty_amount": bounty["a"] or 0,
+        }
 
         return {
             "records": records,
@@ -426,6 +440,22 @@ class SalesViewService:
             "bounty_count": bounty["c"] or 0,
             "bounty_amount": bounty["a"] or 0,
         }
+
+    @staticmethod
+    def _normalize_city(city: str) -> str:
+        """
+        Normalize a sales city name for matching against reference data:
+        lowercase and strip trailing settlement-type suffixes.
+        """
+        if not city:
+            return ""
+        name = city.lower().strip()
+        # Remove common trailing settlement markers.
+        for suffix in (" г", " с", " пгт", " д", " п", " рп", " ст", " х"):
+            if name.endswith(suffix):
+                name = name[: -len(suffix)].strip()
+                break
+        return name
 
 class DistributorUploadService:
     """Upload and save distributor sales/stock data (parametric parser)."""
@@ -463,7 +493,6 @@ class DistributorUploadService:
         DistributorRecord.objects.bulk_create(records)
         return len(records)
 
-
 class DistributorViewService:
     """View and aggregate saved distributor records."""
 
@@ -497,73 +526,3 @@ class DistributorViewService:
     def filter_options(self) -> dict:
         """Distinct values for filter dropdowns."""
         return {"distributors": self.repository.distinct_distributors()}
-
-class DistributorViewService:
-    """View and aggregate saved distributor records."""
-
-    def __init__(self) -> None:
-        """Wire up the repository."""
-        from .repositories import DistributorRepository
-
-        self.repository = DistributorRepository()
-
-    def query(self, **filters) -> dict:
-        """Filtered query with Solgar/Bounty totals."""
-        from django.db.models import Sum
-        from .models import DistributorRecord
-
-        records = self.repository.filter_records(**filters)
-        solgar = records.filter(brand=DistributorRecord.Brand.SOLGAR).aggregate(
-            c=Sum("count"), a=Sum("amount")
-        )
-        bounty = records.filter(brand=DistributorRecord.Brand.BOUNTY).aggregate(
-            c=Sum("count"), a=Sum("amount")
-        )
-        return {
-            "records": records,
-            "total_rows": records.count(),
-            "solgar_count": solgar["c"] or 0,
-            "solgar_amount": solgar["a"] or 0,
-            "bounty_count": bounty["c"] or 0,
-            "bounty_amount": bounty["a"] or 0,
-        }
-
-    def filter_options(self) -> dict:
-        """Distinct values for filter dropdowns."""
-        return {"distributors": self.repository.distinct_distributors()}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        

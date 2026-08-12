@@ -100,6 +100,55 @@ class SalesRepository:
             .order_by("chain_name")
         )
 
+    def group_options(self) -> dict:
+        """Distinct product groups and geographic regions for filter dropdowns."""
+        from .models import AddressGroup, ProductGroup
+
+        main_groups = list(
+            ProductGroup.objects.exclude(main_group="")
+            .values_list("main_group", flat=True).distinct().order_by("main_group")
+        )
+        sub_groups = list(
+            ProductGroup.objects.exclude(sub_group="")
+            .values_list("sub_group", flat=True).distinct().order_by("sub_group")
+        )
+        regions = list(
+            AddressGroup.objects.exclude(region="")
+            .values_list("region", flat=True).distinct().order_by("region")
+        )
+        districts = list(
+            AddressGroup.objects.exclude(district="")
+            .values_list("district", flat=True).distinct().order_by("district")
+        )
+        return {
+            "main_groups": main_groups,
+            "sub_groups": sub_groups,
+            "regions": regions,
+            "districts": districts,
+        }
+
+    def product_names_for_group(self, main_group: str = "", sub_group: str = "") -> set:
+        """Return the set of match_keys (lowercased product names) in a group."""
+        from .models import ProductGroup
+
+        qs = ProductGroup.objects.all()
+        if main_group:
+            qs = qs.filter(main_group=main_group)
+        if sub_group:
+            qs = qs.filter(sub_group=sub_group)
+        return set(qs.values_list("match_key", flat=True))
+
+    def cities_for_region(self, region: str = "", district: str = "") -> set:
+        """Return the set of match_keys (lowercased city names) in a region/district."""
+        from .models import AddressGroup
+
+        qs = AddressGroup.objects.all()
+        if region:
+            qs = qs.filter(region=region)
+        if district:
+            qs = qs.filter(district=district)
+        return set(qs.values_list("match_key", flat=True))
+
 
 class DistributorRepository:
     """Data access for distributor records."""

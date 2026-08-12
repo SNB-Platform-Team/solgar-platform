@@ -74,6 +74,44 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="filter-row">
+        <div class="filter-group">
+            <label for="main_group">Основная группа</label>
+            <select id="main_group" name="main_group">
+                <option value="">Все</option>
+                {% for g in options.main_groups %}
+                <option value="{{ g }}" {% if g == f_main_group %}selected{% endif %}>{{ g }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="sub_group">Подгруппа</label>
+            <select id="sub_group" name="sub_group">
+                <option value="">Все</option>
+                {% for g in options.sub_groups %}
+                <option value="{{ g }}" {% if g == f_sub_group %}selected{% endif %}>{{ g }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="region">Регион</label>
+            <select id="region" name="region">
+                <option value="">Все</option>
+                {% for r in options.regions %}
+                <option value="{{ r }}" {% if r == f_region %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="district">Округ</label>
+            <select id="district" name="district">
+                <option value="">Все</option>
+                {% for d in options.districts %}
+                <option value="{{ d }}" {% if d == f_district %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
         <div class="filter-group">
             <label for="city">Город</label>
             <input type="text" id="city" name="city" value="{{ f_city }}" placeholder="Город">

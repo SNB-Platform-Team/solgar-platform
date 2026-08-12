@@ -8,7 +8,6 @@ Each record is classified as Solgar or Bounty based on the product name.
 from django.conf import settings
 from django.db import models
 
-
 class DistributorRecord(models.Model):
     """
     Distributor sales/stock line, uploaded from a distributor Excel file.
@@ -83,7 +82,6 @@ class DistributorRecord(models.Model):
         """Readable representation."""
         return f"{self.distributor} — {self.product_name} ({self.get_operation_type_display()})"
 
-
 class BrandDefinition(models.Model):
     """
     Parametric brand definition. Instead of hard-coding brand keywords in
@@ -122,7 +120,6 @@ class BrandDefinition(models.Model):
             flags.append("inactive")
         suffix = f" [{', '.join(flags)}]" if flags else ""
         return f"{self.name}{suffix}"
-
 
 class ChainDefinition(models.Model):
     """
@@ -178,7 +175,6 @@ class ChainDefinition(models.Model):
         """Readable representation."""
         return f"{self.name} ({self.country}, {self.get_orientation_display()})"
 
-
 class SalesRecord(models.Model):
     """A single product sales line from a chain's Excel report."""
 
@@ -232,3 +228,50 @@ class SalesRecord(models.Model):
     def __str__(self) -> str:
         """Readable representation."""
         return f"{self.product_name} — {self.count} ({self.get_brand_display()})"
+
+class ProductGroup(models.Model):
+    """
+    Reference data: maps a product sales name to its category groups.
+    Loaded from solgar_tst.sales_product_group. Used to add product
+    category filters to sales reports.
+    """
+
+    product_sales_name = models.CharField("Product sales name", max_length=300)
+    # Lowercased sales name for case-insensitive matching against sales rows.
+    match_key = models.CharField("Match key", max_length=300, db_index=True)
+    main_group = models.CharField("Product main group", max_length=100, blank=True)
+    sub_group = models.CharField("Product sub group", max_length=100, blank=True)
+
+    class Meta:
+        verbose_name = "Product group"
+        verbose_name_plural = "Product groups"
+        db_table = "solgar_tst_product_group"
+        indexes = [models.Index(fields=["match_key"])]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return f"{self.product_sales_name} → {self.main_group}/{self.sub_group}"
+
+class AddressGroup(models.Model):
+    """
+    Reference data: maps a city (Cyrillic) to its region and district.
+    Loaded from solgar_tst.solgar_address_group. Used to add geographic
+    filters to sales reports.
+    """
+
+    city_name = models.CharField("City (Cyrillic)", max_length=150)
+    # Lowercased city for case-insensitive matching against sales rows.
+    match_key = models.CharField("Match key", max_length=150, db_index=True)
+    region = models.CharField("Region", max_length=120, blank=True)
+    district = models.CharField("District", max_length=120, blank=True)
+    country = models.CharField("Country", max_length=60, blank=True)
+
+    class Meta:
+        verbose_name = "Address group"
+        verbose_name_plural = "Address groups"
+        db_table = "solgar_tst_address_group"
+        indexes = [models.Index(fields=["match_key"])]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return f"{self.city_name} → {self.region} / {self.district}"

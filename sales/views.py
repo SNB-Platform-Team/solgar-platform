@@ -267,7 +267,16 @@ def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
     if search:
         filters["search"] = search
 
-    report = service.chain_report(**filters)
+    # Category and geographic filters (resolved via reference data).
+    main_group = request.GET.get("main_group", "").strip()
+    sub_group = request.GET.get("sub_group", "").strip()
+    region = request.GET.get("region", "").strip()
+    district = request.GET.get("district", "").strip()
+
+    report = service.chain_report(
+        main_group=main_group, sub_group=sub_group,
+        region=region, district=district, **filters
+    )
     options = service.filter_options()
 
     context: dict[str, Any] = {
@@ -283,6 +292,10 @@ def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
         "f_brand": request.GET.get("brand", ""),
         "f_city": request.GET.get("city", ""),
         "f_search": request.GET.get("q", ""),
+        "f_main_group": main_group,
+        "f_sub_group": sub_group,
+        "f_region": region,
+        "f_district": district,
         "has_query": bool(request.GET),
     }
     return render(request, "sales/chain_report.html", context)
