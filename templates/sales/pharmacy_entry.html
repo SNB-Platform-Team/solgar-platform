@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% block title %}аптека вход Обновление{% endblock %}
+{% block nav_pharmacy_entry %}active{% endblock %}
+
+{% block content %}
+<style>
+    .ph-form { margin-bottom: 20px; }
+    .brand-bar { display: flex; align-items: center; gap: 14px; background: rgba(201,168,76,0.08); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; }
+    .brand-bar label { font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); }
+    .brand-bar select { background: rgba(255,255,255,0.05); border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 9px 14px; color: var(--gold-light); font-family: 'Jost',sans-serif; font-size: 0.95rem; min-width: 200px; outline: none; }
+    .brand-bar .brand-hint { color: var(--text-dim); font-size: 0.8rem; font-style: italic; margin-left: auto; }
+
+    .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .ph-panel { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+    .ph-panel h3 { font-family: 'Cormorant Garamond',serif; font-size: 1.1rem; color: var(--gold-light); font-weight: 400; margin-bottom: 14px; letter-spacing: 0.03em; }
+    .fld { margin-bottom: 10px; }
+    .fld label { display: block; font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+    .fld input, .fld select, .fld textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 8px 10px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.84rem; outline: none; }
+    .fld input:focus, .fld select:focus, .fld textarea:focus { border-color: var(--gold); }
+    .fld select option { background: var(--dark2); }
+    .fld-row { display: flex; gap: 10px; }
+    .fld-row .fld { flex: 1; }
+
+    .btn-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+    .btn-ph { border: none; border-radius: 4px; padding: 10px 22px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+    .btn-primary { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
+    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--cream); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
+    .btn-ph:hover { opacity: 0.9; }
+
+    .ph-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
+    .table-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .ph-table { border-collapse: collapse; white-space: nowrap; font-size: 0.78rem; }
+    .ph-table th { text-align: left; font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .ph-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; }
+    .ph-table tbody tr { cursor: pointer; }
+    .ph-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .ph-table tbody tr.selected { background: rgba(201,168,76,0.14); }
+    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
+
+
+
+    /* --- KOMPAKT DÜZEN (tüm kutular dar, sabit genişlik, yan yana) --- */
+    .ph-panel, .doc-panel {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 200px);
+        gap: 6px 12px;
+        align-content: start;
+        justify-content: start;
+        padding: 14px 16px;
+    }
+    .ph-panel h3, .doc-panel h3 { margin-bottom: 8px; grid-column: 1 / -1; }
+    /* fld-row: tam satır kaplama, kendi içinde sabit dar kutular */
+    .fld-row { grid-column: 1 / -1; display: flex; gap: 12px; }
+    .fld-row .fld { flex: 0 0 200px; }
+    .fld { margin-bottom: 4px; }
+    .fld label { font-size: 0.6rem; margin-bottom: 2px; letter-spacing: 0.03em; }
+    .fld input, .fld select, .fld textarea {
+        width: 200px;
+        max-width: 200px;
+        font-size: 0.78rem;
+        padding: 5px 8px;
+    }
+    /* textarea biraz daha geniş olabilir ama sınırlı */
+    .fld textarea { width: 200px; }
+    .brand-bar select { width: 200px; max-width: 200px; min-width: 160px; }
+
+
+    /* --- PANEL BOŞLUKLARINI AZALT --- */
+    .panel-grid { gap: 12px; margin-bottom: 12px; align-items: start; }
+    .ph-panel, .doc-panel { align-self: start; }
+</style>
+
+<h1 class="page-title">аптека вход Обновление</h1>
+<p class="page-subtitle">Ввод и обновление данных аптек</p>
+
+<form method="post" class="ph-form" id="phForm">
+    {% csrf_token %}
+    <input type="hidden" name="action" id="phAction" value="">
+    <input type="hidden" name="pharmacy_pk" id="phPk" value="">
+
+    <!-- Brand seçici — en üstte, belirleyici. Değişince sayfa yenilenir. -->
+    <div class="brand-bar">
+        <label for="brand">Компания</label>
+        <select id="brand" name="brand">
+            {% for b in brands %}<option value="{{ b }}" {% if b == brand %}selected{% endif %}>{{ b }}</option>{% endfor %}
+        </select>
+        <span class="brand-hint">При смене компании список и справочники перезагружаются</span>
+    </div>
+
+    <div class="panel-grid">
+        <!-- Panel 1: Global Address -->
+        <div class="ph-panel">
+            <h3>Глобальный адрес</h3>
+            <div class="fld">
+                <label for="country">Страна</label>
+                <select id="country" name="country">
+                    <option value="">—</option>
+                    {% for c in options.countries %}<option value="{{ c }}" {% if c == f.country %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="area">Область (Area)</label>
+                <select id="area" name="area">
+                    <option value="">—</option>
+                    {% for a in options.areas %}<option value="{{ a }}" {% if a == f.area %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="region">Регион</label>
+                <select id="region" name="region">
+                    <option value="">—</option>
+                    {% for r in options.regions %}<option value="{{ r }}" {% if r == f.region %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="city">Город</label>
+                <select id="city" name="city">
+                    <option value="">—</option>
+                    {% for c in options.cities %}<option value="{{ c }}" {% if c == f.city %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="metro">Метро</label>
+                    <select id="metro" name="metro">
+                        <option value="">—</option>
+                        {% for m in options.metros %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="district">Округ</label>
+                    <select id="district" name="district">
+                        <option value="">—</option>
+                        {% for d in options.districts %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 2: Chain / Company -->
+        <div class="ph-panel">
+            <h3>Сеть аптек</h3>
+            <div class="fld">
+                <label for="group_company">Сеть (Chain)</label>
+                <select id="group_company" name="group_company">
+                    <option value="">—</option>
+                    {% for c in options.chains %}<option value="{{ c }}" {% if c == f.group_company %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="subgroup_company">Подсеть (Sub-chain)</label>
+                <select id="subgroup_company" name="subgroup_company">
+                    <option value="">—</option>
+                    {% for c in options.subchains %}<option value="{{ c }}" {% if c == f.subgroup_company %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacy_no">Номер аптеки</label>
+                    <input type="text" id="pharmacy_no" name="pharmacy_no" value="">
+                </div>
+                <div class="fld">
+                    <label for="pharmacy_category">Категория</label>
+                    <select id="pharmacy_category" name="pharmacy_category">
+                        <option value="">—</option>
+                        {% for c in options.pharmacy_categories %}<option value="{{ c }}" {% if c == f.pharmacy_category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="fld">
+                <label for="pharmacy_address">Адрес аптеки</label>
+                <input type="text" id="pharmacy_address" name="pharmacy_address" value="{{ f.pharmacy_address }}">
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacy_type">Тип аптеки</label>
+                    <select id="pharmacy_type" name="pharmacy_type">
+                        <option value="">—</option>
+                        {% for t in options.pharmacy_types %}<option value="{{ t }}" {% if t == f.pharmacy_type %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="assortiment">Ассортимент</label>
+                    <select id="assortiment" name="assortiment">
+                        <option value="">—</option>
+                        {% for a in options.assortiments %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <!-- Panel 3: Marketing / Promo -->
+        <div class="ph-panel">
+            <h3>Промо и маркетинг</h3>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="promo">Промо</label>
+                    <select id="promo" name="promo">
+                        <option value="">—</option>
+                        {% for p in options.promos %}<option value="{{ p }}" {% if p == f.promo %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="cornerNo">Corner No</label>
+                    <input type="text" id="cornerNo" name="cornerNo" value="">
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacy_group">Группа аптек</label>
+                    <select id="pharmacy_group" name="pharmacy_group">
+                        <option value="">—</option>
+                        {% for g in options.pharmacy_groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="sku">SKU</label>
+                    <input type="text" id="sku" name="sku" value="">
+                </div>
+            </div>
+            <div class="fld">
+                <label for="marketing_staff">Мед. представитель</label>
+                <select id="marketing_staff" name="marketing_staff">
+                    <option value="">—</option>
+                    {% for m in options.marketing_staff %}<option value="{{ m }}" {% if m == f.marketing_staff %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacy_activeness">Активность</label>
+                    <select id="pharmacy_activeness" name="pharmacy_activeness">
+                        <option value="">—</option>
+                        {% for a in activeness_list %}<option value="{{ a }}" {% if a == f.pharmacy_activeness %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="pharmacy_activation_date">Дата активации</label>
+                    <input type="text" id="pharmacy_activation_date" name="pharmacy_activation_date" value="">
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 4: Contact / Pharmacists -->
+        <div class="ph-panel">
+            <h3>Контакты и фармацевты</h3>
+            <div class="fld">
+                <label for="pharmacy_response_person">Ответственное лицо</label>
+                <input type="text" id="pharmacy_response_person" name="pharmacy_response_person" value="">
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacy_tel">Телефон аптеки</label>
+                    <input type="text" id="pharmacy_tel" name="pharmacy_tel" value="">
+                </div>
+                <div class="fld">
+                    <label for="pharmacy_email">Эл. адрес</label>
+                    <input type="text" id="pharmacy_email" name="pharmacy_email" value="">
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacist_name_1">Фармацевт 1</label>
+                    <input type="text" id="pharmacist_name_1" name="pharmacist_name_1" value="">
+                </div>
+                <div class="fld">
+                    <label for="pharmacy_home_tel">Тел. 1</label>
+                    <input type="text" id="pharmacy_home_tel" name="pharmacy_home_tel" value="">
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="pharmacist_name_2">Фармацевт 2</label>
+                    <input type="text" id="pharmacist_name_2" name="pharmacist_name_2" value="">
+                </div>
+                <div class="fld">
+                    <label for="pharmacy_work_tel">Тел. 2</label>
+                    <input type="text" id="pharmacy_work_tel" name="pharmacy_work_tel" value="">
+                </div>
+            </div>
+            <div class="fld">
+                <label for="comments">Комментарии</label>
+                <input type="text" id="comments" name="comments" value="">
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 5: Official Address (geocoding) -->
+    <div class="ph-panel" style="margin-bottom:16px;">
+        <h3>Официальный адрес</h3>
+        <div class="panel-grid" style="margin-bottom:0;">
+            <div>
+                <div class="fld">
+                    <label for="full_address">Официальный адрес</label>
+                    <input type="text" id="full_address" name="full_address" value="" readonly>
+                </div>
+                <div class="fld-row">
+                    <div class="fld">
+                        <label for="country_code">Код страны</label>
+                        <input type="text" id="country_code" name="country_code" value="" readonly>
+                    </div>
+                    <div class="fld">
+                        <label for="building_type">Тип здания</label>
+                        <input type="text" id="building_type" name="building_type" value="" readonly>
+                    </div>
+                </div>
+                <div class="fld-row">
+                    <div class="fld">
+                        <label for="street">Улица</label>
+                        <input type="text" id="street" name="street" value="" readonly>
+                    </div>
+                    <div class="fld">
+                        <label for="homenumber">Дом</label>
+                        <input type="text" id="homenumber" name="homenumber" value="" readonly>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="fld-row">
+                    <div class="fld">
+                        <label for="point_x">Точка X</label>
+                        <input type="text" id="point_x" name="point_x" value="" readonly>
+                    </div>
+                    <div class="fld">
+                        <label for="point_y">Точка Y</label>
+                        <input type="text" id="point_y" name="point_y" value="" readonly>
+                    </div>
+                </div>
+                <button type="button" class="btn-ph btn-secondary" id="btnFindAddress" style="margin-top:6px;">Найти адрес</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-bar">
+        <button type="button" class="btn-ph btn-primary" onclick="phList()">Список аптек</button>
+        <button type="button" class="btn-ph btn-primary" onclick="phSubmit('add')">Добавить аптеку</button>
+        <button type="button" class="btn-ph btn-primary" onclick="phSubmit('update')">Обновить</button>
+        <button type="button" class="btn-ph btn-danger" onclick="phSubmit('delete')">Удалить</button>
+        <button type="button" class="btn-ph btn-secondary" onclick="phCleanup()">Очистить</button>
+    </div>
+</form>
+
+<div class="ph-count">Всего: {{ total_rows }}{% if total_rows > 500 %} (показаны первые 500){% endif %}</div>
+
+<div class="table-scroll">
+<table class="ph-table">
+    <thead>
+        <tr>
+            <th>ID</th><th>Страна</th><th>Обл.</th><th>Регион</th><th>Город</th><th>Метро</th><th>Округ</th>
+            <th>Сеть</th><th>Подсеть</th><th>№</th><th>Адрес</th><th>Кат.</th><th>Ассорт.</th><th>Тип</th>
+            <th>Промо</th><th>Corner</th><th>Медреп</th><th>Ответ.</th><th>Тел.</th><th>Email</th>
+            <th>Актив.</th><th>Дата акт.</th><th>Группа</th><th>SKU</th><th>Фарм.1</th><th>Тел.1</th>
+            <th>Фарм.2</th><th>Тел.2</th><th>Коммент.</th><th>Полный адрес</th><th>Тип зд.</th><th>Код стр.</th>
+            <th>Улица</th><th>Дом</th><th>X</th><th>Y</th><th>Польз.</th><th>Дата вв.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in records %}
+        <tr class="ph-row"
+            data-id="{{ p.id }}" data-country="{{ p.country|default:'' }}" data-area="{{ p.area|default:'' }}"
+            data-region="{{ p.region|default:'' }}" data-city="{{ p.city|default:'' }}" data-metro="{{ p.metro|default:'' }}"
+            data-district="{{ p.district|default:'' }}" data-group_company="{{ p.group_company|default:'' }}"
+            data-subgroup_company="{{ p.subgroup_company|default:'' }}" data-pharmacy_no="{{ p.pharmacy_no|default:'' }}"
+            data-pharmacy_address="{{ p.pharmacy_address|default:'' }}" data-pharmacy_category="{{ p.pharmacy_category|default:'' }}"
+            data-assortiment="{{ p.assortiment|default:'' }}" data-pharmacy_type="{{ p.pharmacy_type|default:'' }}"
+            data-promo="{{ p.promo|default:'' }}" data-cornerNo="{{ p.cornerNo|default:'' }}"
+            data-marketing_staff="{{ p.marketing_staff|default:'' }}" data-pharmacy_response_person="{{ p.pharmacy_response_person|default:'' }}"
+            data-pharmacy_tel="{{ p.pharmacy_tel|default:'' }}" data-pharmacy_email="{{ p.pharmacy_email|default:'' }}"
+            data-pharmacy_activeness="{{ p.pharmacy_activeness|default:'' }}" data-pharmacy_activation_date="{{ p.pharmacy_activation_date|default:'' }}"
+            data-pharmacy_group="{{ p.pharmacy_group|default:'' }}" data-sku="{{ p.sku|default:'' }}"
+            data-pharmacist_name_1="{{ p.pharmacist_name_1|default:'' }}" data-pharmacy_home_tel="{{ p.pharmacy_home_tel|default:'' }}"
+            data-pharmacist_name_2="{{ p.pharmacist_name_2|default:'' }}" data-pharmacy_work_tel="{{ p.pharmacy_work_tel|default:'' }}"
+            data-comments="{{ p.comments|default:'' }}" data-full_address="{{ p.full_address|default:'' }}"
+            data-building_type="{{ p.building_type|default:'' }}" data-country_code="{{ p.country_code|default:'' }}"
+            data-street="{{ p.street|default:'' }}" data-homenumber="{{ p.homenumber|default:'' }}"
+            data-point_x="{{ p.point_x|default:'' }}" data-point_y="{{ p.point_y|default:'' }}">
+            <td>{{ p.id }}</td><td>{{ p.country|default:"—" }}</td><td>{{ p.area|default:"—" }}</td><td>{{ p.region|default:"—" }}</td>
+            <td>{{ p.city|default:"—" }}</td><td>{{ p.metro|default:"—" }}</td><td>{{ p.district|default:"—" }}</td>
+            <td>{{ p.group_company|default:"—" }}</td><td>{{ p.subgroup_company|default:"—" }}</td><td>{{ p.pharmacy_no|default:"—" }}</td>
+            <td>{{ p.pharmacy_address|default:"—" }}</td><td>{{ p.pharmacy_category|default:"—" }}</td><td>{{ p.assortiment|default:"—" }}</td>
+            <td>{{ p.pharmacy_type|default:"—" }}</td><td>{{ p.promo|default:"—" }}</td><td>{{ p.cornerNo|default:"—" }}</td>
+            <td>{{ p.marketing_staff|default:"—" }}</td><td>{{ p.pharmacy_response_person|default:"—" }}</td><td>{{ p.pharmacy_tel|default:"—" }}</td>
+            <td>{{ p.pharmacy_email|default:"—" }}</td><td>{{ p.pharmacy_activeness|default:"—" }}</td><td>{{ p.pharmacy_activation_date|default:"—" }}</td>
+            <td>{{ p.pharmacy_group|default:"—" }}</td><td>{{ p.sku|default:"—" }}</td><td>{{ p.pharmacist_name_1|default:"—" }}</td>
+            <td>{{ p.pharmacy_home_tel|default:"—" }}</td><td>{{ p.pharmacist_name_2|default:"—" }}</td><td>{{ p.pharmacy_work_tel|default:"—" }}</td>
+            <td>{{ p.comments|default:"—" }}</td><td>{{ p.full_address|default:"—" }}</td><td>{{ p.building_type|default:"—" }}</td>
+            <td>{{ p.country_code|default:"—" }}</td><td>{{ p.street|default:"—" }}</td><td>{{ p.homenumber|default:"—" }}</td>
+            <td>{{ p.point_x|default:"—" }}</td><td>{{ p.point_y|default:"—" }}</td><td>{{ p.entry_user|default:"—" }}</td>
+            <td>{{ p.entry_date|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="38" class="empty">Нет данных</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<script>
+(function () {
+    "use strict";
+    var optUrl = "{% url 'sales:pharmacy_options' %}";
+    var form = document.getElementById("phForm");
+    function byId(id) { return document.getElementById(id); }
+    function brandVal() { return byId("brand").value; }
+
+    // Brand değişince sayfayı yenile (Java: tüm dropdown+liste o markadan gelir)
+    byId("brand").addEventListener("change", function () {
+        window.location = window.location.pathname + "?brand=" + encodeURIComponent(this.value);
+    });
+
+    function fill(select, values) {
+        select.innerHTML = '<option value="">—</option>';
+        values.forEach(function (v) {
+            var o = document.createElement("option");
+            o.value = v; o.textContent = v;
+            select.appendChild(o);
+        });
+    }
+    function fetchOpts(level, params) {
+        params.brand = brandVal(); params.level = level;
+        var qs = new URLSearchParams(params).toString();
+        return fetch(optUrl + "?" + qs, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { return d.options || []; })
+            .catch(function () { return []; });
+    }
+
+    byId("country").addEventListener("change", function () {
+        fetchOpts("area", { country: this.value }).then(function (o) {
+            fill(byId("area"), o); fill(byId("region"), []); fill(byId("city"), []); fill(byId("metro"), []);
+        });
+    });
+    byId("area").addEventListener("change", function () {
+        fetchOpts("region", { country: byId("country").value, area: this.value }).then(function (o) {
+            fill(byId("region"), o); fill(byId("city"), []); fill(byId("metro"), []);
+        });
+    });
+    byId("region").addEventListener("change", function () {
+        fetchOpts("city", { country: byId("country").value, area: byId("area").value, region: this.value }).then(function (o) {
+            fill(byId("city"), o); fill(byId("metro"), []);
+        });
+    });
+    byId("city").addEventListener("change", function () {
+        fetchOpts("metro", { city: this.value }).then(function (o) { fill(byId("metro"), o); });
+    });
+    byId("group_company").addEventListener("change", function () {
+        fetchOpts("subchain", { group_company: this.value }).then(function (o) { fill(byId("subgroup_company"), o); });
+    });
+
+    // Tablo satırına tıkla -> form doldur
+    var FIELDS = ["country","area","region","city","metro","district","group_company","subgroup_company",
+        "pharmacy_no","pharmacy_address","pharmacy_category","assortiment","pharmacy_type","promo","cornerNo",
+        "marketing_staff","pharmacy_response_person","pharmacy_tel","pharmacy_email","pharmacy_activeness",
+        "pharmacy_activation_date","pharmacy_group","sku","pharmacist_name_1","pharmacy_home_tel",
+        "pharmacist_name_2","pharmacy_work_tel","comments","full_address","building_type","country_code",
+        "street","homenumber","point_x","point_y"];
+    document.querySelectorAll(".ph-row").forEach(function (row) {
+        row.addEventListener("click", function () {
+            document.querySelectorAll(".ph-row").forEach(function (r) { r.classList.remove("selected"); });
+            row.classList.add("selected");
+            byId("phPk").value = row.getAttribute("data-id") || "";
+            FIELDS.forEach(function (f) {
+                var el = byId(f);
+                if (!el) return;
+                var val = row.getAttribute("data-" + f);
+                el.value = (val === null ? "" : val);
+            });
+        });
+    });
+
+    window.phSubmit = function (action) {
+        if ((action === "update" || action === "delete") && !byId("phPk").value) {
+            alert("Сначала выберите аптеку из таблицы."); return;
+        }
+        byId("phAction").value = action; form.method = "post"; form.submit();
+    };
+    window.phList = function () {
+        var params = new URLSearchParams(); params.set("brand", brandVal());
+        ["country","area","region","city","group_company","subgroup_company","pharmacy_category",
+         "pharmacy_type","promo","marketing_staff","pharmacy_activeness","pharmacy_address"].forEach(function (f) {
+            var el = byId(f); if (el && el.value) params.set(f, el.value);
+        });
+        window.location = window.location.pathname + "?" + params.toString();
+    };
+    window.phCleanup = function () {
+        form.reset(); byId("phPk").value = "";
+        document.querySelectorAll(".ph-row").forEach(function (r) { r.classList.remove("selected"); });
+    };
+    byId("btnFindAddress").addEventListener("click", function () {
+        alert("Функция «Найти адрес» будет подключена позже (геокодирование).");
+    });
+})();
+</script>
+{% endblock %}

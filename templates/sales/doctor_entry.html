@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Врач вход Обновление{% endblock %}
+{% block nav_doctor_entry %}active{% endblock %}
+
+{% block content %}
+<style>
+    .doc-form { margin-bottom: 20px; }
+    .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .doc-panel { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+    .doc-panel h3 { font-family: 'Cormorant Garamond',serif; font-size: 1.1rem; color: var(--gold-light); font-weight: 400; margin-bottom: 14px; letter-spacing: 0.03em; }
+    .fld { margin-bottom: 10px; }
+    .fld label { display: block; font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+    .fld input, .fld select, .fld textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 8px 10px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.84rem; outline: none; }
+    .fld input:focus, .fld select:focus, .fld textarea:focus { border-color: var(--gold); }
+    .fld select option { background: var(--dark2); }
+    .fld-row { display: flex; gap: 10px; }
+    .fld-row .fld { flex: 1; }
+
+    .btn-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+    .btn-doc { border: none; border-radius: 4px; padding: 10px 22px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+    .btn-primary { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
+    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--cream); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
+    .btn-doc:hover { opacity: 0.9; }
+
+    .doc-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
+    .table-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .doc-table { border-collapse: collapse; white-space: nowrap; font-size: 0.8rem; }
+    .doc-table th { text-align: left; font-size: 0.66rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .doc-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; }
+    .doc-table tbody tr { cursor: pointer; }
+    .doc-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .doc-table tbody tr.selected { background: rgba(201,168,76,0.14); }
+    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
+
+
+
+    /* --- KOMPAKT DÜZEN (tüm kutular dar, sabit genişlik, yan yana) --- */
+    .ph-panel, .doc-panel {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 200px);
+        gap: 6px 12px;
+        align-content: start;
+        justify-content: start;
+        padding: 14px 16px;
+    }
+    .ph-panel h3, .doc-panel h3 { margin-bottom: 8px; grid-column: 1 / -1; }
+    /* fld-row: tam satır kaplama, kendi içinde sabit dar kutular */
+    .fld-row { grid-column: 1 / -1; display: flex; gap: 12px; }
+    .fld-row .fld { flex: 0 0 200px; }
+    .fld { margin-bottom: 4px; }
+    .fld label { font-size: 0.6rem; margin-bottom: 2px; letter-spacing: 0.03em; }
+    .fld input, .fld select, .fld textarea {
+        width: 200px;
+        max-width: 200px;
+        font-size: 0.78rem;
+        padding: 5px 8px;
+    }
+    /* textarea biraz daha geniş olabilir ama sınırlı */
+    .fld textarea { width: 200px; }
+    .brand-bar select { width: 200px; max-width: 200px; min-width: 160px; }
+
+
+    /* --- PANEL BOŞLUKLARINI AZALT --- */
+    .panel-grid { gap: 12px; margin-bottom: 12px; align-items: start; }
+    .ph-panel, .doc-panel { align-self: start; }
+</style>
+
+<h1 class="page-title">Врач вход Обновление</h1>
+<p class="page-subtitle">Ввод и обновление данных врачей</p>
+
+<form method="post" class="doc-form" id="docForm">
+    {% csrf_token %}
+    <input type="hidden" name="action" id="docAction" value="">
+    <input type="hidden" name="doctor_pk" id="docPk" value="">
+
+    <div class="panel-grid">
+        <!-- Panel 1: Global Address -->
+        <div class="doc-panel">
+            <h3>Глобальный адрес</h3>
+            <div class="fld">
+                <label for="brand">Компания</label>
+                <select id="brand" name="brand">
+                    <option value="">—</option>
+                    {% for b in brands %}<option value="{{ b }}" {% if b == f.brand %}selected{% endif %}>{{ b }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="country">Страна</label>
+                <select id="country" name="country">
+                    <option value="">—</option>
+                    {% for c in options.countries %}<option value="{{ c }}" {% if c == f.country %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="area">Область (Area)</label>
+                <select id="area" name="area">
+                    <option value="">—</option>
+                    {% for a in options.areas %}<option value="{{ a }}" {% if a == f.area %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="region">Регион</label>
+                <select id="region" name="region">
+                    <option value="">—</option>
+                    {% for r in options.regions %}<option value="{{ r }}" {% if r == f.region %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="city">Город</label>
+                <select id="city" name="city">
+                    <option value="">—</option>
+                    {% for c in options.cities %}<option value="{{ c }}" {% if c == f.city %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld">
+                <label for="district">Округ (District)</label>
+                <select id="district" name="district">
+                    <option value="">—</option>
+                    {% for d in options.districts %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Panel 2: Doctor Info -->
+        <div class="doc-panel">
+            <h3>Информация о враче</h3>
+            <div class="fld">
+                <label for="doctor_name">Имя доктора</label>
+                <input type="text" id="doctor_name" name="doctor_name" value="{{ f.doctor_name }}">
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="medrep">Мед. представитель</label>
+                    <select id="medrep" name="medrep">
+                        <option value="">—</option>
+                        {% for m in options.medreps %}<option value="{{ m }}" {% if m == f.medrep %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="activeness">Активность</label>
+                    <select id="activeness" name="activeness">
+                        <option value="">—</option>
+                        {% for a in activeness_list %}<option value="{{ a }}" {% if a == f.activeness %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="unified_specialty">Основная специальность</label>
+                    <select id="unified_specialty" name="unified_specialty">
+                        <option value="">—</option>
+                        {% for u in options.unified_specialties %}<option value="{{ u }}" {% if u == f.unified_specialty %}selected{% endif %}>{{ u }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="specialty">Специальность</label>
+                    <select id="specialty" name="specialty">
+                        <option value="">—</option>
+                        {% for s in options.specialties %}<option value="{{ s }}" {% if s == f.specialty %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="category">Категория</label>
+                    <select id="category" name="category">
+                        <option value="">—</option>
+                        {% for c in categories %}<option value="{{ c }}" {% if c == f.category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="doctor_tel">Доктор Тел</label>
+                    <input type="text" id="doctor_tel" name="doctor_tel" value="">
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="doctor_email">Эл. адрес</label>
+                    <input type="text" id="doctor_email" name="doctor_email" value="">
+                </div>
+                <div class="fld">
+                    <label for="position_regalia">Должность</label>
+                    <input type="text" id="position_regalia" name="position_regalia" value="">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <!-- Panel 3: Clinic Info -->
+        <div class="doc-panel">
+            <h3>Информация о клинике</h3>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="clinic_status">Категория клиники</label>
+                    <select id="clinic_status" name="clinic_status">
+                        <option value="">—</option>
+                        {% for c in clinic_statuses %}<option value="{{ c }}" {% if c == f.clinic_status %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="fld">
+                    <label for="clinic_count">Количество</label>
+                    <input type="text" id="clinic_count" name="clinic_count" value="">
+                </div>
+            </div>
+            <div class="fld">
+                <label for="clinic_name1">Название клиники</label>
+                <input type="text" id="clinic_name1" name="clinic_name1" value="">
+            </div>
+            <div class="fld">
+                <label for="key_person">Ключевой человек</label>
+                <input type="text" id="key_person" name="key_person" value="">
+            </div>
+            <div class="fld">
+                <label for="clinic_address">Адрес клиники</label>
+                <textarea id="clinic_address" name="clinic_address" rows="2"></textarea>
+            </div>
+        </div>
+
+        <!-- Panel 4: Official Address (geocoding) -->
+        <div class="doc-panel">
+            <h3>Официальный адрес</h3>
+            <div class="fld">
+                <label for="full_address">Официальный адрес</label>
+                <input type="text" id="full_address" name="full_address" value="" readonly>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="country_code">Код страны</label>
+                    <input type="text" id="country_code" name="country_code" value="" readonly>
+                </div>
+                <div class="fld">
+                    <label for="building_type">Тип здания</label>
+                    <input type="text" id="building_type" name="building_type" value="" readonly>
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="street">Улица</label>
+                    <input type="text" id="street" name="street" value="" readonly>
+                </div>
+                <div class="fld">
+                    <label for="homenumber">Домашний номер</label>
+                    <input type="text" id="homenumber" name="homenumber" value="" readonly>
+                </div>
+            </div>
+            <div class="fld-row">
+                <div class="fld">
+                    <label for="point_x">Точка X</label>
+                    <input type="text" id="point_x" name="point_x" value="" readonly>
+                </div>
+                <div class="fld">
+                    <label for="point_y">Точка Y</label>
+                    <input type="text" id="point_y" name="point_y" value="" readonly>
+                </div>
+            </div>
+            <button type="button" class="btn-doc btn-secondary" id="btnFindAddress" style="margin-top:6px;">Найти адрес</button>
+        </div>
+    </div>
+
+    <div class="btn-bar">
+        <button type="button" class="btn-doc btn-primary" onclick="docList()">Список врачей</button>
+        <button type="button" class="btn-doc btn-primary" onclick="docSubmit('add')">Добавить</button>
+        <button type="button" class="btn-doc btn-primary" onclick="docSubmit('update')">Обновить</button>
+        <button type="button" class="btn-doc btn-danger" onclick="docSubmit('delete')">Удалить</button>
+        <button type="button" class="btn-doc btn-secondary" onclick="docCleanup()">Очистить</button>
+    </div>
+</form>
+
+<div class="doc-count">Всего: {{ total_rows }}{% if total_rows > 500 %} (показаны первые 500){% endif %}</div>
+
+<div class="table-scroll">
+<table class="doc-table">
+    <thead>
+        <tr>
+            <th>ID</th><th>Бренд</th><th>Страна</th><th>Обл.</th><th>Регион</th><th>Округ</th><th>Город</th>
+            <th>Актив.</th><th>Medrep</th><th>Дата</th><th>Имя</th><th>Осн.спец.</th><th>Спец.</th>
+            <th>Должность</th><th>Кат.</th><th>Клиника</th><th>Кат.клин.</th><th>Адрес клин.</th><th>Кол-во</th>
+            <th>Ключевой</th><th>Тел</th><th>Email</th><th>Полный адрес</th><th>Тип</th><th>Код стр.</th>
+            <th>Обл.имя</th><th>Подобл.</th><th>Улица</th><th>Дом</th><th>point_y</th><th>point_x</th>
+            <th>Польз.</th><th>Дата вв.</th><th>Клиника1</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in records %}
+        <tr class="doc-row"
+            data-id="{{ d.id }}" data-brand="{{ d.brand|default:'' }}" data-country="{{ d.country|default:'' }}"
+            data-area="{{ d.area|default:'' }}" data-region="{{ d.region|default:'' }}" data-district="{{ d.district|default:'' }}"
+            data-city="{{ d.city|default:'' }}" data-activeness="{{ d.activeness|default:'' }}" data-medrep="{{ d.medrep|default:'' }}"
+            data-doctor_date="{{ d.doctor_date|default:'' }}" data-doctor_name="{{ d.doctor_name|default:'' }}"
+            data-unified_specialty="{{ d.unified_specialty|default:'' }}" data-specialty="{{ d.specialty|default:'' }}"
+            data-position_regalia="{{ d.position_regalia|default:'' }}" data-category="{{ d.category|default:'' }}"
+            data-clinic_name="{{ d.clinic_name|default:'' }}" data-clinic_name1="{{ d.clinic_name1|default:'' }}"
+            data-clinic_status="{{ d.clinic_status|default:'' }}" data-clinic_address="{{ d.clinic_address|default:'' }}"
+            data-clinic_count="{{ d.clinic_count|default:'' }}" data-key_person="{{ d.key_person|default:'' }}"
+            data-doctor_tel="{{ d.doctor_tel|default:'' }}" data-doctor_email="{{ d.doctor_email|default:'' }}"
+            data-full_address="{{ d.full_address|default:'' }}" data-building_type="{{ d.building_type|default:'' }}"
+            data-country_code="{{ d.country_code|default:'' }}" data-street="{{ d.street|default:'' }}"
+            data-homenumber="{{ d.homenumber|default:'' }}" data-point_y="{{ d.point_y|default:'' }}" data-point_x="{{ d.point_x|default:'' }}">
+            <td>{{ d.id }}</td><td>{{ d.brand|default:"—" }}</td><td>{{ d.country|default:"—" }}</td><td>{{ d.area|default:"—" }}</td>
+            <td>{{ d.region|default:"—" }}</td><td>{{ d.district|default:"—" }}</td><td>{{ d.city|default:"—" }}</td>
+            <td>{{ d.activeness|default:"—" }}</td><td>{{ d.medrep|default:"—" }}</td><td>{{ d.doctor_date|default:"—" }}</td>
+            <td>{{ d.doctor_name|default:"—" }}</td><td>{{ d.unified_specialty|default:"—" }}</td><td>{{ d.specialty|default:"—" }}</td>
+            <td>{{ d.position_regalia|default:"—" }}</td><td>{{ d.category|default:"—" }}</td><td>{{ d.clinic_name|default:"—" }}</td>
+            <td>{{ d.clinic_status|default:"—" }}</td><td>{{ d.clinic_address|default:"—" }}</td><td>{{ d.clinic_count|default:"—" }}</td>
+            <td>{{ d.key_person|default:"—" }}</td><td>{{ d.doctor_tel|default:"—" }}</td><td>{{ d.doctor_email|default:"—" }}</td>
+            <td>{{ d.full_address|default:"—" }}</td><td>{{ d.building_type|default:"—" }}</td><td>{{ d.country_code|default:"—" }}</td>
+            <td>{{ d.administrative_area_name|default:"—" }}</td><td>{{ d.sub_administrative_area_name|default:"—" }}</td>
+            <td>{{ d.street|default:"—" }}</td><td>{{ d.homenumber|default:"—" }}</td><td>{{ d.point_y|default:"—" }}</td>
+            <td>{{ d.point_x|default:"—" }}</td><td>{{ d.entry_user|default:"—" }}</td><td>{{ d.entry_date|default:"—" }}</td>
+            <td>{{ d.clinic_name1|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="34" class="empty">Нет данных</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<script>
+(function () {
+    "use strict";
+    var optUrl = "{% url 'sales:doctor_address_options' %}";
+    var form = document.getElementById("docForm");
+
+    function byId(id) { return document.getElementById(id); }
+
+    // --- cascading: country -> area -> region -> city ---
+    function fill(select, values, keep) {
+        var prev = keep ? select.value : "";
+        select.innerHTML = '<option value="">—</option>';
+        values.forEach(function (v) {
+            var o = document.createElement("option");
+            o.value = v; o.textContent = v;
+            if (v === prev) o.selected = true;
+            select.appendChild(o);
+        });
+    }
+
+    function fetchOpts(level, params) {
+        var qs = new URLSearchParams(params).toString();
+        return fetch(optUrl + "?level=" + level + "&" + qs,
+                     { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { return d.options || []; })
+            .catch(function () { return []; });
+    }
+
+    byId("country").addEventListener("change", function () {
+        var country = this.value;
+        fetchOpts("area", { country: country }).then(function (o) {
+            fill(byId("area"), o, false);
+            fill(byId("region"), [], false);
+            fill(byId("city"), [], false);
+        });
+    });
+
+    byId("area").addEventListener("change", function () {
+        var country = byId("country").value, area = this.value;
+        fetchOpts("region", { country: country, area: area }).then(function (o) {
+            fill(byId("region"), o, false);
+            fill(byId("city"), [], false);
+        });
+    });
+
+    byId("region").addEventListener("change", function () {
+        var country = byId("country").value, area = byId("area").value, region = this.value;
+        fetchOpts("city", { country: country, area: area, region: region }).then(function (o) {
+            fill(byId("city"), o, false);
+        });
+    });
+
+    // --- table row click -> fill form ---
+    var FIELDS = ["brand","country","area","region","district","city","activeness","medrep",
+        "doctor_date","doctor_name","unified_specialty","specialty","position_regalia","category",
+        "clinic_name1","clinic_status","clinic_address","clinic_count","key_person","doctor_tel",
+        "doctor_email","full_address","building_type","country_code","street","homenumber","point_y","point_x"];
+
+    document.querySelectorAll(".doc-row").forEach(function (row) {
+        row.addEventListener("click", function () {
+            document.querySelectorAll(".doc-row").forEach(function (r) { r.classList.remove("selected"); });
+            row.classList.add("selected");
+            byId("docPk").value = row.getAttribute("data-id") || "";
+            FIELDS.forEach(function (f) {
+                var el = byId(f);
+                if (!el) return;
+                var val = row.getAttribute("data-" + f);
+                el.value = (val === null ? "" : val);
+            });
+        });
+    });
+
+    // --- buttons ---
+    window.docSubmit = function (action) {
+        if ((action === "update" || action === "delete") && !byId("docPk").value) {
+            alert("Сначала выберите врача из таблицы.");
+            return;
+        }
+        byId("docAction").value = action;
+        form.method = "post";
+        form.submit();
+    };
+
+    window.docList = function () {
+        // GET ile filtrele — form alanlarından query string kur
+        var params = new URLSearchParams();
+        ["brand","country","area","region","city","medrep","specialty",
+         "unified_specialty","category","activeness","doctor_name","clinic_status"].forEach(function (f) {
+            var el = byId(f);
+            if (el && el.value) params.set(f, el.value);
+        });
+        window.location = window.location.pathname + "?" + params.toString();
+    };
+
+    window.docCleanup = function () {
+        form.reset();
+        byId("docPk").value = "";
+        document.querySelectorAll(".doc-row").forEach(function (r) { r.classList.remove("selected"); });
+    };
+
+    // Find Address — geocoding henüz bağlı değil
+    byId("btnFindAddress").addEventListener("click", function () {
+        alert("Функция «Найти адрес» будет подключена позже (геокодирование).");
+    });
+})();
+</script>
+{% endblock %}

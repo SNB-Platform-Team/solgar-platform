@@ -17,6 +17,7 @@ load_dotenv(BASE_DIR / ".env")
 
 _SENTINEL = object()
 
+
 def get_secret(key: str, default: Any = _SENTINEL) -> str:
     """
     Read a configuration value from the environment.
@@ -37,6 +38,7 @@ def get_secret(key: str, default: Any = _SENTINEL) -> str:
     if default is _SENTINEL:
         raise KeyError(f"Missing required environment variable: {key}")
     return default
+
 
 #  Core
 SECRET_KEY: str = get_secret("DJANGO_SECRET_KEY")
@@ -99,30 +101,17 @@ WSGI_APPLICATION: str = "config.wsgi.application"
 # otherwise             → local Docker MySQL with a static password
 USE_AZURE_MYSQL: bool = get_secret("USE_AZURE_MYSQL", "False") == "True"
 
-# External reference database (solgar_tst on Olga's server) — read-only,
-# feeds the product-category and geographic report filters.
-REFERENCE_DB = {
-    "ENGINE": "django.db.backends.mysql",
-    "HOST": get_secret("REFDB_HOST", ""),
-    "PORT": get_secret("REFDB_PORT", "3306"),
-    "NAME": get_secret("REFDB_NAME", ""),
-    "USER": get_secret("REFDB_USER", ""),
-    "PASSWORD": get_secret("REFDB_PASSWORD", ""),
-    "OPTIONS": {"charset": "utf8mb4"},
-}
-
 if USE_AZURE_MYSQL:
     DATABASES: dict[str, dict[str, Any]] = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
             "NAME": get_secret("DB_NAME"),
             "USER": get_secret("DB_USER"),
-            "PASSWORD": "",  # injected as an Entra ID token by config.db_token
+            "PASSWORD": "",  # injected per-connection via config/db_token.py
             "HOST": get_secret("DB_HOST"),
             "PORT": get_secret("DB_PORT", "3306"),
-            "OPTIONS": {"charset": "utf8mb4", "ssl": {"ssl-mode": "REQUIRED"}},
-        },
-        "refdb": REFERENCE_DB,
+            "OPTIONS": {},
+        }
     }
 else:
     DATABASES: dict[str, dict[str, Any]] = {
@@ -136,11 +125,8 @@ else:
             "OPTIONS": {
                 "charset": "utf8mb4",
             },
-        },
-        "refdb": REFERENCE_DB,
+        }
     }
-
-DATABASE_ROUTERS = ["config.routers.ReferenceRouter"]
 
 #  Custom user model
 AUTH_USER_MODEL: str = "accounts.User"
@@ -209,6 +195,7 @@ if not DEBUG:
     CSRF_TRUSTED_ORIGINS: list[str] = [
         f"https://{host}" for host in ALLOWED_HOSTS if host
     ]
+
 
 # Load the Azure MySQL token injector (no-op unless USE_AZURE_MYSQL=True)
 if USE_AZURE_MYSQL:

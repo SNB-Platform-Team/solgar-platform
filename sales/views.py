@@ -18,7 +18,13 @@ from .services import (
     SalesParseError, SalesUploadService, SalesViewService,
 )
 CHAINS = ["MFO"]
-COUNTRIES = ["Russia", "Kazakhstan", "Belarus", "Uzbekistan", "Azerbaijan"]
+COUNTRIES = ["Russia", "Kazakhistan", "Belarusian", "Uzbekistan", "Azerbaijan",
+    "Kyrgystan", "Armenia", "Tajikistan",]
+DOCTOR_CATEGORIES = ["A+", "A", "B", "C"]
+DOCTOR_ACTIVENESS = ["Актив", "Не Актив", "в процессе"]
+CLINIC_STATUSES = ["GOLD", "PLATINUM", "SILVER"]
+DOCTOR_BRANDS = ["SOLGAR", "NATURES BOUNTY", "OBF"]
+
 
 SESSION_KEY = "sales_preview"
 
@@ -179,7 +185,7 @@ def sales_report_view(request: HttpRequest) -> HttpResponse:
         filters["search"] = search
 
     result = service.query(**filters)
-    options = service.filter_options()
+    options = service.filter_options(country=request.GET.get("country", ""))
 
     context: dict[str, Any] = {
         "result": result,
@@ -277,7 +283,7 @@ def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
         main_group=main_group, sub_group=sub_group,
         region=region, district=district, **filters
     )
-    options = service.filter_options()
+    options = service.filter_options(country=request.GET.get("country", ""))
 
     context: dict[str, Any] = {
         "report": report,
@@ -300,6 +306,28 @@ def sales_chain_report_view(request: HttpRequest) -> HttpResponse:
     }
     return render(request, "sales/chain_report.html", context)
 
+@login_required
+@require_screen("SALES_CHAIN")
+@require_http_methods(["GET"])
+def chain_filter_options_json(request: HttpRequest) -> HttpResponse:
+    """
+    AJAX endpoint: return chain/region/district options for a given country.
+
+    Called by the chain report page when the user changes the country
+    dropdown, so the dependent dropdowns (Сеть, Регион, Округ) refresh
+    without a full page reload. Mirrors the Java country->company cascading,
+    driven by ChainDefinition + AddressGroup reference data.
+    """
+    from django.http import JsonResponse
+
+    country = request.GET.get("country", "").strip()
+    service = SalesViewService()
+    options = service.filter_options(country=country)
+    return JsonResponse({
+        "chains": options.get("chains", []),
+        "regions": options.get("regions", []),
+        "districts": options.get("districts", []),
+    })
 
 DISTRIBUTOR_SESSION_KEY = "distributor_preview"
 
@@ -471,3 +499,312 @@ def distributor_report_view(request: HttpRequest) -> HttpResponse:
         "has_query": bool(request.GET),
     }
     return render(request, "sales/distributor_report.html", context)
+
+@login_required
+@require_screen("DOCTOR_UPDATE")
+@require_http_methods(["GET"])
+def doctor_address_options_json(request: HttpRequest) -> HttpResponse:
+    """
+    AJAX endpoint for the Doctor screen's cascading address dropdowns.
+
+    Returns the option list for one level, narrowed by the levels above it.
+    The frontend calls this whenever country/area/region changes, mirroring
+    the Java itemStateChanged cascade (country -> area -> region -> city).
+
+    Query params:
+        level:   which list to return — "area", "region" or "city".
+        country, area, region: the current selections above that level.
+
+    Response: {"options": [...]}  (always sorted, distinct, non-empty)
+    """
+    from django.http import JsonResponse
+
+    from .repositories import DoctorRepository
+
+    repo = DoctorRepository()
+    level = request.GET.get("level", "").strip()
+    country = request.GET.get("country", "").strip()
+    area = request.GET.get("area", "").strip()
+    region = request.GET.get("region", "").strip()
+
+    if level == "area":
+        options = repo.areas(country=country)
+    elif level == "region":
+        options = repo.regions(country=country, area=area)
+    elif level == "city":
+        options = repo.cities(country=country, area=area, region=region)
+    else:
+        options = []
+
+    return JsonResponse({"options": options})
+
+@login_required
+@require_screen("DOCTOR_UPDATE")
+@require_http_methods(["GET"])
+def doctor_address_options_json(request: HttpRequest) -> HttpResponse:
+    """
+    AJAX endpoint for the Doctor screen's cascading address dropdowns.
+
+    Returns the option list for one level, narrowed by the levels above it.
+    The frontend calls this whenever country/area/region changes, mirroring
+    the Java itemStateChanged cascade (country -> area -> region -> city).
+
+    Query params:
+        level:   which list to return — "area", "region" or "city".
+        country, area, region: the current selections above that level.
+    """
+    from django.http import JsonResponse
+
+    from .repositories import DoctorRepository
+
+    repo = DoctorRepository()
+    level = request.GET.get("level", "").strip()
+    country = request.GET.get("country", "").strip()
+    area = request.GET.get("area", "").strip()
+    region = request.GET.get("region", "").strip()
+
+    if level == "area":
+        options = repo.areas(country=country)
+    elif level == "region":
+        options = repo.regions(country=country, area=area)
+    elif level == "city":
+        options = repo.cities(country=country, area=area, region=region)
+    else:
+        options = []
+
+    return JsonResponse({"options": options})
+
+@login_required
+@require_screen("DOCTOR_UPDATE")
+@require_http_methods(["GET", "POST"])
+def doctor_entry_view(request: HttpRequest) -> HttpResponse:
+    """
+    Doctor Entry & Update (Врач вход Обновление) — single-page CRUD.
+ 
+    Web port of the Java DoctorEntryUpdate form. The same fields act as both
+    search filters (List Doctor) and data-entry inputs (Add/Update). Actions:
+ 
+        list   (GET)  — filter and show the table
+        add    (POST) — create a new doctor
+        update (POST) — update the selected doctor
+        delete (POST) — soft-delete (status=0) the selected doctor
+ 
+    POST actions redirect back (PRG) so a refresh doesn't repeat the write.
+    """
+    from django.contrib import messages
+    from django.shortcuts import redirect, render
+ 
+    from .services import DoctorViewService, DoctorWriteService
+ 
+    view_service = DoctorViewService()
+ 
+    # ---------- POST: write actions ----------
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        write_service = DoctorWriteService()
+        user_name = request.user.get_full_name() or request.user.username
+ 
+        data = {k: v.strip() for k, v in request.POST.items()}
+ 
+        if action == "add":
+            try:
+                doc = write_service.create(data, user_name=user_name)
+                messages.success(request, f"Врач добавлен (ID {doc.id}).")
+            except Exception as exc:
+                messages.error(request, f"Ошибка при добавлении: {exc}")
+ 
+        elif action == "update":
+            doctor_id = request.POST.get("doctor_pk", "").strip()
+            if not doctor_id:
+                messages.error(request, "Не выбран врач для обновления.")
+            else:
+                try:
+                    n = write_service.update(int(doctor_id), data, user_name=user_name)
+                    if n:
+                        messages.success(request, "Врач обновлён.")
+                    else:
+                        messages.error(request, "Врач не найден.")
+                except Exception as exc:
+                    messages.error(request, f"Ошибка при обновлении: {exc}")
+ 
+        elif action == "delete":
+            doctor_id = request.POST.get("doctor_pk", "").strip()
+            if not doctor_id:
+                messages.error(request, "Не выбран врач для удаления.")
+            else:
+                try:
+                    n = write_service.soft_delete(int(doctor_id))
+                    if n:
+                        messages.success(request, "Врач удалён.")
+                    else:
+                        messages.error(request, "Врач не найден.")
+                except Exception as exc:
+                    messages.error(request, f"Ошибка при удалении: {exc}")
+ 
+        # PRG: filtreleri koruyarak listeye dön
+        from urllib.parse import urlencode
+        keep = {k: request.POST.get(k, "") for k in (
+            "brand", "country", "area", "region", "city", "medrep",
+            "specialty", "unified_specialty", "category", "activeness",
+            "doctor_name", "clinic_status",
+        ) if request.POST.get(k, "")}
+        url = request.path
+        if keep:
+            url = f"{url}?{urlencode(keep)}"
+        return redirect(url)
+ 
+    # ---------- GET: filter + list ----------
+    filters = {k: request.GET.get(k, "").strip() for k in (
+        "brand", "country", "area", "region", "city", "medrep",
+        "specialty", "unified_specialty", "category", "activeness",
+        "doctor_name", "clinic_status",
+    )}
+ 
+    result = view_service.query(**filters)
+    options = view_service.address_options(
+        country=filters["country"], area=filters["area"], region=filters["region"],
+    )
+ 
+    context = {
+        "records": result["records"],
+        "total_rows": result["total_rows"],
+        "options": options,
+        "categories": DOCTOR_CATEGORIES,
+        "activeness_list": DOCTOR_ACTIVENESS,
+        "clinic_statuses": CLINIC_STATUSES,
+        "brands": DOCTOR_BRANDS,
+        "f": filters,
+        "has_query": bool(request.GET),
+    }
+    return render(request, "sales/doctor_entry.html", context)
+
+# =====================================================================
+# PHARMACY (аптека вход Обновление) — sales/views.py sonuna eklendi
+# =====================================================================
+
+PHARMACY_BRANDS = ["SOLGAR", "NATURES BOUNTY", "OBF"]
+PHARMACY_ACTIVENESS = ["Актив", "Не Актив", "в процессе"]
+
+
+@login_required
+@require_screen("PHARMACY_UPDATE")
+@require_http_methods(["GET"])
+def pharmacy_options_json(request: HttpRequest) -> HttpResponse:
+    """
+    AJAX endpoint for the Pharmacy screen's cascading dropdowns. Everything
+    is brand-scoped (Solgar/Bounty are separate tables). Levels: area, region,
+    city, metro, subchain.
+    """
+    from django.http import JsonResponse
+
+    from .repositories import PharmacyRepository
+
+    repo = PharmacyRepository()
+    brand = request.GET.get("brand", "").strip()
+    level = request.GET.get("level", "").strip()
+    country = request.GET.get("country", "").strip()
+    area = request.GET.get("area", "").strip()
+    region = request.GET.get("region", "").strip()
+    city = request.GET.get("city", "").strip()
+    group_company = request.GET.get("group_company", "").strip()
+
+    if level == "area":
+        options = repo.areas(brand, country=country)
+    elif level == "region":
+        options = repo.regions(brand, country=country, area=area)
+    elif level == "city":
+        options = repo.cities(brand, country=country, area=area, region=region)
+    elif level == "metro":
+        options = repo.metros(brand, city=city)
+    elif level == "subchain":
+        options = repo.subchains(brand, group_company=group_company)
+    else:
+        options = []
+
+    return JsonResponse({"options": options})
+
+
+@login_required
+@require_screen("PHARMACY_UPDATE")
+@require_http_methods(["GET", "POST"])
+def pharmacy_entry_view(request: HttpRequest) -> HttpResponse:
+    """
+    Pharmacy Entry & Update (аптека вход Обновление) - single-page CRUD.
+
+    Web port of the Java PharmacyEntryUpdate form. Brand (SOLGAR / NATURES
+    BOUNTY / OBF) is selected first and drives which table is read/written;
+    the same fields serve as both search filters and data-entry inputs.
+    Actions: list (GET), add / update / delete (POST). PRG on write.
+    """
+    from django.contrib import messages
+    from django.shortcuts import redirect, render
+
+    from .services import (
+        PharmacyValidationError, PharmacyViewService, PharmacyWriteService,
+    )
+
+    view_service = PharmacyViewService()
+    brand = (request.GET.get("brand") or request.POST.get("brand") or "SOLGAR").strip()
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        write_service = PharmacyWriteService()
+        user_name = request.user.get_full_name() or request.user.username
+        data = {k: v.strip() for k, v in request.POST.items()}
+
+        try:
+            if action == "add":
+                obj = write_service.create(brand, data, user_name=user_name)
+                messages.success(request, f"Аптека добавлена (ID {obj.id}).")
+            elif action == "update":
+                pk = request.POST.get("pharmacy_pk", "").strip()
+                if not pk:
+                    messages.error(request, "Не выбрана аптека для обновления.")
+                else:
+                    n = write_service.update(brand, int(pk), data, user_name=user_name)
+                    messages.success(request, "Аптека обновлена." if n else "Аптека не найдена.")
+            elif action == "delete":
+                pk = request.POST.get("pharmacy_pk", "").strip()
+                if not pk:
+                    messages.error(request, "Не выбрана аптека для удаления.")
+                else:
+                    n = write_service.soft_delete(brand, int(pk))
+                    messages.success(request, "Аптека удалена." if n else "Аптека не найдена.")
+        except PharmacyValidationError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:
+            messages.error(request, f"Ошибка: {exc}")
+
+        from urllib.parse import urlencode
+        keep = {"brand": brand}
+        for k in ("country", "area", "region", "city", "group_company",
+                  "subgroup_company", "pharmacy_category", "pharmacy_type",
+                  "promo", "marketing_staff", "pharmacy_activeness", "pharmacy_address"):
+            v = request.POST.get(k, "")
+            if v:
+                keep[k] = v
+        return redirect(f"{request.path}?{urlencode(keep)}")
+
+    filters = {k: request.GET.get(k, "").strip() for k in (
+        "country", "area", "region", "city", "group_company", "subgroup_company",
+        "pharmacy_category", "pharmacy_type", "promo", "marketing_staff",
+        "pharmacy_activeness", "pharmacy_address",
+    )}
+
+    result = view_service.query(brand=brand, **filters)
+    options = view_service.dropdown_options(
+        brand=brand, country=filters["country"], area=filters["area"],
+        region=filters["region"], city=filters["city"],
+    )
+
+    context = {
+        "records": result["records"],
+        "total_rows": result["total_rows"],
+        "options": options,
+        "brands": PHARMACY_BRANDS,
+        "activeness_list": PHARMACY_ACTIVENESS,
+        "brand": brand,
+        "f": filters,
+        "has_query": bool(request.GET),
+    }
+    return render(request, "sales/pharmacy_entry.html", context)

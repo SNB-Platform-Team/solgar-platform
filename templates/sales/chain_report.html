@@ -30,6 +30,7 @@
     .table-scroll { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
     .empty { text-align: center; color: var(--text-dim); padding: 40px; font-style: italic; }
     .cap-note { color: var(--text-dim); font-size: 0.8rem; margin-top: 10px; font-style: italic; }
+    .cascade-loading { opacity: 0.5; pointer-events: none; }
 </style>
 
 <h1 class="page-title">Просмотр Аптечная сеть продаж</h1>
@@ -55,16 +56,8 @@
             </select>
         </div>
     </div>
+
     <div class="filter-row">
-        <div class="filter-group">
-            <label for="chain_name">Сеть</label>
-            <select id="chain_name" name="chain_name">
-                <option value="">Все</option>
-                {% for c in options.chains %}
-                <option value="{{ c }}" {% if c == f_chain %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="filter-group">
             <label for="country">Страна</label>
             <select id="country" name="country">
@@ -74,7 +67,18 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="filter-row">
+        <div class="filter-group">
+            <label for="chain_name">Сеть</label>
+            <select id="chain_name" name="chain_name">
+                <option value="">Все</option>
+                {% for c in options.chains %}
+                <option value="{{ c }}" {% if c == f_chain %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="filter-row">
         <div class="filter-group">
             <label for="main_group">Основная группа</label>
             <select id="main_group" name="main_group">
@@ -112,6 +116,8 @@
             </select>
         </div>
     </div>
+
+    <div class="filter-row">
         <div class="filter-group">
             <label for="city">Город</label>
             <input type="text" id="city" name="city" value="{{ f_city }}" placeholder="Город">
@@ -121,6 +127,7 @@
             <input type="text" id="q" name="q" value="{{ f_search }}" placeholder="Поиск">
         </div>
     </div>
+
     <div class="filter-row">
         <div class="filter-group" style="display:flex; align-items:flex-end;">
             <button type="submit" class="btn-generate">Сформировать отчёт</button>
@@ -191,4 +198,79 @@
 {% else %}
 <p class="page-subtitle">Задайте фильтры и нажмите «Сформировать отчёт».</p>
 {% endif %}
+
+<script>
+(function () {
+    "use strict";
+
+    // Country değişince Сеть / Регион / Округ dropdown'larını AJAX ile tazele.
+    // Java'daki country->company cascading'in web karşılığı; sayfa yenilenmez.
+    var optionsUrl = "{% url 'sales:chain_filter_options' %}";
+
+    var countrySel  = document.getElementById("country");
+    var chainSel    = document.getElementById("chain_name");
+    var regionSel   = document.getElementById("region");
+    var districtSel = document.getElementById("district");
+
+    // Bir <select>'i "Все" + verilen değerlerle yeniden doldurur.
+    // Mümkünse önceki seçimi korur (yeni listede hâlâ varsa).
+    function repopulate(select, values) {
+        var previous = select.value;
+        select.innerHTML = "";
+
+        var allOpt = document.createElement("option");
+        allOpt.value = "";
+        allOpt.textContent = "Все";
+        select.appendChild(allOpt);
+
+        values.forEach(function (v) {
+            var opt = document.createElement("option");
+            opt.value = v;
+            opt.textContent = v;
+            if (v === previous) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+    }
+
+    function refreshDependents() {
+        var country = countrySel.value;
+
+        // Görsel geri bildirim: yükleme sırasında dropdown'ları soluklaştır.
+        [chainSel, regionSel, districtSel].forEach(function (s) {
+            s.classList.add("cascade-loading");
+        });
+
+        var url = optionsUrl + "?country=" + encodeURIComponent(country);
+
+        fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (resp) {
+                if (!resp.ok) {
+                    throw new Error("HTTP " + resp.status);
+                }
+                return resp.json();
+            })
+            .then(function (data) {
+                repopulate(chainSel,    data.chains    || []);
+                repopulate(regionSel,   data.regions   || []);
+                repopulate(districtSel, data.districts || []);
+            })
+            .catch(function (err) {
+                // Hata olursa sessizce bırak; kullanıcı yine de formu
+                // gönderebilir, server-side filtre son sözü söyler.
+                console.error("Cascade yüklenemedi:", err);
+            })
+            .finally(function () {
+                [chainSel, regionSel, districtSel].forEach(function (s) {
+                    s.classList.remove("cascade-loading");
+                });
+            });
+    }
+
+    if (countrySel) {
+        countrySel.addEventListener("change", refreshDependents);
+    }
+})();
+</script>
 {% endblock %}

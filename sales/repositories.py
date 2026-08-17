@@ -81,7 +81,7 @@ class SalesRepository:
         if search:
             qs = qs.filter(product_name__icontains=search)
 
-        return qs.order_by("chain_name", "product_name")    
+        return qs.order_by("chain_name", "product_name")
 
     def distinct_report_dates(self) -> list:
         """Return the distinct report dates present, newest first."""
@@ -91,55 +91,63 @@ class SalesRepository:
             .order_by("-report_date")
         )
 
-    def distinct_chains(self) -> list[str]:
-        """Return the distinct chain names present."""
+    def distinct_chains(self, country: str = "") -> list[str]:
+        """Return distinct chain names from ChainDefinition, optionally by country."""
+        from .models import ChainDefinition
+
+        qs = ChainDefinition.objects.filter(is_active=True)
+        if country:
+            qs = qs.filter(country=country)
         return list(
-            SalesRecord.objects.exclude(chain_name="")
-            .values_list("chain_name", flat=True)
-            .distinct()
-            .order_by("chain_name")
+            qs.exclude(name="")
+            .values_list("name", flat=True)
+            .distinct().order_by("name")
         )
 
-    def group_options(self) -> dict:
-        """Distinct product groups and geographic regions for filter dropdowns."""
+    def group_options(self, country: str = "") -> dict:
+        """
+        Distinct product groups and geographic regions for filter dropdowns.
+        If country is given, regions/districts are limited to that country.
+        """
         from .models import AddressGroup, ProductGroup
 
         main_groups = list(
-            ProductGroup.objects.exclude(main_group="")
-            .values_list("main_group", flat=True).distinct().order_by("main_group")
+            ProductGroup.objects.exclude(product_main_group="")
+            .values_list("product_main_group", flat=True).distinct().order_by("product_main_group")
         )
         sub_groups = list(
-            ProductGroup.objects.exclude(sub_group="")
-            .values_list("sub_group", flat=True).distinct().order_by("sub_group")
+            ProductGroup.objects.exclude(product_sub_group="")
+            .values_list("product_sub_group", flat=True).distinct().order_by("product_sub_group")
         )
+
+        addr_qs = AddressGroup.objects.all()
+        if country:
+            addr_qs = addr_qs.filter(cntry=country)   # AddressGroup'ta ülke bilgisi cntry kolonunda
+
         regions = list(
-            AddressGroup.objects.exclude(region="")
+            addr_qs.exclude(region="")
             .values_list("region", flat=True).distinct().order_by("region")
         )
         districts = list(
-            AddressGroup.objects.exclude(district="")
+            addr_qs.exclude(district="")
             .values_list("district", flat=True).distinct().order_by("district")
         )
-        return {
-            "main_groups": main_groups,
-            "sub_groups": sub_groups,
-            "regions": regions,
-            "districts": districts,
-        }
+        return {"main_groups": main_groups, "sub_groups": sub_groups,
+                "regions": regions, "districts": districts}
 
     def product_names_for_group(self, main_group: str = "", sub_group: str = "") -> set:
-        """Return the set of match_keys (lowercased product names) in a group."""
+        """Return lowercased product names in a group (for matching sales rows)."""
         from .models import ProductGroup
 
         qs = ProductGroup.objects.all()
         if main_group:
-            qs = qs.filter(main_group=main_group)
+            qs = qs.filter(product_main_group=main_group)
         if sub_group:
-            qs = qs.filter(sub_group=sub_group)
-        return set(qs.values_list("match_key", flat=True))
+            qs = qs.filter(product_sub_group=sub_group)
+        return {name.lower() for name in qs.values_list("product_sales_name", flat=True) if name}
 
     def cities_for_region(self, region: str = "", district: str = "") -> set:
-        """Return the set of match_keys (lowercased city names) in a region/district."""
+        """Return lowercased city names in a region/district (for matching sales rows)."""
         from .models import AddressGroup
 
         qs = AddressGroup.objects.all()
@@ -147,7 +155,7 @@ class SalesRepository:
             qs = qs.filter(region=region)
         if district:
             qs = qs.filter(district=district)
-        return set(qs.values_list("match_key", flat=True))
+        return {c.lower() for c in qs.values_list("city_region", flat=True) if c}
 
 
 class DistributorRepository:
@@ -189,3 +197,181 @@ class DistributorRepository:
             .values_list("distributor", flat=True)
             .distinct().order_by("distributor")
         )
+
+
+class DoctorRepository:
+    """
+    Data access for Doctor records (external doctor_data table).
+
+    Cascading address options come from the distinct values already present
+    in doctor_data — country -> area -> region -> city — mirroring the Java
+    getPRMDataGroupBy chain (which read prm_sales_addresses). Each level is
+    filtered by the level(s) above it. Medrep / specialty / unified_specialty
+    are likewise derived from existing doctor_data values.
+    """
+
+    def _distinct(self, field: str, **filters) -> list:
+        """Distinct non-empty values of `field`, filtered, ordered."""
+        from .models import Doctor
+
+        qs = Doctor.objects.filter(status=1)
+        for key, value in filters.items():
+            if value:
+                qs = qs.filter(**{key: value})
+        return list(
+            qs.exclude(**{f"{field}__isnull": True})
+            .exclude(**{field: ""})
+            .values_list(field, flat=True)
+            .distinct()
+            .order_by(field)
+        )
+
+    # --- address cascade: country -> area -> region -> city ---
+
+    def countries(self) -> list:
+        """All distinct countries."""
+        return self._distinct("country")
+
+    def areas(self, country: str = "") -> list:
+        """Distinct areas, optionally within a country."""
+        return self._distinct("area", country=country)
+
+    def regions(self, country: str = "", area: str = "") -> list:
+        """Distinct regions, optionally within a country/area."""
+        return self._distinct("region", country=country, area=area)
+
+    def cities(self, country: str = "", area: str = "", region: str = "") -> list:
+        """Distinct cities, optionally within country/area/region."""
+        return self._distinct("city", country=country, area=area, region=region)
+
+    def districts(self, country: str = "", area: str = "", region: str = "") -> list:
+        """Distinct districts. Java's district combo is a flat list, but we
+        allow the same cascading filters for consistency."""
+        return self._distinct("district", country=country, area=area, region=region)
+
+    # --- other dropdowns derived from doctor_data ---
+
+    def medreps(self, brand: str = "", country: str = "", area: str = "") -> list:
+        """Distinct medical reps, optionally narrowed by brand/country/area.
+
+        Java getMedRep read from an employee list; here we derive medreps
+        from the values already present in doctor_data."""
+        return self._distinct("medrep", brand=brand, country=country, area=area)
+
+    def specialties(self) -> list:
+        """Distinct specialties present in doctor_data."""
+        return self._distinct("specialty")
+
+    def unified_specialties(self) -> list:
+        """Distinct unified specialties present in doctor_data."""
+        return self._distinct("unified_specialty")
+
+class PharmacyRepository:
+    """
+    Data access for pharmacy records. Solgar/OBF and Bounty live in separate
+    tables (pharmacy_data_solgar / pharmacy_data_bounty), so every query is
+    routed to the right model by brand via _model_for.
+
+    Dropdown options (address cascade, chain, category, etc.) are derived as
+    DISTINCT values from the pharmacy table itself. When the app DB user is
+    granted access to solgar_prm, these can be switched to the clean
+    prm_sales_* reference tables with minimal change.
+    """
+
+    # Görünmez / sorunlu karakterler (Word'den yapışan) — metro vb. temizliği.
+    _JUNK_CHARS = ("\xa0", "\u200e", "\u200f", "\ufeff")
+
+    def _model_for(self, brand: str = ""):
+        """Return the pharmacy model matching the brand (default: Solgar)."""
+        from .models import PharmacyBounty, PharmacySolgar
+
+        b = (brand or "").strip().upper()
+        if b in ("BOUNTY", "NATURES BOUNTY", "NATURE'S BOUNTY", "BN"):
+            return PharmacyBounty
+        # SOLGAR, OBF ve bilinmeyen -> Solgar tablosu
+        return PharmacySolgar
+
+    def _clean(self, value: str) -> str:
+        """Strip invisible junk characters and surrounding whitespace."""
+        if value is None:
+            return ""
+        for ch in self._JUNK_CHARS:
+            value = value.replace(ch, "")
+        return value.strip()
+
+    def _distinct(self, brand: str, field: str, **filters) -> list:
+        """Distinct cleaned, non-empty values of `field` for a brand, filtered."""
+        model = self._model_for(brand)
+        qs = model.objects.all()
+        for key, value in filters.items():
+            if value:
+                qs = qs.filter(**{key: value})
+        raw = (
+            qs.exclude(**{f"{field}__isnull": True})
+            .exclude(**{field: ""})
+            .values_list(field, flat=True)
+            .distinct()
+        )
+        # Temizle + tekrar tekilleştir (strip sonrası çakışabilir) + sırala
+        cleaned = {self._clean(v) for v in raw if v and self._clean(v)}
+        return sorted(cleaned)
+
+    # --- address cascade: country -> area -> region -> city -> metro ---
+
+    def countries(self, brand: str = "") -> list:
+        """Distinct countries for a brand."""
+        return self._distinct(brand, "country")
+
+    def areas(self, brand: str = "", country: str = "") -> list:
+        """Distinct areas within a country."""
+        return self._distinct(brand, "area", country=country)
+
+    def regions(self, brand: str = "", country: str = "", area: str = "") -> list:
+        """Distinct regions within country/area."""
+        return self._distinct(brand, "region", country=country, area=area)
+
+    def cities(self, brand: str = "", country: str = "", area: str = "", region: str = "") -> list:
+        """Distinct cities within country/area/region."""
+        return self._distinct(brand, "city", country=country, area=area, region=region)
+
+    def metros(self, brand: str = "", city: str = "") -> list:
+        """Distinct metros for a city (values cleaned of invisible chars)."""
+        return self._distinct(brand, "metro", city=city)
+
+    def districts(self, brand: str = "", country: str = "", area: str = "", region: str = "") -> list:
+        """Distinct districts within country/area/region."""
+        return self._distinct(brand, "district", country=country, area=area, region=region)
+
+    # --- other dropdowns derived from the pharmacy table ---
+
+    def chains(self, brand: str = "") -> list:
+        """Distinct group companies (chains)."""
+        return self._distinct(brand, "group_company")
+
+    def subchains(self, brand: str = "", group_company: str = "") -> list:
+        """Distinct sub-chains, optionally within a chain."""
+        return self._distinct(brand, "subgroup_company", group_company=group_company)
+
+    def pharmacy_categories(self, brand: str = "") -> list:
+        """Distinct pharmacy categories."""
+        return self._distinct(brand, "pharmacy_category")
+
+    def pharmacy_types(self, brand: str = "") -> list:
+        """Distinct pharmacy types."""
+        return self._distinct(brand, "pharmacy_type")
+
+    def promos(self, brand: str = "") -> list:
+        """Distinct promo values."""
+        return self._distinct(brand, "promo")
+
+    def assortiments(self, brand: str = "") -> list:
+        """Distinct assortiment values."""
+        return self._distinct(brand, "assortiment")
+
+    def pharmacy_groups(self, brand: str = "") -> list:
+        """Distinct pharmacy groups."""
+        return self._distinct(brand, "pharmacy_group")
+
+    def marketing_staff(self, brand: str = "", country: str = "", area: str = "") -> list:
+        """Distinct marketing staff (medreps), optionally by country/area."""
+        return self._distinct(brand, "marketing_staff", country=country, area=area)

@@ -45,16 +45,16 @@ class ParseResult:
     @property
     def total_rows(self) -> int:
         """Number of parsed rows."""
-        return len(self.rows)
+        return len(self.rows)     
 
 class SalesParseError(Exception):
     """Raised when a file cannot be parsed (e.g. header not found)."""
-
-class ChainParser:
+#admin panelden
+class ChainParser:                                                      
     """
     Single parametric parser for all chains/distributors.
 
-    Instead of one parser per chain, this reads a ChainDefinition (column
+    Instead of one parser per chain, this reads a ChainDefinition (column 
     mapping, orientation, country) and parses accordingly. Adding a chain
     means adding a ChainDefinition row, not new code.
     """
@@ -378,13 +378,13 @@ class SalesViewService:
         }
 
     #bu
-    def filter_options(self) -> dict:
+    def filter_options(self, country: str = "") -> dict:
         """Return distinct values for the filter dropdowns."""
         options = {
             "report_dates": self.repository.distinct_report_dates(),
-            "chains": self.repository.distinct_chains(),
+            "chains": self.repository.distinct_chains(country=country),
         }
-        options.update(self.repository.group_options())
+        options.update(self.repository.group_options(country=country))
         return options
 
     def chain_report(self, main_group="", sub_group="", region="", district="", **filters) -> dict:
@@ -499,6 +499,7 @@ class DistributorViewService:
     def __init__(self) -> None:
         """Wire up the repository."""
         from .repositories import DistributorRepository
+        #python manage.py runserver
 
         self.repository = DistributorRepository()
 
@@ -510,6 +511,7 @@ class DistributorViewService:
         records = self.repository.filter_records(**filters)
         solgar = records.filter(brand=DistributorRecord.Brand.SOLGAR).aggregate(
             c=Sum("count"), a=Sum("amount")
+           # c=sum("count"), a=sum("amount")
         )
         bounty = records.filter(brand=DistributorRecord.Brand.BOUNTY).aggregate(
             c=Sum("count"), a=Sum("amount")
@@ -521,8 +523,310 @@ class DistributorViewService:
             "solgar_amount": solgar["a"] or 0,
             "bounty_count": bounty["c"] or 0,
             "bounty_amount": bounty["a"] or 0,
+            
         }
 
     def filter_options(self) -> dict:
         """Distinct values for filter dropdowns."""
         return {"distributors": self.repository.distinct_distributors()}
+
+
+class DoctorViewService:
+    """
+    Read/query service for the Doctor Entry & Update screen.
+
+    Wraps DoctorRepository for cascading options and provides the filtered
+    doctor list behind the Java 'List Doctor' (Список врачей) button.
+    """
+
+    def __init__(self):
+        from .repositories import DoctorRepository
+
+        self.repository = DoctorRepository()
+
+    def address_options(self, country: str = "", area: str = "", region: str = "") -> dict:
+        """Bundle all cascading dropdown options for the initial page load."""
+        return {
+            "countries": self.repository.countries(),
+            "areas": self.repository.areas(country=country),
+            "regions": self.repository.regions(country=country, area=area),
+            "cities": self.repository.cities(country=country, area=area, region=region),
+            "districts": self.repository.districts(country=country, area=area, region=region),
+            "medreps": self.repository.medreps(),
+            "specialties": self.repository.specialties(),
+            "unified_specialties": self.repository.unified_specialties(),
+        }
+
+    def query(
+        self,
+        brand: str = "", country: str = "", area: str = "", region: str = "",
+        city: str = "", medrep: str = "", specialty: str = "",
+        unified_specialty: str = "", category: str = "", activeness: str = "",
+        doctor_name: str = "", clinic_status: str = "",
+    ) -> dict:
+        """
+        Return doctor rows matching the given filters (all optional, empty
+        ignored). Mirrors the Java getDoctorInfo query. Only active rows
+        (status=1) are listed.
+        """
+        from .models import Doctor
+
+        qs = Doctor.objects.filter(status=1)
+
+        if brand:
+            qs = qs.filter(brand=brand)
+        if country:
+            qs = qs.filter(country=country)
+        if area:
+            qs = qs.filter(area=area)
+        if region:
+            qs = qs.filter(region=region)
+        if city:
+            qs = qs.filter(city=city)
+        if medrep:
+            qs = qs.filter(medrep=medrep)
+        if specialty:
+            qs = qs.filter(specialty=specialty)
+        if unified_specialty:
+            qs = qs.filter(unified_specialty=unified_specialty)
+        if category:
+            qs = qs.filter(category=category)
+        if activeness:
+            qs = qs.filter(activeness=activeness)
+        if doctor_name:
+            qs = qs.filter(doctor_name__icontains=doctor_name)
+        if clinic_status:
+            qs = qs.filter(clinic_status=clinic_status)
+
+        qs = qs.order_by("country", "area", "region", "city", "doctor_name")
+
+        records = list(qs[:500])  # cap for display, like chain report
+        return {"records": records, "total_rows": qs.count()}
+
+
+class DoctorWriteService:
+    """
+    Create / update / soft-delete service for the Doctor screen.
+
+    Web-native: each action hits the DB immediately (no client-side batch
+    like the Java JTable). Deletes are soft (status=0), matching the Java
+    behaviour where a deleted row is flagged rather than physically removed.
+    """
+
+    EDITABLE_FIELDS = (
+        "brand", "country", "area", "region", "district", "city",
+        "activeness", "medrep", "doctor_date", "doctor_name",
+        "unified_specialty", "specialty", "position_regalia", "category",
+        "clinic_name", "clinic_name1", "clinic_status", "clinic_address",
+        "clinic_count", "key_person", "doctor_tel", "doctor_email",
+        "full_address", "building_type", "country_code",
+        "administrative_area_name", "sub_administrative_area_name",
+        "street", "homenumber", "point_y", "point_x",
+    )
+
+    def _clean(self, data: dict) -> dict:
+        """Keep only known fields; coerce clinic_count to int or None."""
+        cleaned = {}
+        for f in self.EDITABLE_FIELDS:
+            if f in data:
+                cleaned[f] = data[f]
+        if "clinic_count" in cleaned:
+            raw = str(cleaned["clinic_count"]).strip()
+            cleaned["clinic_count"] = int(raw) if raw.isdigit() else None
+        return cleaned
+
+    def create(self, data: dict, user_name: str = ""):
+        """Insert a new doctor row (status=1)."""
+        from django.utils import timezone
+
+        from .models import Doctor
+
+        fields = self._clean(data)
+        fields["status"] = 1
+        fields["entry_user"] = user_name
+        fields["entry_date"] = timezone.now()
+        return Doctor.objects.create(**fields)
+
+    def update(self, doctor_id: int, data: dict, user_name: str = "") -> int:
+        """Update an existing doctor row. Returns number of rows updated."""
+        from django.utils import timezone
+
+        from .models import Doctor
+
+        fields = self._clean(data)
+        fields["entry_user"] = user_name
+        fields["entry_date"] = timezone.now()
+        return Doctor.objects.filter(pk=doctor_id).update(**fields)
+
+    def soft_delete(self, doctor_id: int) -> int:
+        """Soft-delete: flag status=0 so the row drops out of the active list."""
+        from .models import Doctor
+
+        return Doctor.objects.filter(pk=doctor_id).update(status=0)
+
+
+class PharmacyValidationError(Exception):
+    """Raised when a pharmacy record fails a business rule (e.g. corner)."""
+
+
+class PharmacyViewService:
+    """
+    Read/query service for the Pharmacy Entry & Update screen.
+
+    Brand drives everything: the Java screen picks the company (SOLGAR /
+    NATURES BOUNTY / OBF) first, then every other dropdown and the list are
+    loaded for that brand's table. So `brand` is threaded through all calls.
+    """
+
+    def __init__(self):
+        from .repositories import PharmacyRepository
+
+        self.repository = PharmacyRepository()
+
+    def dropdown_options(self, brand: str = "", country: str = "", area: str = "",
+                         region: str = "", city: str = "") -> dict:
+        """All dropdown lists for the initial page load, for one brand."""
+        r = self.repository
+        return {
+            "countries": r.countries(brand),
+            "areas": r.areas(brand, country=country),
+            "regions": r.regions(brand, country=country, area=area),
+            "cities": r.cities(brand, country=country, area=area, region=region),
+            "metros": r.metros(brand, city=city),
+            "districts": r.districts(brand, country=country, area=area, region=region),
+            "chains": r.chains(brand),
+            "subchains": r.subchains(brand),
+            "pharmacy_categories": r.pharmacy_categories(brand),
+            "pharmacy_types": r.pharmacy_types(brand),
+            "promos": r.promos(brand),
+            "assortiments": r.assortiments(brand),
+            "pharmacy_groups": r.pharmacy_groups(brand),
+            "marketing_staff": r.marketing_staff(brand),
+        }
+
+    def query(self, brand: str = "", country: str = "", area: str = "", region: str = "",
+              city: str = "", group_company: str = "", subgroup_company: str = "",
+              pharmacy_category: str = "", pharmacy_type: str = "", promo: str = "",
+              marketing_staff: str = "", pharmacy_activeness: str = "",
+              pharmacy_address: str = "") -> dict:
+        """
+        Return pharmacy rows for a brand matching the filters (empty ignored).
+        Mirrors the Java getPharmInfo query. Only active rows (status=1).
+        """
+        model = self.repository._model_for(brand)
+        qs = model.objects.filter(status=1)
+
+        if country:
+            qs = qs.filter(country=country)
+        if area:
+            qs = qs.filter(area=area)
+        if region:
+            qs = qs.filter(region=region)
+        if city:
+            qs = qs.filter(city=city)
+        if group_company:
+            qs = qs.filter(group_company=group_company)
+        if subgroup_company:
+            qs = qs.filter(subgroup_company=subgroup_company)
+        if pharmacy_category:
+            qs = qs.filter(pharmacy_category=pharmacy_category)
+        if pharmacy_type:
+            qs = qs.filter(pharmacy_type=pharmacy_type)
+        if promo:
+            qs = qs.filter(promo=promo)
+        if marketing_staff:
+            qs = qs.filter(marketing_staff=marketing_staff)
+        if pharmacy_activeness:
+            qs = qs.filter(pharmacy_activeness=pharmacy_activeness)
+        if pharmacy_address:
+            qs = qs.filter(pharmacy_address__icontains=pharmacy_address)
+
+        qs = qs.order_by("country", "area", "region", "city", "group_company")
+        records = list(qs[:500])
+        return {"records": records, "total_rows": qs.count()}
+
+
+class PharmacyWriteService:
+    """
+    Create / update / soft-delete for pharmacies. Writes go to the brand's
+    table (Solgar/OBF -> solgar, Bounty -> bounty). Web-native: each action
+    hits the DB immediately. Deletes are soft (status=0).
+    """
+
+    EDITABLE_FIELDS = (
+        "country", "area", "region", "city", "city_region", "district", "metro",
+        "group_company", "subgroup_company", "pharmacy_no", "pharmacy_address",
+        "pharmacy_category", "assortiment", "pharmacy_type", "promo",
+        "marketing_staff", "pharmacy_response_person", "pharmacy_tel",
+        "pharmacy_email", "pharmacy_activeness", "pharmacy_activation_date",
+        "comments", "pharmacy_number_sale",
+        "full_address", "building_type", "country_code",
+        "administrative_area_name", "sub_administrative_area_name",
+        "street", "homenumber", "point_y", "point_x",
+        "assortiment1", "pharmacy_group",
+        "pharmacist_name_1", "pharmacy_home_tel",
+        "pharmacist_name_2", "pharmacy_work_tel",
+    )
+    INT_FIELDS = ("marketing_staff_no", "found_no", "sku", "cornerNo", "pharmacy_id")
+
+    def __init__(self):
+        from .repositories import PharmacyRepository
+
+        self.repository = PharmacyRepository()
+
+    def _clean(self, data: dict) -> dict:
+        """Keep known fields; coerce int fields."""
+        cleaned = {}
+        for f in self.EDITABLE_FIELDS:
+            if f in data:
+                cleaned[f] = data[f]
+        for f in self.INT_FIELDS:
+            if f in data:
+                raw = str(data.get(f, "")).strip()
+                cleaned[f] = int(raw) if raw.lstrip("-").isdigit() else 0
+        return cleaned
+
+    def _check_corner(self, data: dict) -> None:
+        """
+        Java cornerControl: in Russia, if promo contains 'Корнер', a Corner No
+        is required. Raises PharmacyValidationError otherwise.
+        """
+        country = (data.get("country") or "").strip()
+        promo = (data.get("promo") or "")
+        corner_raw = str(data.get("cornerNo", "")).strip()
+        corner_no = int(corner_raw) if corner_raw.lstrip("-").isdigit() else 0
+        if country == "Russia" and "Корнер" in promo and corner_no == 0:
+            raise PharmacyValidationError(
+                "Для промо «Корнер» в России необходимо указать Corner No."
+            )
+
+    def create(self, brand: str, data: dict, user_name: str = ""):
+        """Insert a new pharmacy row (status=1) into the brand's table."""
+        from django.utils import timezone
+
+        self._check_corner(data)
+        model = self.repository._model_for(brand)
+        fields = self._clean(data)
+        fields["status"] = 1
+        fields["entry_user"] = user_name
+        fields["entry_date"] = timezone.now()
+        # Bounty tablosunda brand kolonu var — doldur
+        if model.__name__ == "PharmacyBounty":
+            fields["brand"] = "BN"
+        return model.objects.create(**fields)
+
+    def update(self, brand: str, pharmacy_id: int, data: dict, user_name: str = "") -> int:
+        """Update an existing pharmacy row in the brand's table."""
+        from django.utils import timezone
+
+        self._check_corner(data)
+        model = self.repository._model_for(brand)
+        fields = self._clean(data)
+        fields["entry_user"] = user_name
+        fields["entry_date"] = timezone.now()
+        return model.objects.filter(pk=pharmacy_id).update(**fields)
+
+    def soft_delete(self, brand: str, pharmacy_id: int) -> int:
+        """Soft-delete: status=0 so the row drops out of the active list."""
+        model = self.repository._model_for(brand)
+        return model.objects.filter(pk=pharmacy_id).update(status=0)

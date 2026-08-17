@@ -113,7 +113,7 @@
         let visible = 0;
 
         rows.forEach(function (row) {
-            // Match against employee name and equipment (first two cells).
+            // Match against employee name and equipment (first two cells). 
             const cells = row.querySelectorAll("td");
             const text = (cells[0].textContent + " " + cells[1].textContent).toLowerCase();
             const show = text.includes(term);
@@ -126,4 +126,5 @@
     });
 </script>
 {% endblock %}
+
 

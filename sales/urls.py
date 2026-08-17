@@ -11,6 +11,11 @@ urlpatterns = [
     path("report/", views.sales_report_view, name="report"),
     path("export/", views.sales_export_view, name="export"),
     path("chain-report/", views.sales_chain_report_view, name="chain_report"),
+    path("chain-report/options/", views.chain_filter_options_json, name="chain_filter_options"),
     path("distributor/upload/", views.distributor_upload_view, name="distributor_upload"),
     path("distributor/report/", views.distributor_report_view, name="distributor_report"),
+    path("doctor/address-options/", views.doctor_address_options_json, name="doctor_address_options"),
+    path("doctor/", views.doctor_entry_view, name="doctor_entry"),
+    path("pharmacy/", views.pharmacy_entry_view, name="pharmacy_entry"),
+    path("pharmacy/options/", views.pharmacy_options_json, name="pharmacy_options"),
 ]
