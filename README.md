@@ -65,6 +65,12 @@ the ORM calls in one place and the views thin.
 
 **Parametric parsing (chains and brands in the database).** Rather than a separate parser per chain, a single parser reads chain "definitions" stored in the database: each defines its column mapping, country, and layout orientation. Adding a chain is a data change (a new row), not new code. Brand classification works the same way — each brand's identifying keywords live in a database table, with one brand marked as the default. Deactivating a brand ("pulling it out") is a single flag change, not a code edit.
 
+**Parametric parsing** chains and brands as data. A single ChainParser reads chain "definitions" from the database (ChainDefinition): each holds a column mapping, country, source type (pharmacy/distributor), and layout orientation. Adding a chain is a new row, not new code. Brand classification is likewise data-driven (BrandDefinition): each brand's keywords live in a table with one default brand, so deactivating a brand is a single flag change.
+
+Reference-data filters. Product-category and geographic filters on the sales report resolve against reference tables (ProductGroup, AddressGroup) loaded from solgar_tst. Sales rows match by lowercased product name and by city (settlement suffixes like " г" stripped before matching).
+
+Schema prefixes. Tables are grouped by prefix: intern_sls_ (definitions), solgar_stk_ (distributor data), solgar_tst_ (reference data).
+
 We plan to open the platform to consumers in the future, not only staff.
 
 ---
@@ -198,6 +204,12 @@ access to the MySQL host must be permitted.
 - Parametric brand classification driven by database definitions (BrandDefinition)
 - Two chains configured as definitions: MFO (pharmacy) and APTEKA_RU
 - Excel export of filtered sales
+- Parametric chain parser (ChainDefinition) — MFO (pharmacy) and APTEKA_RU (distributor)
+- Parametric brand classification (BrandDefinition) — Solgar default, Nature's Bounty
+- Distributor sales/stock upload and report screens (operation type: sale/stock)
+- Sales report menu complete: Excel upload, pharmacy chain report, distributor upload, stock/sales view
+- Product-category filters (main/sub group) and geographic filters (region/district) via reference data
+- load_reference_data management command for loading product/address CSVs
 
 **Pending**
 
@@ -213,6 +225,8 @@ access to the MySQL host must be permitted.
 - Distributor sales/stock upload screen (operation type: sale/stock)
 - Migration of sales storage to the intern_sls schema / sales_orders
 - Parametric countries (currently a fixed list)
----
-
-
+- Connect reference data to live solgar_tst (currently loaded from CSV) — pending decision
+- Additional chains from the Java Companies class (as definitions, no code)
+- Horizontal-layout parsing (structure ready via orientation, vertical implemented)
+- Pharmacy database CRUD screen (PharmacyEntryUpdate equivalent)
+- Parametric countries (currently a fixed list)
