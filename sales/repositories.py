@@ -375,3 +375,187 @@ class PharmacyRepository:
     def marketing_staff(self, brand: str = "", country: str = "", area: str = "") -> list:
         """Distinct marketing staff (medreps), optionally by country/area."""
         return self._distinct(brand, "marketing_staff", country=country, area=area)
+
+
+class ReportRepository:
+    """
+    Builds and runs the Sales Report Observation query (Java repChainSalesNew).
+
+    Phase 1 scope: CHAIN_SALES report type, MONTHLY date parameter, SALE
+    operation. The brand-specific FROM/JOIN fragment is read from DadQuery
+    (mirroring Java's getQueryScript); the SELECT header, monthly pivot
+    columns, filters and grouping are built here.
+
+    SECURITY: user-supplied values are passed as query parameters (%s), never
+    string-concatenated, closing the SQL-injection hole present in the Java
+    original. Month pivot column names are derived from the date range (not
+    user input), so they are safe to inline.
+    """
+
+    # compType -> (brand label used in pivot subquery, product_type in WHERE)
+    _BRAND_MAP = {
+        "SL": ("SOLGAR", "SL"),
+        "OS": ("OSB", "OS"),
+        "BN": ("BOUNTY", "BN"),
+    }
+    _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    def __init__(self):
+        from .models import DadQuery
+
+        self._DadQuery = DadQuery
+
+    def _script(self, name: str) -> str:
+        """Fetch a named SQL fragment from the DadQuery store."""
+        try:
+            return self._DadQuery.objects.get(query_name=name, is_active=True).query_script
+        except self._DadQuery.DoesNotExist:
+            raise ValueError(f"SQL script not found: {name}")
+
+    def _where_condition_name(self, comp_type: str, has_category: bool, has_product: bool,
+                              rep_type: str) -> str:
+        """Pick the FROM/JOIN script name, mirroring Java's selection logic."""
+        ct = comp_type.upper()
+        cat_rep = rep_type in ("CATEGORY_PRODUCT_SALES", "PRODUCT_SALES", "REGIONAL_PRODUCT_SALES")
+        use_cat = has_category or has_product or cat_rep
+        suffix = "_CAT" if use_cat else ""
+        return f"CHAIN_SALES_WHRE_CONDITION_{ct}{suffix}"
+
+    def _month_iter(self, begin_yyyymmdd: str, end_yyyymmdd: str):
+        """
+        Yield (year, month_abbr, month_num) for each month in the range.
+        Dates are 'YYYYMMDD' strings (as the Java UI passes them).
+        """
+        from datetime import date
+
+        by, bm = int(begin_yyyymmdd[:4]), int(begin_yyyymmdd[4:6])
+        ey, em = int(end_yyyymmdd[:4]), int(end_yyyymmdd[4:6])
+        y, m = by, bm
+        while (y < ey) or (y == ey and m <= em):
+            yield y, self._MONTHS[m - 1], f"{m:02d}"
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+
+    def _monthly_pivot(self, begin: str, end: str, comp_type: str) -> str:
+        """
+        Build the monthly SUM pivot columns + pharmacy_count + Total, matching
+        Java chainSalesFromMonthly. Column names are date-derived (safe to inline).
+        """
+        cols = []
+        for year, mon_abbr, mon_num in self._month_iter(begin, end):
+            # sum(case when year matches and month matches then sales_count else 0)
+            col = (
+                f"sum(case when substring(sales_date,1,4)='{year}' "
+                f"THEN (case when substring(sales_date,6,2)='{mon_num}' "
+                f"then sales_count else 0 end) else 0 END) as `{year}_{mon_abbr}`"
+            )
+            cols.append(col)
+
+        brand_label, _ = self._BRAND_MAP.get(comp_type.upper(), ("SOLGAR", "SL"))
+        if brand_label == "SOLGAR":
+            pcount = ("(select count(*) from solgar_tst.pharmacy_data_solgar k "
+                      "where status = 1 and a.main_group = k.group_company "
+                      "and pharmacy_Activeness ='Актив') as pharmacy_count")
+        elif brand_label == "OSB":
+            pcount = ("(select count(*) from solgar_tst.pharmacy_data_bounty k "
+                      "where status = 1 and a.main_group = k.group_company "
+                      "and pharmacy_Activeness ='Актив' and brand = 'OS') as pharmacy_count")
+        else:  # BOUNTY
+            pcount = ("(select count(*) from solgar_tst.pharmacy_data_bounty k "
+                      "where status = 1 and a.main_group = k.group_company "
+                      "and pharmacy_Activeness ='Актив' and brand = 'BN') as pharmacy_count")
+
+        return ", ".join(cols) + ", " + pcount + ", sum(sales_count) as Total "
+
+    def chain_sales_monthly(self, comp_type: str, begin: str, end: str,
+                            chain: str = "", country: str = "", area: str = "",
+                            region: str = "", city: str = "", medrep: str = "") -> dict:
+        """
+        CHAIN_SALES report, monthly, SALE. Returns {columns, rows}.
+
+        begin/end: 'YYYYMMDD'. comp_type: SL/OS/BN. Filters optional.
+        """
+        from django.db import connections
+
+        comp_type = (comp_type or "SL").upper()
+        _, product_type = self._BRAND_MAP.get(comp_type, ("SOLGAR", "SL"))
+        brand_label = self._BRAND_MAP.get(comp_type, ("SOLGAR",))[0]
+
+        # 1) SELECT header: marka etiketi + chain + aylık pivot
+        select_head = f"select '{brand_label}' as PRODUCT, a.main_group as chain, "
+        pivot = self._monthly_pivot(begin, end, comp_type)
+
+        # 2) FROM/JOIN + base where (script'ten). Script zaten 'where product_type=..' içeriyor.
+        where_script = self._script(self._where_condition_name(comp_type, bool(0), bool(0), "CHAIN_SALES"))
+
+        # 3) tarih + filtreler — PARAMETRELİ
+        params = []
+        # Tarih karsilastirmasi: sales_date datetime oldugu icin dogrudan
+        # date siniri kullaniyoruz. Java string hilesi (replace(sales_date,'-',''))
+        # bitis gununun saatli kayitlarini eliyordu; asagidaki hem dogru hem indeks dostu.
+        # begin/end 'YYYYMMDD' -> 'YYYY-MM-DD'. Bitis gununun tamamini kapsamak icin
+        # ertesi gunun basindan kucuk kosulu kullaniyoruz.
+        from datetime import datetime, timedelta
+        begin_dt = datetime.strptime(begin, "%Y%m%d").strftime("%Y-%m-%d")
+        end_next = (datetime.strptime(end, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        where_extra = " and sales_date >= %s and sales_date < %s "
+        params.extend([begin_dt, end_next])
+
+        if chain:
+            where_extra += " and a.main_group = %s "
+            params.append(chain)
+        if country:
+            where_extra += " and a.country = %s "
+            params.append(country)
+        if area:
+            where_extra += " and e.country = %s "
+            params.append(area)
+        if region:
+            where_extra += " and e.region = %s "
+            params.append(region)
+        if city:
+            where_extra += " and e.city = %s "
+            params.append(city)
+        if medrep:
+            where_extra += " and marketing_staff = %s "
+            params.append(medrep)
+
+        group_by = " group by a.main_group order by Total desc "
+
+        sql = select_head + pivot + where_script + where_extra + group_by
+
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            columns = [c[0] for c in cur.description]
+            rows = cur.fetchall()
+
+        return {"columns": columns, "rows": rows, "sql": sql}
+
+    # --- filter dropdown options (Phase 1: distinct from sales_pharmacy) ---
+
+    def filter_chains(self, comp_type: str = "SL") -> list:
+        """Distinct chains (main_group) for a brand, from sales data."""
+        from django.db import connections
+
+        _, product_type = self._BRAND_MAP.get((comp_type or "SL").upper(), ("SOLGAR", "SL"))
+        sql = ("SELECT DISTINCT main_group FROM solgar_tst.sales_pharmacy "
+               "WHERE product_type = %s AND main_group IS NOT NULL AND main_group <> '' "
+               "ORDER BY main_group")
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, [product_type])
+            return [r[0] for r in cur.fetchall()]
+
+    def filter_countries(self, comp_type: str = "SL") -> list:
+        """Distinct countries for a brand, from sales data."""
+        from django.db import connections
+
+        _, product_type = self._BRAND_MAP.get((comp_type or "SL").upper(), ("SOLGAR", "SL"))
+        sql = ("SELECT DISTINCT country FROM solgar_tst.sales_pharmacy "
+               "WHERE product_type = %s AND country IS NOT NULL AND country <> '' "
+               "ORDER BY country")
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, [product_type])
+            return [r[0] for r in cur.fetchall()]

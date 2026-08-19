@@ -35,35 +35,38 @@
 
 
 
-    /* --- KOMPAKT DÜZEN (tüm kutular dar, sabit genişlik, yan yana) --- */
-    .ph-panel, .doc-panel {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, 200px);
-        gap: 6px 12px;
-        align-content: start;
-        justify-content: start;
-        padding: 14px 16px;
+
+
+    /* --- KOMPAKT DÜZEN: paneller içerik kadar dar, tablo kendi içinde kayar --- */
+    .panel-grid { display: block; margin-bottom: 10px; }
+    .doc-panel {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        gap: 4px 12px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        width: fit-content;      /* panel içeriği kadar geniş, sağa uzamaz */
+        max-width: 100%;
     }
-    .ph-panel h3, .doc-panel h3 { margin-bottom: 8px; grid-column: 1 / -1; }
-    /* fld-row: tam satır kaplama, kendi içinde sabit dar kutular */
-    .fld-row { grid-column: 1 / -1; display: flex; gap: 12px; }
-    .fld-row .fld { flex: 0 0 200px; }
-    .fld { margin-bottom: 4px; }
+    .doc-panel h3 { flex: 0 0 100%; margin-bottom: 6px; }
+    .fld { flex: 0 0 180px; margin-bottom: 2px; }
     .fld label { font-size: 0.6rem; margin-bottom: 2px; letter-spacing: 0.03em; }
-    .fld input, .fld select, .fld textarea {
-        width: 200px;
-        max-width: 200px;
-        font-size: 0.78rem;
-        padding: 5px 8px;
+    .fld input, .fld select, .fld textarea { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
+    .fld-row { display: contents; }
+    .fld textarea { flex: 0 0 180px; }
+
+    /* Tablo: sadece kendi kutusunda yatay kayar, sayfa taşmaz */
+    .table-scroll {
+        max-height: 460px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        width: 100%;
     }
-    /* textarea biraz daha geniş olabilir ama sınırlı */
-    .fld textarea { width: 200px; }
-    .brand-bar select { width: 200px; max-width: 200px; min-width: 160px; }
+    .doc-table { font-size: 0.75rem; }
+    .doc-table th, .doc-table td { padding: 5px 8px; }
 
-
-    /* --- PANEL BOŞLUKLARINI AZALT --- */
-    .panel-grid { gap: 12px; margin-bottom: 12px; align-items: start; }
-    .ph-panel, .doc-panel { align-self: start; }
 </style>
 
 <h1 class="page-title">Врач вход Обновление</h1>

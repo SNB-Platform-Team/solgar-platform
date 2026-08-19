@@ -808,3 +808,57 @@ def pharmacy_entry_view(request: HttpRequest) -> HttpResponse:
         "has_query": bool(request.GET),
     }
     return render(request, "sales/pharmacy_entry.html", context)
+
+# ==== Sales Report Observation (Просмотр Сток и Продажа) — Phase 1 ====
+
+REPORT_COMP_TYPES = [("SL", "SOLGAR"), ("OS", "OBF"), ("BN", "NATURES BOUNTY")]
+
+
+@login_required
+@require_screen("SALES_REPORT_OBS")
+@require_http_methods(["GET"])
+def sales_report_obs_view(request: HttpRequest) -> HttpResponse:
+    """
+    Sales Report Observation (Просмотр Сток и Продажа) - Phase 1.
+
+    CHAIN_SALES report, monthly, with brand + date + chain + country filters.
+    GET-driven: filters in the query string, report runs when dates are given.
+    """
+    from django.shortcuts import render
+
+    from .services import ReportService
+
+    service = ReportService()
+
+    comp_type = (request.GET.get("comp_type") or "SL").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+    chain = (request.GET.get("chain") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+
+    options = service.dropdown_options(comp_type)
+
+    report = None
+    error = ""
+    if begin and end:
+        # Tarih formatini normalize et: YYYY-MM-DD (input type=date) -> YYYYMMDD
+        b = begin.replace("-", "")
+        e = end.replace("-", "")
+        if len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
+            try:
+                report = service.run_chain_sales(comp_type, b, e, chain=chain, country=country)
+            except Exception as exc:
+                error = f"Ошибка отчета: {exc}"
+        else:
+            error = "Неверный формат даты."
+
+    context = {
+        "comp_types": REPORT_COMP_TYPES,
+        "options": options,
+        "report": report,
+        "error": error,
+        "f": {"comp_type": comp_type, "begin": begin, "end": end,
+              "chain": chain, "country": country},
+        "has_query": bool(request.GET),
+    }
+    return render(request, "sales/sales_report_obs.html", context)

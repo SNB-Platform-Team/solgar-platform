@@ -12,4 +12,5 @@ urlpatterns = [
     path("login/azure/", views.azure_login_view, name="azure_login"),
     path("login/azure/callback/", views.azure_callback_view, name="azure_callback"),
     path("logout/", views.logout_view, name="logout"),
+    path("faq/", views.faq_view, name="faq"),
 ]

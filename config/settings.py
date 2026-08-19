@@ -101,13 +101,22 @@ USE_AZURE_MYSQL: bool = get_secret("USE_AZURE_MYSQL", "False") == "True"
 
 # External reference database (solgar_tst on Olga's server) — read-only,
 # feeds the product-category and geographic report filters.
+# Azure App Service, bu degiskenleri EXTERNAL_DB_* isimleriyle sagliyor;
+# lokal .env ise REFDB_* kullanabilir. Once EXTERNAL_DB_*, yoksa REFDB_* okunur.
+def _ref_secret(ext_key: str, ref_key: str, default: str = "") -> str:
+    """Prefer the Azure EXTERNAL_DB_* name, fall back to the local REFDB_* name."""
+    val = os.environ.get(ext_key)
+    if val is not None and val != "":
+        return val
+    return get_secret(ref_key, default)
+
 REFERENCE_DB = {
     "ENGINE": "django.db.backends.mysql",
-    "HOST": get_secret("REFDB_HOST", ""),
-    "PORT": get_secret("REFDB_PORT", "3306"),
-    "NAME": get_secret("REFDB_NAME", ""),
-    "USER": get_secret("REFDB_USER", ""),
-    "PASSWORD": get_secret("REFDB_PASSWORD", ""),
+    "HOST": _ref_secret("EXTERNAL_DB_HOST", "REFDB_HOST", ""),
+    "PORT": _ref_secret("EXTERNAL_DB_PORT", "REFDB_PORT", "3306"),
+    "NAME": _ref_secret("EXTERNAL_DB_NAME", "REFDB_NAME", ""),
+    "USER": _ref_secret("EXTERNAL_DB_USER", "REFDB_USER", ""),
+    "PASSWORD": _ref_secret("EXTERNAL_DB_PASSWORD", "REFDB_PASSWORD", ""),
     "OPTIONS": {"charset": "utf8mb4"},
 }
 

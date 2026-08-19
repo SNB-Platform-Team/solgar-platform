@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Часто задаваемые вопросы{% endblock %}
+{% block nav_faq %}active{% endblock %}
+
+{% block content %}
+<style>
+    .faq-wrap { max-width: 760px; }
+    .faq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .faq-head .icon { font-size: 1.4rem; }
+    .faq-head h1 { font-family: 'Cormorant Garamond',serif; font-size: 1.7rem; font-weight: 300; color: var(--cream); }
+
+    .faq-greeting { background: linear-gradient(135deg, rgba(201,168,76,0.14), rgba(201,168,76,0.06)); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; color: var(--cream); font-size: 0.94rem; line-height: 1.5; margin-bottom: 22px; }
+    .faq-greeting b { color: var(--gold-light); }
+
+    .faq-questions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .faq-q-btn { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.3); border-radius: 22px; padding: 10px 20px; color: var(--gold-light); font-family: 'Jost',sans-serif; font-size: 0.88rem; cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+    .faq-q-btn:hover { background: rgba(201,168,76,0.12); border-color: var(--gold); }
+    .faq-q-btn.active { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border-color: var(--gold); }
+
+    .faq-answer { background: rgba(26,22,16,0.6); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; min-height: 80px; display: none; }
+    .faq-answer.show { display: block; animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .faq-answer h3 { font-family: 'Cormorant Garamond',serif; font-size: 1.2rem; color: var(--gold-light); font-weight: 400; margin-bottom: 12px; }
+    .faq-answer p { color: var(--cream); font-size: 0.92rem; line-height: 1.6; margin-bottom: 10px; }
+    .faq-answer ul { list-style: none; padding: 0; margin: 8px 0; }
+    .faq-answer li { color: var(--cream); font-size: 0.9rem; padding: 7px 12px; margin-bottom: 6px; background: rgba(201,168,76,0.06); border-left: 2px solid var(--gold-dim); border-radius: 3px; }
+    .faq-answer .muted { color: var(--text-dim); font-size: 0.85rem; font-style: italic; }
+</style>
+
+<div class="faq-wrap">
+    <div class="faq-head">
+        <h1>Часто задаваемые вопросы</h1>
+    </div>
+
+    <div class="faq-greeting">
+        Здравствуйте, <b>{{ user_display }}</b>! Выберите интересующий вас вопрос о платформе:
+    </div>
+
+    <div class="faq-questions">
+        <button type="button" class="faq-q-btn" onclick="faqShow('access', this)">Мои права доступа</button>
+        <button type="button" class="faq-q-btn" onclick="faqShow('purpose', this)">Цель платформы</button>
+    </div>
+
+    
+    <div class="faq-answer" id="faq-access">
+        <h3>Ваши права доступа</h3>
+        {% if my_screens %}
+        <p>Вам доступны следующие разделы платформы:</p>
+        <ul>
+            {% for s in my_screens %}
+            <li>{{ s }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">У Вас пока нет доступа ни к одному разделу. Обратитесь к администратору.</p>
+        {% endif %}
+    </div>
+
+    
+    <div class="faq-answer" id="faq-purpose">
+        <h3>Цель платформы</h3>
+        <p>
+            Данная платформа объединяет все рабочие приложения команд <b>Solgar</b> и
+            <b>Nature's Bounty</b> в едином пространстве. Вместо разрозненных программ и
+            ручных операций все процессы — от загрузки и анализа продаж до ведения данных
+            врачей и аптек — доступны из одного места.
+        </p>
+        <p>
+            Цель — упростить и ускорить рабочий процесс: обеспечить единый вход, общий доступ
+            к отчётам и справочникам, а также прозрачное управление задачами внутри команды.
+            Платформа заменяет прежнее настольное приложение «Solgar Intern», перенося его
+            возможности в современный веб-интерфейс.
+        </p>
+    </div>
+</div>
+
+<script>
+(function () {
+    "use strict";
+    window.faqShow = function (key, btn) {
+        //tum cevaplari gizle ve butonlari pasifle
+        document.querySelectorAll(".faq-answer").forEach(function (a) { a.classList.remove("show"); });
+        document.querySelectorAll(".faq-q-btn").forEach(function (b) { b.classList.remove("active"); });
+        //sadece secileni goster
+        var ans = document.getElementById("faq-" + key);
+        if (ans) ans.classList.add("show");
+        if (btn) btn.classList.add("active");
+    };
+})();
+</script>
+{% endblock %}

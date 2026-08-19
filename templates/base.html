@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Solgar{% endblock %} — Внутренняя платформа</title>
+    <title>{% block title %}Solgar{% endblock %} — Internatl Platform</title>
+    <link rel="icon" type="image/png" href="{% static 'images/solgar-logo.png' %}">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -172,15 +173,28 @@
 {% endif %}
                         </div>
                     </div>
+
+                    {% if "SALES_REPORT_OBS" in accessible_screens %}
+                    <div class="nav-subgroup">
+                        <div class="nav-subgroup-title">Административные экраны</div>
+                        <div class="nav-subsubmenu">
+                            <a href="{% url 'sales:sales_report_obs' %}" class="nav-link {% block nav_sales_report_obs %}{% endblock %}">Просмотр Сток и Продажа</a>
+                        </div>
+                    </div>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
             {% endif %}
 
+            
             <a href="https://solgar.hr-link.ru/employee" target="_blank" rel="noopener" class="nav-link nav-toplink">HRlink</a> <!--HR link simdilik boyle kaliyor, daha ileride api ile entegre edebiliriz-->
 
             <a href="https://solgar.pro/stream/" target="_blank" rel="noopener" class="nav-link nav-toplink">Битрикс24</a> <!--bitrix de simdilik boyle kalsin, kararlastiracagiz nasil olacagini-->
+            
+            <a href="{% url 'accounts:faq' %}" class="nav-link nav-toplink {% block nav_faq %}{% endblock %}">FAQ</a>
 
+            
         </aside>
 
         <main class="content">

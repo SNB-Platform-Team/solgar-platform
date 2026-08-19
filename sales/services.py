@@ -830,3 +830,39 @@ class PharmacyWriteService:
         """Soft-delete: status=0 so the row drops out of the active list."""
         model = self.repository._model_for(brand)
         return model.objects.filter(pk=pharmacy_id).update(status=0)
+
+
+# ============================ SERVICE ============================
+
+class ReportService:
+    """
+    Orchestrates the Sales Report Observation screen (Phase 1: CHAIN_SALES,
+    monthly). Wraps ReportRepository: provides filter dropdowns and runs the
+    report.
+    """
+
+    COMP_TYPES = [("SL", "SOLGAR"), ("OS", "OBF"), ("BN", "NATURES BOUNTY")]
+
+    def __init__(self):
+        from .repositories import ReportRepository
+
+        self.repository = ReportRepository()
+
+    def dropdown_options(self, comp_type: str = "SL") -> dict:
+        """Filter dropdowns for the given brand."""
+        return {
+            "chains": self.repository.filter_chains(comp_type),
+            "countries": self.repository.filter_countries(comp_type),
+        }
+
+    def run_chain_sales(self, comp_type: str, begin: str, end: str,
+                        chain: str = "", country: str = "") -> dict:
+        """Run the CHAIN_SALES monthly report. Returns {columns, rows, total_rows}."""
+        result = self.repository.chain_sales_monthly(
+            comp_type=comp_type, begin=begin, end=end, chain=chain, country=country,
+        )
+        return {
+            "columns": result["columns"],
+            "rows": result["rows"],
+            "total_rows": len(result["rows"]),
+        }

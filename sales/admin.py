@@ -2,9 +2,8 @@
 
 from django.contrib import admin
 
-from .models import BrandDefinition, ChainDefinition, DistributorRecord, SalesRecord
+from .models import BrandDefinition, ChainDefinition, DistributorRecord, SalesRecord, DadQuery
 
-from .models import BrandDefinition, ChainDefinition, SalesRecord
 
 @admin.register(BrandDefinition)
 class BrandDefinitionAdmin(admin.ModelAdmin):
@@ -51,6 +50,46 @@ class DistributorRecordAdmin(admin.ModelAdmin):
     date_hierarchy = "begin_date"
     ordering = ("-begin_date", "distributor")
 
+
+@admin.register(DadQuery)
+class DadQueryAdmin(admin.ModelAdmin):
+    """
+    Admin for the SQL script store (mirrors Java's solgar_gen.dad_queries).
+ 
+    Lets managers view, edit, and add report SQL fragments from one place
+    without touching code. The query_script is the raw SQL fragment; edit
+    with care since the Sales Report screen depends on these.
+    """
+ 
+    list_display = ("query_name", "short_description", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("query_name", "query_script", "description")
+    readonly_fields = ("updated_at",)
+    ordering = ("query_name",)
+    list_per_page = 50
+ 
+    fieldsets = (
+        (None, {
+            "fields": ("query_name", "description", "is_active"),
+        }),
+        ("SQL", {
+            "fields": ("query_script",),
+            "description": "Raw SQL fragment. The Sales Report screen combines "
+                           "these with generated SELECT/pivot/filter clauses.",
+        }),
+        ("Meta", {
+            "fields": ("updated_at",),
+            "classes": ("collapse",),
+        }),
+    )
+ 
+    def short_description(self, obj):
+        """Truncated description for the list view."""
+        text = obj.description or (obj.query_script or "")
+        return (text[:60] + "...") if len(text) > 60 else text
+ 
+    short_description.short_description = "Описание / SQL"
+ 
 
 
 # ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————

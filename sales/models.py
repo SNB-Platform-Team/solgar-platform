@@ -495,3 +495,33 @@ class PrmMetro(models.Model):
     def __str__(self) -> str:
         """Readable representation."""
         return f"{self.city} - {self.metro}"
+
+class DadQuery(models.Model):
+    """
+    SQL script fragment store, mirroring Java's solgar_gen.dad_queries table.
+
+    The Sales Report Observation screen builds its report by combining named
+    SQL fragments (FROM/JOIN conditions per brand) with dynamically generated
+    SELECT/pivot/filter clauses. Storing the fragments as data (not code) keeps
+    the report parametric: new brands or report variants are added by inserting
+    rows here, not by changing Python.
+
+    Lives in the local (default) DB, since the original solgar_gen schema is
+    not reachable from the app's DB connection.
+    """
+
+    query_name = models.CharField("Query name", max_length=120, unique=True)
+    query_script = models.TextField("Query script")
+    description = models.CharField("Description", max_length=255, blank=True)
+    is_active = models.BooleanField("Active", default=True)
+    updated_at = models.DateTimeField("Updated at", auto_now=True)
+
+    class Meta:
+        verbose_name = "DAD query"
+        verbose_name_plural = "DAD queries"
+        db_table = "intern_sls_dad_query"
+        ordering = ["query_name"]
+
+    def __str__(self) -> str:
+        """Readable representation."""
+        return self.query_name

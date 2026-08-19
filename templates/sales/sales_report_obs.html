@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Просмотр Сток и Продажа{% endblock %}
+{% block nav_sales_report_obs %}active{% endblock %}
+
+{% block content %}
+<style>
+    .rep-form { margin-bottom: 20px; }
+    .rep-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+    .rep-fld { display: flex; flex-direction: column; }
+    .rep-fld label { font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); margin-bottom: 3px; }
+    .rep-fld input, .rep-fld select { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 6px 9px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.82rem; outline: none; min-width: 150px; }
+    .rep-fld input:focus, .rep-fld select:focus { border-color: var(--gold); }
+    .rep-fld select option { background: var(--dark2); }
+
+    .btn-rep { border: none; border-radius: 4px; padding: 9px 24px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
+    .btn-rep:hover { opacity: 0.9; }
+
+    .rep-error { background: rgba(224,85,85,0.12); border: 1px solid rgba(224,85,85,0.35); color: #f4a0a0; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.86rem; }
+    .rep-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
+
+    .table-scroll { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .rep-table { border-collapse: collapse; white-space: nowrap; font-size: 0.76rem; }
+    .rep-table th { text-align: left; font-size: 0.62rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gold); padding: 6px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .rep-table td { padding: 5px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; }
+    .rep-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .rep-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
+</style>
+
+<h1 class="page-title">Просмотр Сток и Продажа</h1>
+<p class="page-subtitle">Отчет по продажам сети аптек (CHAIN_SALES)</p>
+
+<form method="get" class="rep-form">
+    <div class="rep-filters">
+        <div class="rep-fld">
+            <label for="comp_type">Компания</label>
+            <select id="comp_type" name="comp_type">
+                {% for code, label in comp_types %}
+                <option value="{{ code }}" {% if code == f.comp_type %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rep-fld">
+            <label for="begin">Начало</label>
+            <input type="date" id="begin" name="begin" value="{{ f.begin }}">
+        </div>
+        <div class="rep-fld">
+            <label for="end">Конец</label>
+            <input type="date" id="end" name="end" value="{{ f.end }}">
+        </div>
+        <div class="rep-fld">
+            <label for="country">Страна</label>
+            <select id="country" name="country">
+                <option value="">— все —</option>
+                {% for c in options.countries %}
+                <option value="{{ c }}" {% if c == f.country %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rep-fld">
+            <label for="chain">Сеть</label>
+            <select id="chain" name="chain">
+                <option value="">— все —</option>
+                {% for c in options.chains %}
+                <option value="{{ c }}" {% if c == f.chain %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn-rep">Сформировать отчет</button>
+    </div>
+</form>
+
+{% if error %}
+<div class="rep-error">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+<div class="rep-count">Строк: {{ report.total_rows }}</div>
+<div class="table-scroll">
+<table class="rep-table">
+    <thead>
+        <tr>
+            {% for col in report.columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in report.rows %}
+        <tr>
+            {% for cell in row %}
+            <td class="{% if forloop.counter > 2 %}num{% endif %}">{{ cell }}</td>
+            {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ report.columns|length }}" class="empty">Нет данных за выбранный период</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% elif has_query %}
+<div class="rep-count">Укажите начало и конец периода для формирования отчета.</div>
+{% else %}
+<div class="rep-count">Выберите компанию и период, затем нажмите «Сформировать отчет».</div>
+{% endif %}
+{% endblock %}
