@@ -559,3 +559,58 @@ class ReportRepository:
         with connections["refdb"].cursor() as cur:
             cur.execute(sql, [product_type])
             return [r[0] for r in cur.fetchall()]
+class OneCRepository:
+    """
+    Read-only access to the 1C stock data on SQL Server (Orders, Shipments).
+
+    Uses pymssql directly (not the ORM) because this is a separate SQL Server
+    instance and the screen only needs to display two tables. Connection
+    parameters come from settings.SQLSERVER_CONFIG (populated from env vars).
+    """
+
+    # Whitelist of readable tables -> ordered display columns.
+    _TABLES = {
+        "orders": ("Orders", ["Brand", "PO_Code", "Stock_UPC", "SAP",
+                              "Item_Description", "Qty", "Date", "Past_Due"]),
+        "shipments": ("Shipments", ["Brand", "ImpCode", "Stock_UPC", "SAP",
+                                    "Item_Description", "Qty", "Date", "Customs_WH"]),
+    }
+
+    def _connect(self):
+        """Open a pymssql connection from settings config."""
+        import pymssql
+        from django.conf import settings
+
+        cfg = settings.SQLSERVER_CONFIG
+        return pymssql.connect(
+            server=cfg["HOST"],
+            port=str(cfg.get("PORT", "1433")),
+            user=cfg["USER"],
+            password=cfg["PASSWORD"],
+            database=cfg["NAME"],
+            login_timeout=10,
+            timeout=30,
+        )
+
+    def fetch_table(self, key: str) -> dict:
+        """
+        Return {columns, rows} for a whitelisted table. `key` is 'orders' or
+        'shipments'. Read-only SELECT; column list is fixed (no user input in
+        SQL), so this is injection-safe.
+        """
+        if key not in self._TABLES:
+            raise ValueError(f"Unknown table: {key}")
+
+        table_name, columns = self._TABLES[key]
+        col_sql = ", ".join(f"[{c}]" for c in columns)
+        sql = f"SELECT {col_sql} FROM dbo.{table_name} ORDER BY [Date] DESC"
+
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(sql)
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        return {"columns": columns, "rows": rows, "table": table_name}

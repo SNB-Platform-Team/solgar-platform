@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}1C - Склад{% endblock %}
+{% block nav_onec_stock %}active{% endblock %}
+
+{% block content %}
+<style>
+    .onec-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+    .onec-tab { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.3); border-radius: 6px 6px 0 0; padding: 10px 24px; color: var(--gold-light); font-family: 'Jost',sans-serif; font-size: 0.9rem; text-decoration: none; transition: background 0.2s; }
+    .onec-tab:hover { background: rgba(201,168,76,0.1); }
+    .onec-tab.active { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border-color: var(--gold); font-weight: 500; }
+
+    .onec-count { color: var(--text-dim); font-size: 0.82rem; margin-bottom: 10px; }
+    .onec-error { background: rgba(224,85,85,0.12); border: 1px solid rgba(224,85,85,0.35); color: #f4a0a0; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.86rem; }
+
+    .table-scroll { max-height: 600px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+    .onec-table { border-collapse: collapse; white-space: nowrap; font-size: 0.78rem; width: 100%; }
+    .onec-table th { text-align: left; font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .onec-table td { padding: 6px 12px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; color: var(--cream); }
+    .onec-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .onec-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
+</style>
+
+<h1 class="page-title">1C - Склад</h1>
+<p class="page-subtitle">Заказы и поставки (только просмотр)</p>
+
+<div class="onec-tabs">
+    <a href="?tab=orders" class="onec-tab {% if tab == 'orders' %}active{% endif %}">Заказы (Orders)</a>
+    <a href="?tab=shipments" class="onec-tab {% if tab == 'shipments' %}active{% endif %}">Поставки (Shipments)</a>
+</div>
+
+{% if error %}
+<div class="onec-error">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+<div class="onec-count">Строк: {{ report.total_rows }}</div>
+<div class="table-scroll">
+<table class="onec-table">
+    <thead>
+        <tr>
+            {% for col in report.columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in report.rows %}
+        <tr>
+            {% for cell in row %}
+            <td class="{% if forloop.counter == 6 %}num{% endif %}">{{ cell }}</td>
+            {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ report.columns|length }}" class="empty">Нет данных</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

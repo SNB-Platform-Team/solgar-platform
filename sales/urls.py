@@ -18,5 +18,6 @@ urlpatterns = [
     path("doctor/", views.doctor_entry_view, name="doctor_entry"),
     path("pharmacy/", views.pharmacy_entry_view, name="pharmacy_entry"),
     path("pharmacy/options/", views.pharmacy_options_json, name="pharmacy_options"),
-        path("report-obs/", views.sales_report_obs_view, name="sales_report_obs"),
+    path("report-obs/", views.sales_report_obs_view, name="sales_report_obs"),
+    path("1c-stock/", views.onec_stock_view, name="onec_stock"),
 ]

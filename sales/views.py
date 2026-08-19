@@ -861,4 +861,57 @@ def sales_report_obs_view(request: HttpRequest) -> HttpResponse:
               "chain": chain, "country": country},
         "has_query": bool(request.GET),
     }
-    return render(request, "sales/sales_report_obs.html", context)
+    return render(request, "sales/sales_report_obs.html", context)# ============================ 1C SERVICE ============================
+
+class OneCService:
+    """Orchestrates the 1C stock screen (read-only Orders/Shipments)."""
+
+    def __init__(self):
+        from .repositories import OneCRepository
+
+        self.repository = OneCRepository()
+
+    def get_table(self, key: str) -> dict:
+        """Return {columns, rows, total_rows} for the given table key."""
+        result = self.repository.fetch_table(key)
+        return {
+            "columns": result["columns"],
+            "rows": result["rows"],
+            "total_rows": len(result["rows"]),
+            "table": result["table"],
+        }
+
+
+# ============================ 1C VIEW ============================
+
+@login_required
+@require_screen("ONEC_STOCK")
+@require_http_methods(["GET"])
+def onec_stock_view(request: HttpRequest) -> HttpResponse:
+    """
+    1C stock screen - read-only view of Orders and Shipments from SQL Server.
+
+    A tab selector chooses which table to show; data is fetched live via
+    pymssql. Defaults to Orders.
+    """
+    from django.shortcuts import render
+
+    service = OneCService()
+
+    tab = (request.GET.get("tab") or "orders").strip().lower()
+    if tab not in ("orders", "shipments"):
+        tab = "orders"
+
+    report = None
+    error = ""
+    try:
+        report = service.get_table(tab)
+    except Exception as exc:
+        error = f"Ошибка загрузки данных: {exc}"
+
+    context = {
+        "tab": tab,
+        "report": report,
+        "error": error,
+    }
+    return render(request, "sales/onec_stock.html", context)

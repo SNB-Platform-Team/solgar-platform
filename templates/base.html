@@ -185,6 +185,15 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if "ONEC_STOCK" in accessible_screens %}
+            <div class="nav-group">
+                <div class="nav-group-title">1C</div>
+                <div class="nav-submenu">
+                    <a href="{% url 'sales:onec_stock' %}" class="nav-link {% block nav_onec_stock %}{% endblock %}">1C - Склад</a>
+                </div>
+            </div>
+            {% endif %}
             {% endif %}
 
             

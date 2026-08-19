@@ -222,3 +222,14 @@ if not DEBUG:
 # Load the Azure MySQL token injector (no-op unless USE_AZURE_MYSQL=True)
 if USE_AZURE_MYSQL:
     import config.db_token  # noqa: F401
+# ---------------------------------------------------------------------------
+# SQL Server (1C stock data) - read-only, accessed via pymssql (not the ORM).
+# Populated from environment variables so credentials stay out of the code.
+# ---------------------------------------------------------------------------
+SQLSERVER_CONFIG = {
+    "HOST": get_secret("SQLSERVER_HOST", ""),
+    "PORT": get_secret("SQLSERVER_PORT", "1433"),
+    "USER": get_secret("SQLSERVER_USER", ""),
+    "PASSWORD": get_secret("SQLSERVER_PASSWORD", ""),
+    "NAME": get_secret("SQLSERVER_NAME", ""),
+}
