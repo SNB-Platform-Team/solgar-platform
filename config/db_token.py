@@ -8,6 +8,12 @@ Service's Managed Identity, and must use a secure transport.
 We wrap the MySQL backend's get_new_connection to inject a fresh token as the
 password and enable SSL, before the connection is opened.
 
+IMPORTANT: the token/SSL injection applies ONLY to the 'default' connection
+(Azure MySQL). The 'refdb' connection (external MySQL on Olga's server) uses a
+normal username/password and must be left untouched — otherwise its real
+password would be overwritten with an Azure token it does not understand,
+causing "Access denied".
+
 Active only when USE_AZURE_MYSQL=True.
 """
 
@@ -33,12 +39,17 @@ _original_get_new_connection = DatabaseWrapper.get_new_connection
 
 
 def _patched_get_new_connection(self, conn_params: dict[str, Any]):
-    """Inject a fresh token and enable TLS before opening the connection."""
-    conn_params["passwd"] = _get_token()
-    # Azure MySQL requires a secure transport. Enable SSL without a CA file
-    # (server certificate is trusted via the platform CA bundle).
-    conn_params["ssl_mode"] = "REQUIRED"
-    conn_params["ssl"] = {"ca": None}
+    """
+    Inject a fresh token and enable TLS before opening the connection, but
+    ONLY for the Azure MySQL ('default') connection. Any other connection
+    (e.g. 'refdb') is opened as-is with its configured password.
+    """
+    if getattr(self, "alias", None) == "default":
+        conn_params["passwd"] = _get_token()
+        # Azure MySQL requires a secure transport. Enable SSL without a CA file
+        # (server certificate is trusted via the platform CA bundle).
+        conn_params["ssl_mode"] = "REQUIRED"
+        conn_params["ssl"] = {"ca": None}
     return _original_get_new_connection(self, conn_params)
 
 
