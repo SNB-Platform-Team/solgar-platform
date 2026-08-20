@@ -883,23 +883,30 @@ class OneCService:
 
 
 # ============================ 1C VIEW ============================
+ONEC_TABS = [
+    ("orders", "Заказы"),
+    ("shipments", "Поставки"),
+    ("sales", "Продажи"),
+    ("residues", "Свободные остатки"),
+]
+
 
 @login_required
 @require_screen("ONEC_STOCK")
 @require_http_methods(["GET"])
 def onec_stock_view(request: HttpRequest) -> HttpResponse:
     """
-    1C stock screen - read-only view of Orders and Shipments from SQL Server.
-
-    A tab selector chooses which table to show; data is fetched live via
-    pymssql. Defaults to Orders.
+    1C stock screen - read-only view of Orders, Shipments, Sales and
+    Stock_Free_Residues from SQL Server. A tab selector chooses the table;
+    data is fetched live via pymssql. Defaults to Orders.
     """
     from django.shortcuts import render
 
     service = OneCService()
 
+    valid = {key for key, _ in ONEC_TABS}
     tab = (request.GET.get("tab") or "orders").strip().lower()
-    if tab not in ("orders", "shipments"):
+    if tab not in valid:
         tab = "orders"
 
     report = None
@@ -910,12 +917,13 @@ def onec_stock_view(request: HttpRequest) -> HttpResponse:
         error = f"Ошибка загрузки данных: {exc}"
 
     context = {
+        "tabs": ONEC_TABS,
         "tab": tab,
         "report": report,
         "error": error,
     }
     return render(request, "sales/onec_stock.html", context)
-# ==================== PHARMACY MANAGERIAL SERVICE ====================
+
 
 class PharmManagerialService:
     """

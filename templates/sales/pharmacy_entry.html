@@ -162,6 +162,33 @@
     /* Tablo icerik kadar genis; kapsayiciyi asinca table-scroll'da scroll cikar */
     .ph-table { width: max-content; max-width: none; border-collapse: collapse; white-space: nowrap; }
     .ph-table th, .ph-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    /* Официальный адрес: yatay dizilim (label solda, input sagda) */
+    .fld-horizontal {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1 1 100% !important;
+        width: 100%;
+    }
+    .fld-horizontal label {
+        flex: 0 0 140px;
+        margin-bottom: 0 !important;
+        white-space: nowrap;
+    }
+    .fld-horizontal input {
+        flex: 1;
+        width: auto !important;
+    }
+    /* Официальный адрес paneli: tum alanlar yan yana (yatay), sarmali */
+    .addr-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; }
+    .addr-grid > div { display: contents; }           /* ic sarmalayici div'leri seffaf yap */
+    .addr-grid .fld-row { display: contents; }         /* fld-row'u da seffaf yap */
+    .addr-grid .fld {
+        flex: 0 0 160px;                               /* her alan 160px, yan yana */
+        margin-bottom: 0;
+    }
+    .addr-grid .fld label { display: block; }
+    .addr-grid .fld input { width: 100%; }
 </style>
 
 <h1 class="page-title">аптека вход Обновление</h1>
@@ -381,9 +408,9 @@
     </div>
 
     <!-- Panel 5: Official Address (geocoding) -->
-    <div class="ph-panel" style="margin-bottom:16px;">
+    <div class="ph-panel addr-panel" style="margin-bottom:16px;">
         <h3>Официальный адрес</h3>
-        <div class="panel-grid" style="margin-bottom:0;">
+        <div class="addr-grid">
             <div>
                 <div class="fld">
                     <label for="full_address">Официальный адрес</label>

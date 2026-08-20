@@ -561,19 +561,37 @@ class ReportRepository:
             return [r[0] for r in cur.fetchall()]
 class OneCRepository:
     """
-    Read-only access to the 1C stock data on SQL Server (Orders, Shipments).
+    Read-only access to the 1C stock data on SQL Server.
 
-    Uses pymssql directly (not the ORM) because this is a separate SQL Server
-    instance and the screen only needs to display two tables. Connection
-    parameters come from settings.SQLSERVER_CONFIG (populated from env vars).
+    Uses pymssql directly (not the ORM). Connection parameters come from
+    settings.SQLSERVER_CONFIG (populated from env vars). All readable objects
+    are whitelisted with a fixed column list, so no user input reaches SQL.
+
+    Tables/views exposed:
+      orders     (VIEW Orders)               - purchase orders
+      shipments  (VIEW Shipments)            - shipments
+      sales      (VIEW Sales)                - monthly sales
+      residues   (TABLE Stock_Free_Residues) - free stock residues
     """
 
-    # Whitelist of readable tables -> ordered display columns.
+    # key -> (object name, ordered display columns)
     _TABLES = {
         "orders": ("Orders", ["Brand", "PO_Code", "Stock_UPC", "SAP",
                               "Item_Description", "Qty", "Date", "Past_Due"]),
         "shipments": ("Shipments", ["Brand", "ImpCode", "Stock_UPC", "SAP",
                                     "Item_Description", "Qty", "Date", "Customs_WH"]),
+        "sales": ("Sales", ["Brand", "YearMonth", "Stock_UPC", "SAP",
+                            "Item_Description", "Qty"]),
+        "residues": ("Stock_Free_Residues", ["UPS", "Item_Description_EN", "SAP",
+                                             "Stock", "Shipment", "Ord"]),
+    }
+
+    # Optional ORDER BY per table (some have no Date column).
+    _ORDER_BY = {
+        "orders": "[Date] DESC",
+        "shipments": "[Date] DESC",
+        "sales": "[YearMonth] DESC",
+        "residues": "[UPS]",
     }
 
     def _connect(self):
@@ -594,16 +612,19 @@ class OneCRepository:
 
     def fetch_table(self, key: str) -> dict:
         """
-        Return {columns, rows} for a whitelisted table. `key` is 'orders' or
-        'shipments'. Read-only SELECT; column list is fixed (no user input in
-        SQL), so this is injection-safe.
+        Return {columns, rows, table} for a whitelisted table/view. `key` is
+        one of _TABLES. Read-only SELECT with a fixed column list, so this is
+        injection-safe.
         """
         if key not in self._TABLES:
             raise ValueError(f"Unknown table: {key}")
 
         table_name, columns = self._TABLES[key]
         col_sql = ", ".join(f"[{c}]" for c in columns)
-        sql = f"SELECT {col_sql} FROM dbo.{table_name} ORDER BY [Date] DESC"
+        order_by = self._ORDER_BY.get(key)
+        sql = f"SELECT {col_sql} FROM dbo.{table_name}"
+        if order_by:
+            sql += f" ORDER BY {order_by}"
 
         conn = self._connect()
         try:
@@ -614,6 +635,8 @@ class OneCRepository:
             conn.close()
 
         return {"columns": columns, "rows": rows, "table": table_name}
+
+
 class PharmManagerialRepository:
     """
     Pharmacy Managerial report (Java repPharmManagerial). Fills placeholder
