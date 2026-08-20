@@ -614,3 +614,330 @@ class OneCRepository:
             conn.close()
 
         return {"columns": columns, "rows": rows, "table": table_name}
+class PharmManagerialRepository:
+    """
+    Pharmacy Managerial report (Java repPharmManagerial). Fills placeholder
+    templates (PAR_REP_PHARMDATA_*) stored in DadQuery, mirroring the Java
+    string-replace approach but with strict whitelisting/escaping so no
+    user value can break out of the SQL.
+
+    Reads from pharmacy_data_solgar / pharmacy_data_bounty (status=1).
+    Three report families (parameter): CATEGORY, QUANTITY, ACTIVENESS.
+    Six group types (repType): REGIONS, MAIN_DISTRICT, CITY, MED_REPS,
+    CHAINS, ACTIVATION_DATE.
+    """
+
+    # repType -> (group column). Whitelist: only these are accepted.
+    _REPTYPE_COL = {
+        "REGIONS": "region",
+        "MAIN_DISTRICT": "area",
+        "CITY": "city",
+        "MED_REPS": "marketing_staff",
+        "CHAINS": "group_company",
+        "ACTIVATION_DATE": "region",
+    }
+    # parameter -> script base name. Whitelist.
+    _PARAM_SCRIPT = {
+        "TOTAL_CATEGORY": "PAR_REP_PHARMDATA_CATEGORY_GET",
+        "TOTAL_QUANTITY": "PAR_REP_PHARMDATA_QUANTITY_GET",
+        "TOTAL_ACTIVENESS": "PAR_REP_PHARMDATA_ACTIVENESS_GET",
+    }
+    # optional filter fields -> column name. Whitelist of filterable columns.
+    _FILTER_COLS = {
+        "chain": "group_company",
+        "subchain": "subgroup_company",
+        "assortiment": "assortiment",
+        "pharmacy_type": "pharmacy_type",
+        "promo": "promo",
+        "medrep": "marketing_staff",
+        "district": "area",
+        "region": "region",
+        "city": "city",
+        "activeness": "pharmacy_activeness",
+        "country": "country",
+    }
+
+    def __init__(self):
+        from .models import DadQuery
+
+        self._DadQuery = DadQuery
+
+    def _script(self, name: str) -> str:
+        """Fetch a template from DadQuery."""
+        return self._DadQuery.objects.get(query_name=name, is_active=True).query_script
+
+    def _esc(self, value: str) -> str:
+        """
+        Escape a value for safe single-quoted SQL literal use. Removes
+        backslashes and escapes single quotes. Used only where the template
+        design forces inline literals (placeholder replacement, not params).
+        """
+        if value is None:
+            return ""
+        v = str(value).replace("\\", "").replace("'", "''")
+        # Kontrol karakterlerini ve tehlikeli noktalı virgülü temizle
+        v = v.replace(";", "").replace("\x00", "").strip()
+        return v
+
+    def _brand_table(self, brand: str):
+        """Return (brand_table_suffix, brand_where) for the given company code."""
+        b = (brand or "SOLGAR").strip().upper()
+        if b == "SOLGAR":
+            return "solgar", ""
+        if b == "OBF":
+            return "bounty", " and brand='OS' "
+        # BOUNTY / NATURES BOUNTY / BN
+        return "bounty", " and brand='BN' "
+
+    def run(self, brand: str, rep_type: str, parameter: str,
+            begin: str = "", end: str = "",
+            country: str = "", district: str = "", region: str = "", city: str = "",
+            chain: str = "", subchain: str = "", assortiment: str = "",
+            pharmacy_type: str = "", promo: str = "", activeness: str = "",
+            medrep: str = "") -> dict:
+        """
+        Build and run the managerial report. Returns {columns, rows}.
+
+        brand: SOLGAR/OBF/BOUNTY. rep_type: one of _REPTYPE_COL.
+        parameter: one of _PARAM_SCRIPT. Dates 'YYYYMMDD' (only used for
+        ACTIVATION_DATE). Filters optional.
+        """
+        from django.db import connections
+
+        # --- whitelist checks (injection-safe: reject unknown structural values) ---
+        rep_type = (rep_type or "REGIONS").strip().upper()
+        parameter = (parameter or "TOTAL_QUANTITY").strip().upper()
+        if rep_type not in self._REPTYPE_COL:
+            raise ValueError(f"Unknown rep_type: {rep_type}")
+        if parameter not in self._PARAM_SCRIPT:
+            raise ValueError(f"Unknown parameter: {parameter}")
+
+        brand_suffix, brand_where = self._brand_table(brand)
+
+        # --- build from / groupBy / union (Java logic) ---
+        base_col = self._REPTYPE_COL[rep_type]
+        from_cols = base_col + ","
+        group_by = base_col
+        union = "'Total' as a,"
+
+        prm_date = ""
+        if rep_type == "ACTIVATION_DATE" and begin and end:
+            # tarih guvenli: sadece rakam (YYYYMMDD)
+            b = "".join(ch for ch in begin if ch.isdigit())
+            e = "".join(ch for ch in end if ch.isdigit())
+            if len(b) == 8 and len(e) == 8:
+                prm_date = (f" and replace(pharmacy_activation_date,'-','') >= '{b}' "
+                            f"and replace(pharmacy_activation_date,'-','') <= '{e}' ")
+
+        param_where = brand_where
+        param_where_union = brand_where
+
+        # optional filters: her biri from/groupby/union/where'e eklenir (Java gibi)
+        filters = {
+            "chain": chain, "subchain": subchain, "assortiment": assortiment,
+            "pharmacy_type": pharmacy_type, "promo": promo, "medrep": medrep,
+            "district": district, "region": region, "city": city,
+            "activeness": activeness, "country": country,
+        }
+        for key, val in filters.items():
+            if val and val.strip():
+                col = self._FILTER_COLS[key]  # whitelist'ten kolon adi (guvenli)
+                safe = self._esc(val)         # deger escape edildi
+                from_cols += col + ","
+                group_by += "," + col
+                union += "'' as " + key[0] + "_col,"
+                cond = f" and {col}='{safe}' "
+                param_where += cond
+                param_where_union += cond
+
+        # --- script seçimi: Russia + REGIONS + alt filtre yok -> _REGIONS ---
+        use_regions = (
+            (country or "").strip().lower() == "russia"
+            and rep_type == "REGIONS"
+            and not district and not region and not city
+        )
+        script_name = self._PARAM_SCRIPT[parameter] + ("_REGIONS" if use_regions else "")
+        sql = self._script(script_name)
+
+        # --- placeholder doldur ---
+        replacements = {
+            "PARAMFROM1": from_cols.replace("region", "area"),
+            "PARAMGROUP1": group_by.replace("region", "area"),
+            "PARAMFROM": from_cols,
+            "PARAMGROUP": group_by,
+            "PARAMUNION": union,
+            "BRANDTYPE": brand_suffix,
+            "PARAMWHERE": param_where,
+            "PRMWHEREUNION": param_where_union,
+            "PRMDATE": prm_date,
+        }
+        # PARAMFROM1/PARAMGROUP1 once (uzun anahtarlar), sonra kisalar
+        for key in ("PARAMFROM1", "PARAMGROUP1", "PARAMFROM", "PARAMGROUP",
+                    "PARAMUNION", "BRANDTYPE", "PARAMWHERE", "PRMWHEREUNION", "PRMDATE"):
+            sql = sql.replace(key, replacements[key])
+
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql)
+            columns = [c[0] for c in cur.description]
+            rows = cur.fetchall()
+
+        return {"columns": columns, "rows": rows, "sql": sql}
+class DoctorManagerialRepository:
+    """
+    Doctor Managerial report (Java repDoctorManagerial). Fills placeholder
+    templates (PAR_REP_DOCTORDATA_*) from DadQuery, mirroring the Java
+    string-replace approach with strict whitelisting/escaping.
+
+    Reads from solgar_tst.doctor_data (status=1). Single table (no per-brand
+    split, unlike the pharmacy version); brand is a WHERE filter. Two report
+    families (parameter): CATEGORY, QUANTITY. Group types (repType): REGIONS,
+    MAIN_DISTRICT, CITY, MAIN_SPECIALITY, SUB_SPECIALITY, MED_REPS,
+    CLINIC_NAME, ACTIVATION_DATE.
+    """
+
+    # repType -> group column. Whitelist.
+    _REPTYPE_COL = {
+        "REGIONS": "region",
+        "MAIN_DISTRICT": "area",
+        "CITY": "city",
+        "MAIN_SPECIALITY": "unified_specialty",
+        "SUB_SPECIALITY": "specialty",
+        "MED_REPS": "medrep",
+        "CLINIC_NAME": "clinic_name",
+        "ACTIVATION_DATE": "region",
+    }
+    # parameter -> script base name. Whitelist (doctor has no ACTIVENESS).
+    _PARAM_SCRIPT = {
+        "TOTAL_CATEGORY": "PAR_REP_DOCTORDATA_CATEGORY_GET",
+        "TOTAL_QUANTITY": "PAR_REP_DOCTORDATA_QUANTITY_GET",
+    }
+    # optional filter fields -> column name. Whitelist.
+    _FILTER_COLS = {
+        "brand": "brand",
+        "country": "country",
+        "speciality": "unified_specialty",
+        "sub_speciality": "specialty",
+        "clinic": "clinic_name",
+        "medrep": "medrep",
+        "district": "area",
+        "region": "region",
+        "city": "city",
+        "activeness": "activeness",
+    }
+
+    def __init__(self):
+        from .models import DadQuery
+
+        self._DadQuery = DadQuery
+
+    def _script(self, name: str) -> str:
+        """Fetch a template from DadQuery."""
+        return self._DadQuery.objects.get(query_name=name, is_active=True).query_script
+
+    def _esc(self, value: str) -> str:
+        """Escape a value for safe single-quoted SQL literal use."""
+        if value is None:
+            return ""
+        v = str(value).replace("\\", "").replace("'", "''")
+        v = v.replace(";", "").replace("\x00", "").strip()
+        return v
+
+    def _brand_code(self, brand: str) -> str:
+        """Map company name to the brand code stored in doctor_data."""
+        b = (brand or "").strip().upper()
+        if b == "SOLGAR":
+            return "SL"
+        if b == "OBF":
+            return "OS"
+        if b in ("BOUNTY", "NATURES BOUNTY", "BN"):
+            return "BN"
+        return ""
+
+    def run(self, brand: str, rep_type: str, parameter: str,
+            begin: str = "", end: str = "",
+            country: str = "", district: str = "", region: str = "", city: str = "",
+            speciality: str = "", sub_speciality: str = "", clinic: str = "",
+            medrep: str = "", activeness: str = "") -> dict:
+        """
+        Build and run the doctor managerial report. Returns {columns, rows}.
+
+        brand: SOLGAR/OBF/BOUNTY (optional filter). rep_type: one of
+        _REPTYPE_COL. parameter: one of _PARAM_SCRIPT. Dates 'YYYYMMDD'
+        (ACTIVATION_DATE only). Filters optional.
+        """
+        from django.db import connections
+
+        rep_type = (rep_type or "REGIONS").strip().upper()
+        parameter = (parameter or "TOTAL_QUANTITY").strip().upper()
+        if rep_type not in self._REPTYPE_COL:
+            raise ValueError(f"Unknown rep_type: {rep_type}")
+        if parameter not in self._PARAM_SCRIPT:
+            raise ValueError(f"Unknown parameter: {parameter}")
+
+        base_col = self._REPTYPE_COL[rep_type]
+        from_cols = base_col + ","
+        group_by = base_col
+        union = "'Total' as a,"
+
+        prm_date = ""
+        if rep_type == "ACTIVATION_DATE" and begin and end:
+            b = "".join(ch for ch in begin if ch.isdigit())
+            e = "".join(ch for ch in end if ch.isdigit())
+            if len(b) == 8 and len(e) == 8:
+                prm_date = (f" and replace(doctor_date,'-','') >= '{b}' "
+                            f"and replace(doctor_date,'-','') <= '{e}' ")
+
+        param_where = ""
+        param_where_union = ""
+
+        # brand -> code (SL/OS/BN), filtered as a WHERE condition
+        brand_code = self._brand_code(brand)
+        filters = {
+            "brand": brand_code, "country": country, "speciality": speciality,
+            "sub_speciality": sub_speciality, "clinic": clinic, "medrep": medrep,
+            "district": district, "region": region, "city": city,
+            "activeness": activeness,
+        }
+        # Grup kolonu eklenmeyen filtreler: brand, country (Java'da sadece where)
+        _where_only = {"brand", "country"}
+        for key, val in filters.items():
+            if val and str(val).strip():
+                col = self._FILTER_COLS[key]
+                safe = self._esc(val)
+                if key not in _where_only:
+                    from_cols += col + ","
+                    group_by += "," + col
+                    union += "'' as " + key[0] + "_col,"
+                cond = f" and {col}='{safe}' "
+                param_where += cond
+                param_where_union += cond
+
+        # Russia + REGIONS + no sub-filter -> _REGION script
+        use_region = (
+            (country or "").strip().lower() == "russia"
+            and rep_type == "REGIONS"
+            and not district and not region and not city
+        )
+        script_name = self._PARAM_SCRIPT[parameter] + ("_REGION" if use_region else "")
+        sql = self._script(script_name)
+
+        replacements = {
+            "PARAMFROM1": from_cols.replace("region", "area"),
+            "PARAMGROUP1": group_by.replace("region", "area"),
+            "PARAMFROM": from_cols,
+            "PARAMGROUP": group_by,
+            "PARAMUNION": union,
+            "PARAMWHERE": param_where,
+            "PRMWHEREUNION": param_where_union,
+            "PRMDATE": prm_date,
+        }
+        for key in ("PARAMFROM1", "PARAMGROUP1", "PARAMFROM", "PARAMGROUP",
+                    "PARAMUNION", "PARAMWHERE", "PRMWHEREUNION", "PRMDATE"):
+            sql = sql.replace(key, replacements[key])
+
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql)
+            columns = [c[0] for c in cur.description]
+            rows = cur.fetchall()
+
+        return {"columns": columns, "rows": rows, "sql": sql}

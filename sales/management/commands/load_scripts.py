@@ -30,6 +30,28 @@ count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE where status = 1 PRMDA
 order by x.total desc""",
     "PAR_REP_PHARMDATA_QUANTITY_GET": r"""select * from (select PARAMFROM count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE where status =1  PRMDATE PARAMWHERE group by 1,PARAMGROUP union all select PARAMUNION count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
     "PAR_REP_PHARMDATA_ACTIVENESS_GET": r"""select * from (select PARAMFROM sum(case when pharmacy_activeness = 'Актив' THEN 1 else 0 END) as Active,sum(case when pharmacy_activeness = 'В процессе' THEN 1 else 0 END) as InProcess,sum(case when pharmacy_activeness = 'Не Актив' THEN 1 else 0 END) as NotActive,count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE where status = 1 PRMDATE PARAMWHERE group by 1,PARAMGROUP union all select PARAMUNION sum(case when pharmacy_activeness = 'Актив' THEN 1 else 0 END) as Active,sum(case when pharmacy_activeness = 'В процессе' THEN 1 else 0 END) as InProcess,sum(case when pharmacy_activeness = 'Не Актив' THEN 1 else 0 END) as NotActive,count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
+    "PAR_REP_DOCTORDATA_CATEGORY_GET": r"""select PARAMFROM A_PLUS as 'A+',A,B,C,Total, 
+ round(((x.A_PLUS)/x.Total)*100) as '%A+',round(((x.A)/x.Total)*100) as '%A',
+ round(((x.B)/x.Total)*100) as '%B',round(((x.C)/x.Total)*100) as '%C'
+ from (
+ select PARAMFROM 
+ sum(case when category = 'A+' THEN 1 else 0 END) as A_PLUS, 
+ sum(case when category = 'A' THEN 1 else 0 END) as A,
+ sum(case when category = 'B' THEN 1 else 0 END) as B,
+ sum(case when category = 'C' THEN 1 else 0 END) as C,
+  count(0) as Total from 
+  solgar_tst.doctor_data where status = 1 PRMDATE PARAMWHERE 
+  group by 1, PARAMGROUP 
+  union all 
+  select PARAMUNION 
+  sum(case when category = 'A+' THEN 1 else 0 END) as A_PLUS, 
+ sum(case when category = 'A' THEN 1 else 0 END) as A,
+ sum(case when category = 'B' THEN 1 else 0 END) as B,
+ sum(case when category = 'C' THEN 1 else 0 END) as C,
+  count(0) as Total 
+  from solgar_tst.doctor_data 
+  where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
+    "PAR_REP_DOCTORDATA_QUANTITY_GET": r"""select * from (select PARAMFROM count(0) as Total from solgar_tst.doctor_data where status = 1 PRMDATE PARAMWHERE group by 1,PARAMGROUP union all select PARAMUNION  count(0) as Total from solgar_tst.doctor_data where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
     "PAR_REP_PHARMDATA_CATEGORY_GET_REGIONS": r"""select PARAMFROM x.A,x.A_PLUS,x.B,x.B_PLUS,x.C,x.C_PLUS,x.EMPTY,x.Total,
 round(((x.A+x.A_PLUS)/x.Total)*100) as '%A', round(((x.B+x.B_PLUS)/x.Total)*100) as '%B',
 round(((x.C+x.C_PLUS)/x.Total)*100) as '%C' from (
@@ -92,6 +114,42 @@ select PARAMUNION sum(case when pharmacy_activeness = 'Актив' THEN 1 else 0
 sum(case when pharmacy_activeness = 'В процессе' THEN 1 else 0 END) as InProcess,
 sum(case when pharmacy_activeness = 'Не Актив' THEN 1 else 0 END) as NotActive,
 count(0) as Total from solgar_tst.pharmacy_data_BRANDTYPE 
+where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
+    "PAR_REP_DOCTORDATA_CATEGORY_GET_REGION": r"""select PARAMFROM A_PLUS as 'A+', A,B,C,Total, 
+round(((x.A_PLUS)/x.Total)*100) as '%A+',round(((x.A)/x.Total)*100) as '%A',
+round(((x.B)/x.Total)*100) as '%B',round(((x.C)/x.Total)*100) as '%C'
+ from (
+ select PARAMFROM 
+ sum(case when category = 'A+' THEN 1 else 0 END) as A_PLUS,
+ sum(case when category = 'A' THEN 1 else 0 END) as A,
+ sum(case when category = 'B' THEN 1 else 0 END) as B,
+ sum(case when category = 'C' THEN 1 else 0 END) as C,
+ count(0) as Total from solgar_tst.doctor_data 
+ where status = 1 and area ='Region' PRMDATE PARAMWHERE group by 1,PARAMGROUP 
+ union all 
+ select PARAMFROM1
+ sum(case when category = 'A+' THEN 1 else 0 END) as A_PLUS,
+ sum(case when category = 'A' THEN 1 else 0 END) as A,
+ sum(case when category = 'B' THEN 1 else 0 END) as B,
+ sum(case when category = 'C' THEN 1 else 0 END) as C,
+ count(0) as Total from solgar_tst.doctor_data 
+ where status = 1 and area in('Moscow','Saint Petersburg') PRMDATE PARAMWHERE group by 1,PARAMGROUP1 
+ union all 
+ select PARAMUNION 
+ sum(case when category = 'A+' THEN 1 else 0 END) as A_PLUS,
+ sum(case when category = 'A' THEN 1 else 0 END) as A,
+ sum(case when category = 'B' THEN 1 else 0 END) as B,
+ sum(case when category = 'C' THEN 1 else 0 END) as C,
+ count(0) as Total from solgar_tst.doctor_data 
+ where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
+    "PAR_REP_DOCTORDATA_QUANTITY_GET_REGION": r"""select * from (
+select PARAMFROM count(0) as Total from solgar_tst.doctor_data 
+where status = 1 and area ='Region' PRMDATE PARAMWHERE group by 1,PARAMGROUP 
+union all 
+select PARAMFROM1 count(0) as Total from solgar_tst.doctor_data 
+where status = 1 and area in('Moscow','Saint Petersburg') PRMDATE PARAMWHERE group by 1,PARAMGROUP1 
+union all
+select PARAMUNION  count(0) as Total from solgar_tst.doctor_data 
 where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
     "CHAIN_SALES_WHRE_CONDITION_SL": r"""FROM
  solgar_tst.sales_pharmacy a
@@ -186,7 +244,7 @@ where status = 1 PRMDATE PRMWHEREUNION) x order by x.total desc""",
 class Command(BaseCommand):
     """Load or update the report SQL script fragments in DadQuery."""
 
-    help = "Load DadQuery SQL script fragments (Sales Report + Pharmacy Managerial)."
+    help = "Load DadQuery SQL script fragments (Sales Report + Pharmacy/Doctor Managerial)."
 
     def handle(self, *args, **options):
         """Insert or update each named script."""

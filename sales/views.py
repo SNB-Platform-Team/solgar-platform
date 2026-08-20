@@ -915,3 +915,183 @@ def onec_stock_view(request: HttpRequest) -> HttpResponse:
         "error": error,
     }
     return render(request, "sales/onec_stock.html", context)
+# ==================== PHARMACY MANAGERIAL SERVICE ====================
+
+class PharmManagerialService:
+    """
+    Orchestrates the Pharmacy Managerial screen (Экран администрирования аптек).
+    Wraps PharmManagerialRepository: dropdown options + report execution.
+    """
+
+    COMP_TYPES = [("SOLGAR", "SOLGAR"), ("OBF", "OBF"), ("BOUNTY", "NATURES BOUNTY")]
+    REP_TYPES = [
+        ("REGIONS", "REGIONS"),
+        ("MAIN_DISTRICT", "MAIN_DISTRICT"),
+        ("CITY", "CITY"),
+        ("MED_REPS", "MED_REPS"),
+        ("CHAINS", "CHAINS"),
+        ("ACTIVATION_DATE", "ACTIVATION_DATE"),
+    ]
+    PARAMETERS = [
+        ("TOTAL_QUANTITY", "TOTAL_QUANTITY"),
+        ("TOTAL_CATEGORY", "TOTAL_CATEGORY"),
+        ("TOTAL_ACTIVENESS", "TOTAL_ACTIVENESS"),
+    ]
+
+    def __init__(self):
+        from .repositories import PharmManagerialRepository
+
+        self.repository = PharmManagerialRepository()
+
+    def run(self, **kwargs) -> dict:
+        """Run the managerial report and return {columns, rows, total_rows}."""
+        result = self.repository.run(**kwargs)
+        return {
+            "columns": result["columns"],
+            "rows": result["rows"],
+            "total_rows": len(result["rows"]),
+        }
+
+
+# ==================== PHARMACY MANAGERIAL VIEW ====================
+
+PHARM_MGR_COMP_TYPES = [("SOLGAR", "SOLGAR"), ("OBF", "OBF"), ("BOUNTY", "NATURES BOUNTY")]
+PHARM_MGR_REP_TYPES = ["REGIONS", "MAIN_DISTRICT", "CITY", "MED_REPS", "CHAINS", "ACTIVATION_DATE"]
+PHARM_MGR_PARAMETERS = ["TOTAL_QUANTITY", "TOTAL_CATEGORY", "TOTAL_ACTIVENESS"]
+
+
+@login_required
+@require_screen("PHARM_MANAGERIAL")
+@require_http_methods(["GET"])
+def pharm_managerial_view(request: HttpRequest) -> HttpResponse:
+    """
+    Pharmacy Managerial screen (Экран администрирования аптек).
+
+    Counts/groups pharmacies by the selected report type (region, city, chain,
+    medrep...) and parameter (quantity, category, activeness). GET-driven;
+    report runs when the form is submitted.
+    """
+    from django.shortcuts import render
+
+    service = PharmManagerialService()
+
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    rep_type = (request.GET.get("rep_type") or "REGIONS").strip()
+    parameter = (request.GET.get("parameter") or "TOTAL_QUANTITY").strip()
+    country = (request.GET.get("country") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    chain = (request.GET.get("chain") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    activeness = (request.GET.get("activeness") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    report = None
+    error = ""
+    if request.GET.get("run"):
+        try:
+            report = service.run(
+                brand=brand, rep_type=rep_type, parameter=parameter,
+                country=country, region=region, city=city, chain=chain,
+                medrep=medrep, activeness=activeness,
+                begin=begin.replace("-", ""), end=end.replace("-", ""),
+            )
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    context = {
+        "comp_types": PHARM_MGR_COMP_TYPES,
+        "rep_types": PHARM_MGR_REP_TYPES,
+        "parameters": PHARM_MGR_PARAMETERS,
+        "report": report,
+        "error": error,
+        "f": {"brand": brand, "rep_type": rep_type, "parameter": parameter,
+              "country": country, "region": region, "city": city, "chain": chain,
+              "medrep": medrep, "activeness": activeness, "begin": begin, "end": end},
+    }
+    return render(request, "sales/pharm_managerial.html", context)
+# ==================== DOCTOR MANAGERIAL SERVICE ====================
+
+class DoctorManagerialService:
+    """Orchestrates the Doctor Managerial screen (Экран администрирования врача)."""
+
+    def __init__(self):
+        from .repositories import DoctorManagerialRepository
+
+        self.repository = DoctorManagerialRepository()
+
+    def run(self, **kwargs) -> dict:
+        """Run the managerial report and return {columns, rows, total_rows}."""
+        result = self.repository.run(**kwargs)
+        return {
+            "columns": result["columns"],
+            "rows": result["rows"],
+            "total_rows": len(result["rows"]),
+        }
+
+
+# ==================== DOCTOR MANAGERIAL VIEW ====================
+
+DOC_MGR_COMP_TYPES = [("", "—"), ("SOLGAR", "SOLGAR"), ("OBF", "OBF"), ("BOUNTY", "NATURES BOUNTY")]
+DOC_MGR_REP_TYPES = ["REGIONS", "MAIN_DISTRICT", "CITY", "MAIN_SPECIALITY",
+                     "SUB_SPECIALITY", "MED_REPS", "CLINIC_NAME", "ACTIVATION_DATE"]
+DOC_MGR_PARAMETERS = ["TOTAL_QUANTITY", "TOTAL_CATEGORY"]
+
+
+@login_required
+@require_screen("DOCTOR_MANAGERIAL")
+@require_http_methods(["GET"])
+def doctor_managerial_view(request: HttpRequest) -> HttpResponse:
+    """
+    Doctor Managerial screen (Экран администрирования врача).
+
+    Counts/groups doctors by the selected report type (region, city,
+    speciality, clinic, medrep...) and parameter (quantity, category).
+    GET-driven; report runs when the form is submitted.
+    """
+    from django.shortcuts import render
+
+    service = DoctorManagerialService()
+
+    brand = (request.GET.get("brand") or "").strip()
+    rep_type = (request.GET.get("rep_type") or "REGIONS").strip()
+    parameter = (request.GET.get("parameter") or "TOTAL_QUANTITY").strip()
+    country = (request.GET.get("country") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    speciality = (request.GET.get("speciality") or "").strip()
+    sub_speciality = (request.GET.get("sub_speciality") or "").strip()
+    clinic = (request.GET.get("clinic") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    activeness = (request.GET.get("activeness") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    report = None
+    error = ""
+    if request.GET.get("run"):
+        try:
+            report = service.run(
+                brand=brand, rep_type=rep_type, parameter=parameter,
+                country=country, region=region, city=city,
+                speciality=speciality, sub_speciality=sub_speciality,
+                clinic=clinic, medrep=medrep, activeness=activeness,
+                begin=begin.replace("-", ""), end=end.replace("-", ""),
+            )
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    context = {
+        "comp_types": DOC_MGR_COMP_TYPES,
+        "rep_types": DOC_MGR_REP_TYPES,
+        "parameters": DOC_MGR_PARAMETERS,
+        "report": report,
+        "error": error,
+        "f": {"brand": brand, "rep_type": rep_type, "parameter": parameter,
+              "country": country, "region": region, "city": city,
+              "speciality": speciality, "sub_speciality": sub_speciality,
+              "clinic": clinic, "medrep": medrep, "activeness": activeness,
+              "begin": begin, "end": end},
+    }
+    return render(request, "sales/doctor_managerial.html", context)

@@ -20,4 +20,6 @@ urlpatterns = [
     path("pharmacy/options/", views.pharmacy_options_json, name="pharmacy_options"),
     path("report-obs/", views.sales_report_obs_view, name="sales_report_obs"),
     path("1c-stock/", views.onec_stock_view, name="onec_stock"),
+    path("pharm-managerial/", views.pharm_managerial_view, name="pharm_managerial"),
+    path("doctor-managerial/", views.doctor_managerial_view, name="doctor_managerial"),
 ]

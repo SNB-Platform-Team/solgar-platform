@@ -179,6 +179,9 @@
                         <div class="nav-subgroup-title">Административные экраны</div>
                         <div class="nav-subsubmenu">
                             <a href="{% url 'sales:sales_report_obs' %}" class="nav-link {% block nav_sales_report_obs %}{% endblock %}">Просмотр Сток и Продажа</a>
+                            {% if "PHARM_MANAGERIAL" in accessible_screens %}
+                            <a href="{% url 'sales:pharm_managerial' %}" class="nav-link {% block nav_pharm_managerial %}{% endblock %}">Экран администрирования аптек</a>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}
