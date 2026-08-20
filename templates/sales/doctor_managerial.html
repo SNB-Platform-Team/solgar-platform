@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Экран администрирования врача{% endblock %}
+{% block nav_doctor_managerial %}active{% endblock %}
+
+{% block content %}
+<style>
+    .dm-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+    .dm-fld { display: flex; flex-direction: column; }
+    .dm-fld label { font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); margin-bottom: 3px; }
+    .dm-fld input, .dm-fld select { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 6px 9px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.8rem; outline: none; min-width: 140px; }
+    .dm-fld input:focus, .dm-fld select:focus { border-color: var(--gold); }
+    .dm-fld select option { background: var(--dark2); }
+    .btn-dm { border: none; border-radius: 4px; padding: 9px 24px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
+    .btn-dm:hover { opacity: 0.9; }
+    .dm-error { background: rgba(224,85,85,0.12); border: 1px solid rgba(224,85,85,0.35); color: #f4a0a0; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.86rem; }
+    .dm-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
+    .table-scroll { max-height: 560px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+    .dm-table { border-collapse: collapse; white-space: nowrap; font-size: 0.78rem; width: 100%; }
+    .dm-table th { text-align: left; font-size: 0.62rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gold); padding: 7px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .dm-table td { padding: 6px 12px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; color: var(--cream); }
+    .dm-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .dm-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .dm-table tbody tr:first-child { font-weight: 500; background: rgba(201,168,76,0.05); }
+    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
+</style>
+
+<h1 class="page-title">Экран администрирования врача</h1>
+<p class="page-subtitle">Группировка и подсчёт врачей</p>
+
+<form method="get">
+    <input type="hidden" name="run" value="1">
+    <div class="dm-filters">
+        <div class="dm-fld">
+            <label for="brand">Компания</label>
+            <select id="brand" name="brand">
+                {% for code, lbl in comp_types %}
+                <option value="{{ code }}" {% if code == f.brand %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="dm-fld">
+            <label for="rep_type">Тип отчёта</label>
+            <select id="rep_type" name="rep_type">
+                {% for rt in rep_types %}
+                <option value="{{ rt }}" {% if rt == f.rep_type %}selected{% endif %}>{{ rt }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="dm-fld">
+            <label for="parameter">Параметр</label>
+            <select id="parameter" name="parameter">
+                {% for p in parameters %}
+                <option value="{{ p }}" {% if p == f.parameter %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="dm-fld">
+            <label for="country">Страна</label>
+            <input type="text" id="country" name="country" value="{{ f.country }}" placeholder="Russia">
+        </div>
+        <div class="dm-fld">
+            <label for="region">Регион</label>
+            <input type="text" id="region" name="region" value="{{ f.region }}">
+        </div>
+        <div class="dm-fld">
+            <label for="city">Город</label>
+            <input type="text" id="city" name="city" value="{{ f.city }}">
+        </div>
+        <div class="dm-fld">
+            <label for="speciality">Осн. специальность</label>
+            <input type="text" id="speciality" name="speciality" value="{{ f.speciality }}">
+        </div>
+        <div class="dm-fld">
+            <label for="sub_speciality">Специальность</label>
+            <input type="text" id="sub_speciality" name="sub_speciality" value="{{ f.sub_speciality }}">
+        </div>
+        <div class="dm-fld">
+            <label for="clinic">Клиника</label>
+            <input type="text" id="clinic" name="clinic" value="{{ f.clinic }}">
+        </div>
+        <div class="dm-fld">
+            <label for="medrep">Мед. представитель</label>
+            <input type="text" id="medrep" name="medrep" value="{{ f.medrep }}">
+        </div>
+        <div class="dm-fld">
+            <label for="activeness">Активность</label>
+            <input type="text" id="activeness" name="activeness" value="{{ f.activeness }}">
+        </div>
+        <button type="submit" class="btn-dm">Сформировать отчёт</button>
+    </div>
+</form>
+
+{% if error %}
+<div class="dm-error">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+<div class="dm-count">Строк: {{ report.total_rows }}</div>
+<div class="table-scroll">
+<table class="dm-table">
+    <thead>
+        <tr>
+            {% for col in report.columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in report.rows %}
+        <tr>
+            {% for cell in row %}
+            <td class="{% if forloop.last %}num{% endif %}">{{ cell }}</td>
+            {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ report.columns|length }}" class="empty">Нет данных</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="dm-count">Выберите параметры и нажмите «Сформировать отчёт».</div>
+{% endif %}
+{% endblock %}

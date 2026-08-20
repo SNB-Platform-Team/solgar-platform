@@ -5,7 +5,7 @@
 {% block content %}
 <style>
     .ph-form { margin-bottom: 20px; }
-    .brand-bar { display: flex; align-items: center; gap: 14px; background: rgba(201,168,76,0.08); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; }
+    .brand-bar { display: flex; align-items: center; gap: 14px; background: rgba(201,168,76,0.08); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; flex-wrap: wrap; }
     .brand-bar label { font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); }
     .brand-bar select { background: rgba(255,255,255,0.05); border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 9px 14px; color: var(--gold-light); font-family: 'Jost',sans-serif; font-size: 0.95rem; min-width: 200px; outline: none; }
     .brand-bar .brand-hint { color: var(--text-dim); font-size: 0.8rem; font-style: italic; margin-left: auto; }
@@ -21,26 +21,84 @@
     .fld-row { display: flex; gap: 10px; }
     .fld-row .fld { flex: 1; }
 
-    .btn-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
-    .btn-ph { border: none; border-radius: 4px; padding: 10px 22px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+    /* === BUTONLAR KUCULTULDU VE KOMPAKT HALE GETIRILDI === */
+    .btn-bar {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin: 12px 0;
+        padding: 8px 0;
+    }
+    .btn-ph {
+        border: none;
+        border-radius: 4px;
+        padding: 6px 14px;
+        font-family: 'Jost',sans-serif;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s;
+    }
     .btn-primary { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
     .btn-secondary { background: rgba(255,255,255,0.06); color: var(--cream); border: 1px solid var(--border); }
     .btn-danger { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
-    .btn-ph:hover { opacity: 0.9; }
+    .btn-ph:hover { opacity: 0.85; transform: scale(0.98); }
 
     .ph-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
-    .table-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
-    .ph-table { border-collapse: collapse; white-space: nowrap; font-size: 0.78rem; }
-    .ph-table th { text-align: left; font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
-    .ph-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; }
+
+    /* === TABLO SCROLL - SADECE TABLO ICINDE KAYDIRMA === */
+    .table-wrapper {
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+
+    .table-scroll {
+        max-height: 460px;
+        overflow-y: auto;
+        overflow-x: auto;
+        width: 100%;
+        display: block;
+    }
+
+    .ph-table {
+        font-size: 0.72rem;
+        border-collapse: collapse;
+        width: auto;
+        min-width: 100%;
+        table-layout: auto;
+    }
+
+    .ph-table th {
+        text-align: left;
+        font-size: 0.6rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--gold);
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        background: var(--dark2);
+        z-index: 2;
+        white-space: nowrap;
+    }
+    .ph-table td {
+        padding: 5px 8px;
+        border-bottom: 1px solid rgba(201,168,76,0.08);
+        font-weight: 300;
+        white-space: nowrap;
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     .ph-table tbody tr { cursor: pointer; }
     .ph-table tbody tr:hover { background: rgba(201,168,76,0.06); }
     .ph-table tbody tr.selected { background: rgba(201,168,76,0.14); }
     .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
-
-
-
-
 
     /* --- KOMPAKT DÜZEN: paneller içerik kadar dar, tablo kendi içinde kayar --- */
     .panel-grid { display: block; margin-bottom: 10px; }
@@ -54,24 +112,56 @@
         width: fit-content;
         max-width: 100%;
     }
-    .ph-panel h3 { flex: 0 0 100%; margin-bottom: 6px; }
-    .fld { flex: 0 0 180px; margin-bottom: 2px; }
-    .fld label { font-size: 0.6rem; margin-bottom: 2px; letter-spacing: 0.03em; }
-    .fld input, .fld select, .fld textarea { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
+    .ph-panel h3 { flex: 0 0 100%; margin-bottom: 6px; font-size: 1rem; }
+    .fld { flex: 0 0 170px; margin-bottom: 2px; }
+    .fld label { font-size: 0.55rem; margin-bottom: 2px; letter-spacing: 0.03em; }
+    .fld input, .fld select, .fld textarea { width: 100%; font-size: 0.75rem; padding: 4px 6px; }
     .fld-row { display: contents; }
-    .fld textarea { flex: 0 0 180px; }
-    .brand-bar select { width: 200px; min-width: 160px; }
+    .fld textarea { flex: 0 0 170px; }
+    .brand-bar select { width: 180px; min-width: 140px; }
 
-    .table-scroll {
-        max-height: 460px;
-        overflow: auto;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        width: 100%;
+    /* Butonlarin daha da kuculmesi icin mobil uyum */
+    @media (max-width: 768px) {
+        .btn-ph {
+            padding: 4px 10px;
+            font-size: 0.7rem;
+        }
+        .btn-bar { gap: 4px; }
+        .ph-panel { padding: 8px 10px; }
+        .fld { flex: 0 0 140px; }
     }
-    .ph-table { font-size: 0.72rem; }
-    .ph-table th, .ph-table td { padding: 5px 8px; }
 
+    /* === TASMA DUZELTMESI (butonlar + panel + tablo yatay scroll) === */
+    /* Icerik alani flex item; min-width:0 olmadan cocuk tablo sayfayi genisletir */
+    .content { min-width: 0; overflow-x: hidden; }
+    .panel { max-width: 100%; overflow: hidden; }
+
+    /* Butonlari standart boyutta tut, buyumesinler */
+    .btn-ph {
+        padding: 6px 14px !important;
+        font-size: 0.78rem !important;
+        min-width: auto !important;
+        flex: 0 0 auto !important;
+        white-space: nowrap;
+    }
+    .btn-bar { gap: 6px !important; }
+
+    /* Panel: cok genisleme, icerik kadar ama sayfayi asma */
+    .ph-panel { max-width: 100%; box-sizing: border-box; }
+
+    /* Tablo: SADECE kendi kutusunda yatay + dikey kayar, sayfa kaymaz */
+    .table-scroll {
+        max-height: 400px;
+        overflow: auto !important;      /* hem X hem Y */
+        max-width: 100%;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        display: block;
+    }
+    /* Tablo icerik kadar genis; kapsayiciyi asinca table-scroll'da scroll cikar */
+    .ph-table { width: max-content; max-width: none; border-collapse: collapse; white-space: nowrap; }
+    .ph-table th, .ph-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 </style>
 
 <h1 class="page-title">аптека вход Обновление</h1>
@@ -336,9 +426,10 @@
         </div>
     </div>
 
+    <!-- === BUTONLAR KUCULTULDU === -->
     <div class="btn-bar">
-        <button type="button" class="btn-ph btn-primary" onclick="phList()">Список аптек</button>
-        <button type="button" class="btn-ph btn-primary" onclick="phSubmit('add')">Добавить аптеку</button>
+        <button type="button" class="btn-ph btn-primary" onclick="phList()">Список</button>
+        <button type="button" class="btn-ph btn-primary" onclick="phSubmit('add')">Добавить</button>
         <button type="button" class="btn-ph btn-primary" onclick="phSubmit('update')">Обновить</button>
         <button type="button" class="btn-ph btn-danger" onclick="phSubmit('delete')">Удалить</button>
         <button type="button" class="btn-ph btn-secondary" onclick="phCleanup()">Очистить</button>
@@ -347,57 +438,60 @@
 
 <div class="ph-count">Всего: {{ total_rows }}{% if total_rows > 500 %} (показаны первые 500){% endif %}</div>
 
-<div class="table-scroll">
-<table class="ph-table">
-    <thead>
-        <tr>
-            <th>ID</th><th>Страна</th><th>Обл.</th><th>Регион</th><th>Город</th><th>Метро</th><th>Округ</th>
-            <th>Сеть</th><th>Подсеть</th><th>№</th><th>Адрес</th><th>Кат.</th><th>Ассорт.</th><th>Тип</th>
-            <th>Промо</th><th>Corner</th><th>Медреп</th><th>Ответ.</th><th>Тел.</th><th>Email</th>
-            <th>Актив.</th><th>Дата акт.</th><th>Группа</th><th>SKU</th><th>Фарм.1</th><th>Тел.1</th>
-            <th>Фарм.2</th><th>Тел.2</th><th>Коммент.</th><th>Полный адрес</th><th>Тип зд.</th><th>Код стр.</th>
-            <th>Улица</th><th>Дом</th><th>X</th><th>Y</th><th>Польз.</th><th>Дата вв.</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for p in records %}
-        <tr class="ph-row"
-            data-id="{{ p.id }}" data-country="{{ p.country|default:'' }}" data-area="{{ p.area|default:'' }}"
-            data-region="{{ p.region|default:'' }}" data-city="{{ p.city|default:'' }}" data-metro="{{ p.metro|default:'' }}"
-            data-district="{{ p.district|default:'' }}" data-group_company="{{ p.group_company|default:'' }}"
-            data-subgroup_company="{{ p.subgroup_company|default:'' }}" data-pharmacy_no="{{ p.pharmacy_no|default:'' }}"
-            data-pharmacy_address="{{ p.pharmacy_address|default:'' }}" data-pharmacy_category="{{ p.pharmacy_category|default:'' }}"
-            data-assortiment="{{ p.assortiment|default:'' }}" data-pharmacy_type="{{ p.pharmacy_type|default:'' }}"
-            data-promo="{{ p.promo|default:'' }}" data-cornerNo="{{ p.cornerNo|default:'' }}"
-            data-marketing_staff="{{ p.marketing_staff|default:'' }}" data-pharmacy_response_person="{{ p.pharmacy_response_person|default:'' }}"
-            data-pharmacy_tel="{{ p.pharmacy_tel|default:'' }}" data-pharmacy_email="{{ p.pharmacy_email|default:'' }}"
-            data-pharmacy_activeness="{{ p.pharmacy_activeness|default:'' }}" data-pharmacy_activation_date="{{ p.pharmacy_activation_date|default:'' }}"
-            data-pharmacy_group="{{ p.pharmacy_group|default:'' }}" data-sku="{{ p.sku|default:'' }}"
-            data-pharmacist_name_1="{{ p.pharmacist_name_1|default:'' }}" data-pharmacy_home_tel="{{ p.pharmacy_home_tel|default:'' }}"
-            data-pharmacist_name_2="{{ p.pharmacist_name_2|default:'' }}" data-pharmacy_work_tel="{{ p.pharmacy_work_tel|default:'' }}"
-            data-comments="{{ p.comments|default:'' }}" data-full_address="{{ p.full_address|default:'' }}"
-            data-building_type="{{ p.building_type|default:'' }}" data-country_code="{{ p.country_code|default:'' }}"
-            data-street="{{ p.street|default:'' }}" data-homenumber="{{ p.homenumber|default:'' }}"
-            data-point_x="{{ p.point_x|default:'' }}" data-point_y="{{ p.point_y|default:'' }}">
-            <td>{{ p.id }}</td><td>{{ p.country|default:"—" }}</td><td>{{ p.area|default:"—" }}</td><td>{{ p.region|default:"—" }}</td>
-            <td>{{ p.city|default:"—" }}</td><td>{{ p.metro|default:"—" }}</td><td>{{ p.district|default:"—" }}</td>
-            <td>{{ p.group_company|default:"—" }}</td><td>{{ p.subgroup_company|default:"—" }}</td><td>{{ p.pharmacy_no|default:"—" }}</td>
-            <td>{{ p.pharmacy_address|default:"—" }}</td><td>{{ p.pharmacy_category|default:"—" }}</td><td>{{ p.assortiment|default:"—" }}</td>
-            <td>{{ p.pharmacy_type|default:"—" }}</td><td>{{ p.promo|default:"—" }}</td><td>{{ p.cornerNo|default:"—" }}</td>
-            <td>{{ p.marketing_staff|default:"—" }}</td><td>{{ p.pharmacy_response_person|default:"—" }}</td><td>{{ p.pharmacy_tel|default:"—" }}</td>
-            <td>{{ p.pharmacy_email|default:"—" }}</td><td>{{ p.pharmacy_activeness|default:"—" }}</td><td>{{ p.pharmacy_activation_date|default:"—" }}</td>
-            <td>{{ p.pharmacy_group|default:"—" }}</td><td>{{ p.sku|default:"—" }}</td><td>{{ p.pharmacist_name_1|default:"—" }}</td>
-            <td>{{ p.pharmacy_home_tel|default:"—" }}</td><td>{{ p.pharmacist_name_2|default:"—" }}</td><td>{{ p.pharmacy_work_tel|default:"—" }}</td>
-            <td>{{ p.comments|default:"—" }}</td><td>{{ p.full_address|default:"—" }}</td><td>{{ p.building_type|default:"—" }}</td>
-            <td>{{ p.country_code|default:"—" }}</td><td>{{ p.street|default:"—" }}</td><td>{{ p.homenumber|default:"—" }}</td>
-            <td>{{ p.point_x|default:"—" }}</td><td>{{ p.point_y|default:"—" }}</td><td>{{ p.entry_user|default:"—" }}</td>
-            <td>{{ p.entry_date|default:"—" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="38" class="empty">Нет данных</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<!-- TABLO WRAPPER - Sayfanın taşmasını engeller -->
+<div class="table-wrapper">
+    <div class="table-scroll">
+        <table class="ph-table">
+            <thead>
+                <tr>
+                    <th>ID</th><th>Страна</th><th>Обл.</th><th>Регион</th><th>Город</th><th>Метро</th><th>Округ</th>
+                    <th>Сеть</th><th>Подсеть</th><th>№</th><th>Адрес</th><th>Кат.</th><th>Ассорт.</th><th>Тип</th>
+                    <th>Промо</th><th>Corner</th><th>Медреп</th><th>Ответ.</th><th>Тел.</th><th>Email</th>
+                    <th>Актив.</th><th>Дата акт.</th><th>Группа</th><th>SKU</th><th>Фарм.1</th><th>Тел.1</th>
+                    <th>Фарм.2</th><th>Тел.2</th><th>Коммент.</th><th>Полный адрес</th><th>Тип зд.</th><th>Код стр.</th>
+                    <th>Улица</th><th>Дом</th><th>X</th><th>Y</th><th>Польз.</th><th>Дата вв.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in records %}
+                <tr class="ph-row"
+                    data-id="{{ p.id }}" data-country="{{ p.country|default:'' }}" data-area="{{ p.area|default:'' }}"
+                    data-region="{{ p.region|default:'' }}" data-city="{{ p.city|default:'' }}" data-metro="{{ p.metro|default:'' }}"
+                    data-district="{{ p.district|default:'' }}" data-group_company="{{ p.group_company|default:'' }}"
+                    data-subgroup_company="{{ p.subgroup_company|default:'' }}" data-pharmacy_no="{{ p.pharmacy_no|default:'' }}"
+                    data-pharmacy_address="{{ p.pharmacy_address|default:'' }}" data-pharmacy_category="{{ p.pharmacy_category|default:'' }}"
+                    data-assortiment="{{ p.assortiment|default:'' }}" data-pharmacy_type="{{ p.pharmacy_type|default:'' }}"
+                    data-promo="{{ p.promo|default:'' }}" data-cornerNo="{{ p.cornerNo|default:'' }}"
+                    data-marketing_staff="{{ p.marketing_staff|default:'' }}" data-pharmacy_response_person="{{ p.pharmacy_response_person|default:'' }}"
+                    data-pharmacy_tel="{{ p.pharmacy_tel|default:'' }}" data-pharmacy_email="{{ p.pharmacy_email|default:'' }}"
+                    data-pharmacy_activeness="{{ p.pharmacy_activeness|default:'' }}" data-pharmacy_activation_date="{{ p.pharmacy_activation_date|default:'' }}"
+                    data-pharmacy_group="{{ p.pharmacy_group|default:'' }}" data-sku="{{ p.sku|default:'' }}"
+                    data-pharmacist_name_1="{{ p.pharmacist_name_1|default:'' }}" data-pharmacy_home_tel="{{ p.pharmacy_home_tel|default:'' }}"
+                    data-pharmacist_name_2="{{ p.pharmacist_name_2|default:'' }}" data-pharmacy_work_tel="{{ p.pharmacy_work_tel|default:'' }}"
+                    data-comments="{{ p.comments|default:'' }}" data-full_address="{{ p.full_address|default:'' }}"
+                    data-building_type="{{ p.building_type|default:'' }}" data-country_code="{{ p.country_code|default:'' }}"
+                    data-street="{{ p.street|default:'' }}" data-homenumber="{{ p.homenumber|default:'' }}"
+                    data-point_x="{{ p.point_x|default:'' }}" data-point_y="{{ p.point_y|default:'' }}">
+                    <td>{{ p.id }}</td><td>{{ p.country|default:"—" }}</td><td>{{ p.area|default:"—" }}</td><td>{{ p.region|default:"—" }}</td>
+                    <td>{{ p.city|default:"—" }}</td><td>{{ p.metro|default:"—" }}</td><td>{{ p.district|default:"—" }}</td>
+                    <td>{{ p.group_company|default:"—" }}</td><td>{{ p.subgroup_company|default:"—" }}</td><td>{{ p.pharmacy_no|default:"—" }}</td>
+                    <td>{{ p.pharmacy_address|default:"—" }}</td><td>{{ p.pharmacy_category|default:"—" }}</td><td>{{ p.assortiment|default:"—" }}</td>
+                    <td>{{ p.pharmacy_type|default:"—" }}</td><td>{{ p.promo|default:"—" }}</td><td>{{ p.cornerNo|default:"—" }}</td>
+                    <td>{{ p.marketing_staff|default:"—" }}</td><td>{{ p.pharmacy_response_person|default:"—" }}</td><td>{{ p.pharmacy_tel|default:"—" }}</td>
+                    <td>{{ p.pharmacy_email|default:"—" }}</td><td>{{ p.pharmacy_activeness|default:"—" }}</td><td>{{ p.pharmacy_activation_date|default:"—" }}</td>
+                    <td>{{ p.pharmacy_group|default:"—" }}</td><td>{{ p.sku|default:"—" }}</td><td>{{ p.pharmacist_name_1|default:"—" }}</td>
+                    <td>{{ p.pharmacy_home_tel|default:"—" }}</td><td>{{ p.pharmacist_name_2|default:"—" }}</td><td>{{ p.pharmacy_work_tel|default:"—" }}</td>
+                    <td>{{ p.comments|default:"—" }}</td><td>{{ p.full_address|default:"—" }}</td><td>{{ p.building_type|default:"—" }}</td>
+                    <td>{{ p.country_code|default:"—" }}</td><td>{{ p.street|default:"—" }}</td><td>{{ p.homenumber|default:"—" }}</td>
+                    <td>{{ p.point_x|default:"—" }}</td><td>{{ p.point_y|default:"—" }}</td><td>{{ p.entry_user|default:"—" }}</td>
+                    <td>{{ p.entry_date|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="38" class="empty">Нет данных</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>

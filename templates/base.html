@@ -182,6 +182,9 @@
                             {% if "PHARM_MANAGERIAL" in accessible_screens %}
                             <a href="{% url 'sales:pharm_managerial' %}" class="nav-link {% block nav_pharm_managerial %}{% endblock %}">Экран администрирования аптек</a>
                             {% endif %}
+                            {% if "DOCTOR_MANAGERIAL" in accessible_screens %}
+                            <a href="{% url 'sales:doctor_managerial' %}" class="nav-link {% block nav_doctor_managerial %}{% endblock %}">Экран администрирования врача</a>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}

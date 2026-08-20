@@ -4,69 +4,287 @@
 
 {% block content %}
 <style>
-    .doc-form { margin-bottom: 20px; }
-    .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    .doc-panel { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
-    .doc-panel h3 { font-family: 'Cormorant Garamond',serif; font-size: 1.1rem; color: var(--gold-light); font-weight: 400; margin-bottom: 14px; letter-spacing: 0.03em; }
-    .fld { margin-bottom: 10px; }
-    .fld label { display: block; font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
-    .fld input, .fld select, .fld textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 8px 10px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.84rem; outline: none; }
-    .fld input:focus, .fld select:focus, .fld textarea:focus { border-color: var(--gold); }
-    .fld select option { background: var(--dark2); }
-    .fld-row { display: flex; gap: 10px; }
-    .fld-row .fld { flex: 1; }
-
-    .btn-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
-    .btn-doc { border: none; border-radius: 4px; padding: 10px 22px; font-family: 'Jost',sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
-    .btn-primary { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); }
-    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--cream); border: 1px solid var(--border); }
-    .btn-danger { background: rgba(224,85,85,0.15); color: #f4a0a0; border: 1px solid rgba(224,85,85,0.35); }
-    .btn-doc:hover { opacity: 0.9; }
-
-    .doc-count { color: var(--text-dim); font-size: 0.82rem; margin: 10px 0; }
-    .table-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
-    .doc-table { border-collapse: collapse; white-space: nowrap; font-size: 0.8rem; }
-    .doc-table th { text-align: left; font-size: 0.66rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold); padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
-    .doc-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; }
-    .doc-table tbody tr { cursor: pointer; }
-    .doc-table tbody tr:hover { background: rgba(201,168,76,0.06); }
-    .doc-table tbody tr.selected { background: rgba(201,168,76,0.14); }
-    .empty { text-align: center; color: var(--text-dim); padding: 30px; font-style: italic; }
-
-
-
-
-
-    /* --- KOMPAKT DÜZEN: paneller içerik kadar dar, tablo kendi içinde kayar --- */
-    .panel-grid { display: block; margin-bottom: 10px; }
-    .doc-panel {
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    .doc-form { 
+        margin: 0;
+        padding: 0;
+    }
+    
+    .panel-grid { 
+        display: grid; 
+        grid-template-columns: 1fr; /* TEK SÜTUN - alt alta */
+        gap: 2px; 
+        margin-bottom: 2px; 
+    }
+    
+    .doc-panel { 
+        background: rgba(255,255,255,0.02); 
+        border: 1px solid var(--border); 
+        border-radius: 3px; 
+        padding: 2px 4px !important; 
+        margin: 0;
+    }
+    
+    .doc-panel h3 { 
+        font-family: 'Cormorant Garamond',serif; 
+        font-size: 0.8rem; 
+        color: var(--gold-light); 
+        font-weight: 400; 
+        margin-bottom: 1px; 
+        letter-spacing: 0.01em; 
+    }
+    
+    .fld { 
+        margin-bottom: 0px; 
+        padding: 0;
+    }
+    
+    .fld label { 
+        display: inline-block; /* label ve input yan yana */
+        font-size: 0.6rem; 
+        letter-spacing: 0.01em; 
+        text-transform: uppercase; 
+        color: var(--gold); 
+        margin-bottom: 0px; 
+        padding: 0;
+        line-height: 1.4;
+        min-width: 120px; /* label sabit genişlik */
+    }
+    
+    .fld input, .fld select, .fld textarea { 
+        display: inline-block;
+        width: auto; 
+        min-width: 180px;
+        background: rgba(255,255,255,0.04); 
+        border: 1px solid rgba(201,168,76,0.25); 
+        border-radius: 3px; 
+        padding: 1px 4px; 
+        color: var(--cream); 
+        font-family: 'Jost',sans-serif; 
+        font-size: 0.7rem; 
+        outline: none; 
+        height: 24px;
+        line-height: 1.4;
+        margin: 0;
+    }
+    
+    .fld input:focus, .fld select:focus, .fld textarea:focus { 
+        border-color: var(--gold); 
+    }
+    
+    .fld select option { 
+        background: var(--dark2); 
+    }
+    
+    .fld-row { 
+        display: flex; 
+        gap: 2px; 
+        margin: 0 !important; 
+        padding: 0 !important;
+        flex-wrap: wrap;
+    }
+    
+    .fld-row .fld { 
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0;
+    }
+    
+    /* Her satır için label + input yan yana */
+    .fld-inline {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: 1px;
+        padding: 0;
+    }
+    
+    .fld-inline label {
+        min-width: 120px;
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin: 0;
+        padding: 0;
+    }
+    
+    .fld-inline input,
+    .fld-inline select,
+    .fld-inline textarea {
+        flex: 1;
+        min-width: 150px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(201,168,76,0.25);
+        border-radius: 3px;
+        padding: 1px 4px;
+        color: var(--cream);
+        font-family: 'Jost',sans-serif;
+        font-size: 0.7rem;
+        outline: none;
+        height: 24px;
+        margin: 0;
+    }
+    
+    .fld-inline textarea {
+        height: auto;
+        min-height: 30px;
+    }
+    
+    .fld-inline select option {
+        background: var(--dark2);
+    }
+    
+    .btn-bar { 
+        display: flex; 
+        gap: 3px; 
+        flex-wrap: wrap; 
+        margin: 3px 0; 
+    }
+    
+    .btn-doc { 
+        border: none; 
+        border-radius: 3px; 
+        padding: 3px 8px; 
+        font-family: 'Jost',sans-serif; 
+        font-size: 0.68rem; 
+        font-weight: 500; 
+        cursor: pointer; 
+    }
+    
+    .btn-primary { 
+        background: linear-gradient(135deg, var(--gold-dim), var(--gold)); 
+        color: var(--dark); 
+    }
+    
+    .btn-secondary { 
+        background: rgba(255,255,255,0.06); 
+        color: var(--cream); 
+        border: 1px solid var(--border); 
+    }
+    
+    .btn-danger { 
+        background: rgba(224,85,85,0.15); 
+        color: #f4a0a0; 
+        border: 1px solid rgba(224,85,85,0.35); 
+    }
+    
+    .btn-doc:hover { 
+        opacity: 0.9; 
+    }
+    
+    .doc-count { 
+        color: var(--text-dim); 
+        font-size: 0.7rem; 
+        margin: 3px 0; 
+    }
+    
+    .table-scroll { 
+        max-height: 300px; 
+        overflow: auto; 
+        border: 1px solid var(--border); 
+        border-radius: 4px; 
+    }
+    
+    .doc-table { 
+        border-collapse: collapse; 
+        white-space: nowrap; 
+        font-size: 0.65rem; 
+    }
+    
+    .doc-table th { 
+        text-align: left; 
+        font-size: 0.5rem; 
+        letter-spacing: 0.03em; 
+        text-transform: uppercase; 
+        color: var(--gold); 
+        padding: 3px 4px; 
+        border-bottom: 1px solid var(--border); 
+        position: sticky; 
+        top: 0; 
+        background: var(--dark2); 
+    }
+    
+    .doc-table td { 
+        padding: 2px 4px; 
+        border-bottom: 1px solid rgba(201,168,76,0.08); 
+        font-weight: 300; 
+    }
+    
+    .doc-table tbody tr { 
+        cursor: pointer; 
+    }
+    
+    .doc-table tbody tr:hover { 
+        background: rgba(201,168,76,0.06); 
+    }
+    
+    .doc-table tbody tr.selected { 
+        background: rgba(201,168,76,0.14); 
+    }
+    
+    .empty { 
+        text-align: center; 
+        color: var(--text-dim); 
+        padding: 15px; 
+        font-style: italic; 
+    }
+    
+    .fld-row-inline {
         display: flex;
         flex-wrap: wrap;
-        align-content: flex-start;
-        gap: 4px 12px;
-        padding: 12px 16px;
-        margin-bottom: 10px;
-        width: fit-content;      /* panel içeriği kadar geniş, sağa uzamaz */
-        max-width: 100%;
+        gap: 4px 10px;
+        margin: 0;
+        padding: 0;
     }
-    .doc-panel h3 { flex: 0 0 100%; margin-bottom: 6px; }
-    .fld { flex: 0 0 180px; margin-bottom: 2px; }
-    .fld label { font-size: 0.6rem; margin-bottom: 2px; letter-spacing: 0.03em; }
-    .fld input, .fld select, .fld textarea { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
-    .fld-row { display: contents; }
-    .fld textarea { flex: 0 0 180px; }
+    
+    .fld-row-inline .fld-inline {
+        flex: 1 1 auto;
+        min-width: 200px;
+        margin-bottom: 1px;
+    }
+    
+    #btnFindAddress {
+        margin-top: 2px !important;
+        padding: 2px 8px !important;
+        font-size: 0.6rem !important;
+    }
 
-    /* Tablo: sadece kendi kutusunda yatay kayar, sayfa taşmaz */
+    /* === TASMA DUZELTMESI (butonlar + panel + tablo yatay scroll) === */
+    /* Icerik alani flex item; min-width:0 olmadan cocuk tablo sayfayi genisletir */
+    .content { min-width: 0; overflow-x: hidden; }
+    .panel { max-width: 100%; overflow: hidden; }
+
+    /* Butonlari standart boyutta tut, buyumesinler */
+    .btn-doc {
+        padding: 6px 14px !important;
+        font-size: 0.78rem !important;
+        min-width: auto !important;
+        flex: 0 0 auto !important;
+        white-space: nowrap;
+    }
+    .btn-bar { gap: 6px !important; }
+
+    /* Panel: cok genisleme, icerik kadar ama sayfayi asma */
+    .doc-panel { max-width: 100%; box-sizing: border-box; }
+
+    /* Tablo: SADECE kendi kutusunda yatay + dikey kayar, sayfa kaymaz */
     .table-scroll {
-        max-height: 460px;
-        overflow: auto;
-        border: 1px solid var(--border);
-        border-radius: 8px;
+        max-height: 400px;
+        overflow: auto !important;      /* hem X hem Y */
+        max-width: 100%;
         width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        display: block;
     }
-    .doc-table { font-size: 0.75rem; }
-    .doc-table th, .doc-table td { padding: 5px 8px; }
-
+    /* Tablo icerik kadar genis; kapsayiciyi asinca table-scroll'da scroll cikar */
+    .doc-table { width: max-content; max-width: none; border-collapse: collapse; white-space: nowrap; }
+    .doc-table th, .doc-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 </style>
 
 <h1 class="page-title">Врач вход Обновление</h1>
@@ -77,189 +295,185 @@
     <input type="hidden" name="action" id="docAction" value="">
     <input type="hidden" name="doctor_pk" id="docPk" value="">
 
-    <div class="panel-grid">
-        <!-- Panel 1: Global Address -->
-        <div class="doc-panel">
-            <h3>Глобальный адрес</h3>
-            <div class="fld">
-                <label for="brand">Компания</label>
-                <select id="brand" name="brand">
+    <!-- Panel 1: Global Address -->
+    <div class="doc-panel">
+        <h3>Глобальный адрес</h3>
+        <div class="fld-inline">
+            <label for="brand">Компания</label>
+            <select id="brand" name="brand">
+                <option value="">—</option>
+                {% for b in brands %}<option value="{{ b }}" {% if b == f.brand %}selected{% endif %}>{{ b }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="fld-inline">
+            <label for="country">Страна</label>
+            <select id="country" name="country">
+                <option value="">—</option>
+                {% for c in options.countries %}<option value="{{ c }}" {% if c == f.country %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="fld-inline">
+            <label for="area">Область (Area)</label>
+            <select id="area" name="area">
+                <option value="">—</option>
+                {% for a in options.areas %}<option value="{{ a }}" {% if a == f.area %}selected{% endif %}>{{ a }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="fld-inline">
+            <label for="region">Регион</label>
+            <select id="region" name="region">
+                <option value="">—</option>
+                {% for r in options.regions %}<option value="{{ r }}" {% if r == f.region %}selected{% endif %}>{{ r }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="fld-inline">
+            <label for="city">Город</label>
+            <select id="city" name="city">
+                <option value="">—</option>
+                {% for c in options.cities %}<option value="{{ c }}" {% if c == f.city %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="fld-inline">
+            <label for="district">Округ (District)</label>
+            <select id="district" name="district">
+                <option value="">—</option>
+                {% for d in options.districts %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Panel 2: Doctor Info -->
+    <div class="doc-panel">
+        <h3>Информация о враче</h3>
+        <div class="fld-inline">
+            <label for="doctor_name">Имя доктора</label>
+            <input type="text" id="doctor_name" name="doctor_name" value="{{ f.doctor_name }}">
+        </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="medrep">Мед. представитель</label>
+                <select id="medrep" name="medrep">
                     <option value="">—</option>
-                    {% for b in brands %}<option value="{{ b }}" {% if b == f.brand %}selected{% endif %}>{{ b }}</option>{% endfor %}
+                    {% for m in options.medreps %}<option value="{{ m }}" {% if m == f.medrep %}selected{% endif %}>{{ m }}</option>{% endfor %}
                 </select>
             </div>
-            <div class="fld">
-                <label for="country">Страна</label>
-                <select id="country" name="country">
+            <div class="fld-inline">
+                <label for="activeness">Активность</label>
+                <select id="activeness" name="activeness">
                     <option value="">—</option>
-                    {% for c in options.countries %}<option value="{{ c }}" {% if c == f.country %}selected{% endif %}>{{ c }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="fld">
-                <label for="area">Область (Area)</label>
-                <select id="area" name="area">
-                    <option value="">—</option>
-                    {% for a in options.areas %}<option value="{{ a }}" {% if a == f.area %}selected{% endif %}>{{ a }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="fld">
-                <label for="region">Регион</label>
-                <select id="region" name="region">
-                    <option value="">—</option>
-                    {% for r in options.regions %}<option value="{{ r }}" {% if r == f.region %}selected{% endif %}>{{ r }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="fld">
-                <label for="city">Город</label>
-                <select id="city" name="city">
-                    <option value="">—</option>
-                    {% for c in options.cities %}<option value="{{ c }}" {% if c == f.city %}selected{% endif %}>{{ c }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="fld">
-                <label for="district">Округ (District)</label>
-                <select id="district" name="district">
-                    <option value="">—</option>
-                    {% for d in options.districts %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    {% for a in activeness_list %}<option value="{{ a }}" {% if a == f.activeness %}selected{% endif %}>{{ a }}</option>{% endfor %}
                 </select>
             </div>
         </div>
-
-        <!-- Panel 2: Doctor Info -->
-        <div class="doc-panel">
-            <h3>Информация о враче</h3>
-            <div class="fld">
-                <label for="doctor_name">Имя доктора</label>
-                <input type="text" id="doctor_name" name="doctor_name" value="{{ f.doctor_name }}">
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="unified_specialty">Основная специальность</label>
+                <select id="unified_specialty" name="unified_specialty">
+                    <option value="">—</option>
+                    {% for u in options.unified_specialties %}<option value="{{ u }}" {% if u == f.unified_specialty %}selected{% endif %}>{{ u }}</option>{% endfor %}
+                </select>
             </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="medrep">Мед. представитель</label>
-                    <select id="medrep" name="medrep">
-                        <option value="">—</option>
-                        {% for m in options.medreps %}<option value="{{ m }}" {% if m == f.medrep %}selected{% endif %}>{{ m }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="fld">
-                    <label for="activeness">Активность</label>
-                    <select id="activeness" name="activeness">
-                        <option value="">—</option>
-                        {% for a in activeness_list %}<option value="{{ a }}" {% if a == f.activeness %}selected{% endif %}>{{ a }}</option>{% endfor %}
-                    </select>
-                </div>
+            <div class="fld-inline">
+                <label for="specialty">Специальность</label>
+                <select id="specialty" name="specialty">
+                    <option value="">—</option>
+                    {% for s in options.specialties %}<option value="{{ s }}" {% if s == f.specialty %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select>
             </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="unified_specialty">Основная специальность</label>
-                    <select id="unified_specialty" name="unified_specialty">
-                        <option value="">—</option>
-                        {% for u in options.unified_specialties %}<option value="{{ u }}" {% if u == f.unified_specialty %}selected{% endif %}>{{ u }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="fld">
-                    <label for="specialty">Специальность</label>
-                    <select id="specialty" name="specialty">
-                        <option value="">—</option>
-                        {% for s in options.specialties %}<option value="{{ s }}" {% if s == f.specialty %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                    </select>
-                </div>
+        </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="category">Категория</label>
+                <select id="category" name="category">
+                    <option value="">—</option>
+                    {% for c in categories %}<option value="{{ c }}" {% if c == f.category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
             </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="category">Категория</label>
-                    <select id="category" name="category">
-                        <option value="">—</option>
-                        {% for c in categories %}<option value="{{ c }}" {% if c == f.category %}selected{% endif %}>{{ c }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="fld">
-                    <label for="doctor_tel">Доктор Тел</label>
-                    <input type="text" id="doctor_tel" name="doctor_tel" value="">
-                </div>
+            <div class="fld-inline">
+                <label for="doctor_tel">Доктор Тел</label>
+                <input type="text" id="doctor_tel" name="doctor_tel" value="">
             </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="doctor_email">Эл. адрес</label>
-                    <input type="text" id="doctor_email" name="doctor_email" value="">
-                </div>
-                <div class="fld">
-                    <label for="position_regalia">Должность</label>
-                    <input type="text" id="position_regalia" name="position_regalia" value="">
-                </div>
+        </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="doctor_email">Эл. адрес</label>
+                <input type="text" id="doctor_email" name="doctor_email" value="">
+            </div>
+            <div class="fld-inline">
+                <label for="position_regalia">Должность</label>
+                <input type="text" id="position_regalia" name="position_regalia" value="">
             </div>
         </div>
     </div>
 
-    <div class="panel-grid">
-        <!-- Panel 3: Clinic Info -->
-        <div class="doc-panel">
-            <h3>Информация о клинике</h3>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="clinic_status">Категория клиники</label>
-                    <select id="clinic_status" name="clinic_status">
-                        <option value="">—</option>
-                        {% for c in clinic_statuses %}<option value="{{ c }}" {% if c == f.clinic_status %}selected{% endif %}>{{ c }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="fld">
-                    <label for="clinic_count">Количество</label>
-                    <input type="text" id="clinic_count" name="clinic_count" value="">
-                </div>
+    <!-- Panel 3: Clinic Info -->
+    <div class="doc-panel">
+        <h3>Информация о клинике</h3>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="clinic_status">Категория клиники</label>
+                <select id="clinic_status" name="clinic_status">
+                    <option value="">—</option>
+                    {% for c in clinic_statuses %}<option value="{{ c }}" {% if c == f.clinic_status %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
             </div>
-            <div class="fld">
-                <label for="clinic_name1">Название клиники</label>
-                <input type="text" id="clinic_name1" name="clinic_name1" value="">
-            </div>
-            <div class="fld">
-                <label for="key_person">Ключевой человек</label>
-                <input type="text" id="key_person" name="key_person" value="">
-            </div>
-            <div class="fld">
-                <label for="clinic_address">Адрес клиники</label>
-                <textarea id="clinic_address" name="clinic_address" rows="2"></textarea>
+            <div class="fld-inline">
+                <label for="clinic_count">Количество</label>
+                <input type="text" id="clinic_count" name="clinic_count" value="">
             </div>
         </div>
+        <div class="fld-inline">
+            <label for="clinic_name1">Название клиники</label>
+            <input type="text" id="clinic_name1" name="clinic_name1" value="">
+        </div>
+        <div class="fld-inline">
+            <label for="key_person">Ключевой человек</label>
+            <input type="text" id="key_person" name="key_person" value="">
+        </div>
+        <div class="fld-inline">
+            <label for="clinic_address">Адрес клиники</label>
+            <textarea id="clinic_address" name="clinic_address" rows="2"></textarea>
+        </div>
+    </div>
 
-        <!-- Panel 4: Official Address (geocoding) -->
-        <div class="doc-panel">
-            <h3>Официальный адрес</h3>
-            <div class="fld">
-                <label for="full_address">Официальный адрес</label>
-                <input type="text" id="full_address" name="full_address" value="" readonly>
-            </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="country_code">Код страны</label>
-                    <input type="text" id="country_code" name="country_code" value="" readonly>
-                </div>
-                <div class="fld">
-                    <label for="building_type">Тип здания</label>
-                    <input type="text" id="building_type" name="building_type" value="" readonly>
-                </div>
-            </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="street">Улица</label>
-                    <input type="text" id="street" name="street" value="" readonly>
-                </div>
-                <div class="fld">
-                    <label for="homenumber">Домашний номер</label>
-                    <input type="text" id="homenumber" name="homenumber" value="" readonly>
-                </div>
-            </div>
-            <div class="fld-row">
-                <div class="fld">
-                    <label for="point_x">Точка X</label>
-                    <input type="text" id="point_x" name="point_x" value="" readonly>
-                </div>
-                <div class="fld">
-                    <label for="point_y">Точка Y</label>
-                    <input type="text" id="point_y" name="point_y" value="" readonly>
-                </div>
-            </div>
-            <button type="button" class="btn-doc btn-secondary" id="btnFindAddress" style="margin-top:6px;">Найти адрес</button>
+    <!-- Panel 4: Official Address -->
+    <div class="doc-panel">
+        <h3>Официальный адрес</h3>
+        <div class="fld-inline">
+            <label for="full_address">Официальный адрес</label>
+            <input type="text" id="full_address" name="full_address" value="" readonly>
         </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="country_code">Код страны</label>
+                <input type="text" id="country_code" name="country_code" value="" readonly>
+            </div>
+            <div class="fld-inline">
+                <label for="building_type">Тип здания</label>
+                <input type="text" id="building_type" name="building_type" value="" readonly>
+            </div>
+        </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="street">Улица</label>
+                <input type="text" id="street" name="street" value="" readonly>
+            </div>
+            <div class="fld-inline">
+                <label for="homenumber">Домашний номер</label>
+                <input type="text" id="homenumber" name="homenumber" value="" readonly>
+            </div>
+        </div>
+        <div class="fld-row-inline">
+            <div class="fld-inline">
+                <label for="point_x">Точка X</label>
+                <input type="text" id="point_x" name="point_x" value="" readonly>
+            </div>
+            <div class="fld-inline">
+                <label for="point_y">Точка Y</label>
+                <input type="text" id="point_y" name="point_y" value="" readonly>
+            </div>
+        </div>
+        <button type="button" class="btn-doc btn-secondary" id="btnFindAddress">Найти адрес</button>
     </div>
 
     <div class="btn-bar">
@@ -329,7 +543,6 @@
 
     function byId(id) { return document.getElementById(id); }
 
-    // --- cascading: country -> area -> region -> city ---
     function fill(select, values, keep) {
         var prev = keep ? select.value : "";
         select.innerHTML = '<option value="">—</option>';
@@ -374,7 +587,6 @@
         });
     });
 
-    // --- table row click -> fill form ---
     var FIELDS = ["brand","country","area","region","district","city","activeness","medrep",
         "doctor_date","doctor_name","unified_specialty","specialty","position_regalia","category",
         "clinic_name1","clinic_status","clinic_address","clinic_count","key_person","doctor_tel",
@@ -394,7 +606,6 @@
         });
     });
 
-    // --- buttons ---
     window.docSubmit = function (action) {
         if ((action === "update" || action === "delete") && !byId("docPk").value) {
             alert("Сначала выберите врача из таблицы.");
@@ -406,7 +617,6 @@
     };
 
     window.docList = function () {
-        // GET ile filtrele — form alanlarından query string kur
         var params = new URLSearchParams();
         ["brand","country","area","region","city","medrep","specialty",
          "unified_specialty","category","activeness","doctor_name","clinic_status"].forEach(function (f) {
@@ -422,7 +632,6 @@
         document.querySelectorAll(".doc-row").forEach(function (r) { r.classList.remove("selected"); });
     };
 
-    // Find Address — geocoding henüz bağlı değil
     byId("btnFindAddress").addEventListener("click", function () {
         alert("Функция «Найти адрес» будет подключена позже (геокодирование).");
     });
