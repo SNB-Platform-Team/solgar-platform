@@ -49,18 +49,25 @@
         .layout { display: flex; flex: 1; }
         .sidebar { width: 230px; background: rgba(26,22,16,0.55); backdrop-filter: blur(10px); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
         .nav-section { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); padding: 0 24px; margin: 20px 0 10px; }
-        .nav-link { display: flex; align-items: center; gap: 12px; padding: 11px 24px; color: var(--cream); text-decoration: none; font-size: 0.92rem; font-weight: 300; border-left: 2px solid transparent; transition: background 0.2s, border-color 0.2s; }
-        .nav-link:hover { background: rgba(201,168,76,0.06); border-left-color: var(--gold-dim); }
-        .nav-link.active { background: rgba(201,168,76,0.1); border-left-color: var(--gold); color: var(--gold-light); }
+        .nav-link { display: flex; align-items: center; gap: 12px; padding: 11px 24px; color: var(--cream); text-decoration: none; font-size: 0.92rem; font-weight: 300; border-left: 2px solid transparent; transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, padding-left 0.2s ease; }
+        .nav-link:hover { background: rgba(201,168,76,0.08); border-left-color: var(--gold-dim); color: var(--gold-light); padding-left: 28px; }
+        .nav-link.active { background: linear-gradient(90deg, rgba(201,168,76,0.18), rgba(201,168,76,0.04)); border-left-color: var(--gold); color: var(--gold-light); font-weight: 400; }
+        /* Menu ikonlari: metinle ayni hizada, altin tonunda, gecisli */
+        .nav-ico { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.6; opacity: 0.75; transition: opacity 0.25s ease, transform 0.25s ease; }
+        .nav-link:hover .nav-ico, .nav-group-title:hover .nav-ico { opacity: 1; }
+        .nav-link.active .nav-ico { opacity: 1; color: var(--gold); }
+        .nav-group-title:hover .nav-ico { transform: scale(1.08); }
         .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto; background: var(--gold); color: var(--dark); font-size: 0.72rem; font-weight: 600; border-radius: 10px; }
 
         /* Açılır menü grupları — birinci katman (Главная ile aynı hizada ve renkte) */
         .nav-group { position: relative; }
-        .nav-group-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 24px; color: var(--gold-light); cursor: pointer; font-size: 0.92rem; font-weight: 300; user-select: none; border-left: 2px solid transparent; transition: background 0.2s, border-color 0.2s; }
-        .nav-group-title:hover { background: rgba(201,168,76,0.06); border-left-color: var(--gold-dim); }
+        .nav-group-title { display: flex; align-items: center; gap: 12px; padding: 11px 24px; color: var(--gold-light); cursor: pointer; font-size: 0.92rem; font-weight: 300; user-select: none; border-left: 2px solid transparent; transition: background 0.25s ease, border-color 0.25s ease; }
+        .nav-group-title:hover { background: rgba(201,168,76,0.08); border-left-color: var(--gold-dim); }
+        /* grup basligindaki ok en saga itilsin (ikon+metin solda kalir) */
+        .nav-group-title > .nav-label { flex: 1; }
         .nav-group-title::after { content: '⌄'; font-size: 0.9rem; opacity: 0.5; transition: transform 0.3s; }
         .nav-group.open > .nav-group-title::after { transform: rotate(180deg); }
-        .nav-submenu { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+        .nav-submenu { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1); }
         .nav-group.open > .nav-submenu { max-height: 600px; }
         .nav-toplink { color: var(--gold-light); }
 
@@ -70,7 +77,7 @@
         .nav-subgroup-title::after { content: '›'; font-size: 1rem; opacity: 0.5; transition: transform 0.3s; }
         .nav-subgroup.open > .nav-subgroup-title::after { transform: rotate(90deg); }
         .nav-subgroup-title:hover { background: rgba(201,168,76,0.06); }
-        .nav-subsubmenu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .nav-subsubmenu { max-height: 0; overflow: hidden; transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1); }
         .nav-subgroup.open > .nav-subsubmenu { max-height: 400px; }
         .nav-submenu .nav-link { padding-left: 40px; font-size: 0.88rem; }
         .nav-subsubmenu .nav-link { padding-left: 56px; font-size: 0.85rem; }
@@ -115,12 +122,12 @@
             <div class="nav-section">Меню</div>
 
             {% if "DASHBOARD" in accessible_screens %}
-            <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}">Главная</a>
+            <a href="{% url 'accounts:home' %}" class="nav-link {% block nav_home %}{% endblock %}"><svg class="nav-ico" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Главная</a>
             {% endif %}
 
             {% if "EMPLOYEES" in accessible_screens or "REQUESTS" in accessible_screens or "APPROVALS" in accessible_screens %}
             <div class="nav-group">
-                <div class="nav-group-title">Организация</div>
+                <div class="nav-group-title"><svg class="nav-ico" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/><path d="M16 3.5a3 3 0 0 1 0 7M22 21v-2a5 5 0 0 0-3-4.5"/></svg><span class="nav-label">Организация</span></div>
                 <div class="nav-submenu">
                     {% if "EMPLOYEES" in accessible_screens %}
                     <a href="{% url 'employees:list' %}" class="nav-link {% block nav_employees %}{% endblock %}">Сотрудники</a>
@@ -140,7 +147,7 @@
 
             {% if "SALES_UPLOAD" in accessible_screens or "SALES_VIEW" in accessible_screens %}
             <div class="nav-group">
-                <div class="nav-group-title">Solgar Intern</div>
+                <div class="nav-group-title"><svg class="nav-ico" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span class="nav-label">Solgar Intern</span></div>
                 <div class="nav-submenu">
                     <div class="nav-subgroup">
                         <div class="nav-subgroup-title">Отчет по продажам</div>
@@ -194,7 +201,7 @@
 
             {% if "ONEC_STOCK" in accessible_screens %}
             <div class="nav-group">
-                <div class="nav-group-title">1C</div>
+                <div class="nav-group-title"><svg class="nav-ico" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span class="nav-label">1C</span></div>
                 <div class="nav-submenu">
                     <a href="{% url 'sales:onec_stock' %}" class="nav-link {% block nav_onec_stock %}{% endblock %}">1C - Склад</a>
                 </div>
@@ -203,11 +210,11 @@
             {% endif %}
 
             
-            <a href="https://solgar.hr-link.ru/employee" target="_blank" rel="noopener" class="nav-link nav-toplink">HRlink</a> <!--HR link simdilik boyle kaliyor, daha ileride api ile entegre edebiliriz-->
+            <a href="https://solgar.hr-link.ru/employee" target="_blank" rel="noopener" class="nav-link nav-toplink"><svg class="nav-ico" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>HRlink</a> <!--HR link simdilik boyle kaliyor, daha ileride api ile entegre edebiliriz-->
 
-            <a href="https://solgar.pro/stream/" target="_blank" rel="noopener" class="nav-link nav-toplink">Битрикс24</a> <!--bitrix de simdilik boyle kalsin, kararlastiracagiz nasil olacagini-->
+            <a href="https://solgar.pro/stream/" target="_blank" rel="noopener" class="nav-link nav-toplink"><svg class="nav-ico" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-4-.9L3 21l1.9-4a8.4 8.4 0 0 1-.9-4 8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.4z"/></svg>Битрикс24</a> <!--bitrix de simdilik boyle kalsin, kararlastiracagiz nasil olacagini-->
             
-            <a href="{% url 'accounts:faq' %}" class="nav-link nav-toplink {% block nav_faq %}{% endblock %}">FAQ</a>
+            <a href="{% url 'accounts:faq' %}" class="nav-link nav-toplink {% block nav_faq %}{% endblock %}"><svg class="nav-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>FAQ</a>
 
             
         </aside>

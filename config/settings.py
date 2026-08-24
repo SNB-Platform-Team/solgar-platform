@@ -47,6 +47,7 @@ ALLOWED_HOSTS: list[str] = [
 
 #  Applications
 INSTALLED_APPS: list[str] = [
+    "unfold",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",

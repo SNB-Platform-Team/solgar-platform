@@ -20,7 +20,7 @@
     .fld select option { background: var(--dark2); }
     .fld-row { display: flex; gap: 10px; }
     .fld-row .fld { flex: 1; }
-
+    .panel-grid  {display: grid; grid-template-columns:1fr 1fr 
     /* === BUTONLAR KUCULTULDU VE KOMPAKT HALE GETIRILDI === */
     .btn-bar {
         display: flex;
@@ -573,7 +573,7 @@
         fetchOpts("subchain", { group_company: this.value }).then(function (o) { fill(byId("subgroup_company"), o); });
     });
 
-    // Tablo satırına tıkla -> form doldur
+    
     var FIELDS = ["country","area","region","city","metro","district","group_company","subgroup_company",
         "pharmacy_no","pharmacy_address","pharmacy_category","assortiment","pharmacy_type","promo","cornerNo",
         "marketing_staff","pharmacy_response_person","pharmacy_tel","pharmacy_email","pharmacy_activeness",
