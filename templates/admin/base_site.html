@@ -7,6 +7,205 @@
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'admin/css/solgar_admin.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        /* Admin panelinin genişliğini artır ve sağdaki boşluğu kaldır */
+        #container {
+            max-width: 100% !important;
+            padding: 0 10px !important;
+        }
+        
+        #content {
+            max-width: 100% !important;
+            padding: 20px !important;
+        }
+        
+        #content-main {
+            max-width: 100% !important;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .dashboard #content {
+            width: 100% !important;
+        }
+        
+        /* App listesini daha iyi görünür yap */
+        .module {
+            background: var(--dark2, #1a1610);
+            border: 1px solid var(--border, rgba(201,168,76,0.22));
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            width: 100% !important;
+        }
+        
+        .module table {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+        
+        .module caption {
+            background: rgba(201,168,76,0.1);
+            padding: 12px 20px;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--gold-light, #e8c96a);
+            text-align: left;
+            border-bottom: 1px solid var(--border, rgba(201,168,76,0.22));
+        }
+        
+        .module caption a {
+            color: var(--gold-light, #e8c96a);
+            text-decoration: none;
+        }
+        
+        .module caption a:hover {
+            color: #f5e6b8;
+        }
+        
+        .module th,
+        .module td {
+            padding: 10px 20px !important;
+            border-bottom: 1px solid var(--border, rgba(201,168,76,0.08));
+            text-align: left;
+        }
+        
+        .module th {
+            width: 55%;
+            font-weight: 400;
+        }
+        
+        .module td {
+            width: 22.5%;
+            text-align: center;
+        }
+        
+        .module tr:last-child th,
+        .module tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .module tr:hover {
+            background: rgba(201,168,76,0.05);
+        }
+        
+        .module .addlink,
+        .module .changelink {
+            color: var(--gold-light, #e8c96a);
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 4px 12px;
+            border: 1px solid rgba(201,168,76,0.25);
+            border-radius: 4px;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        
+        .module .addlink:hover,
+        .module .changelink:hover {
+            background: rgba(201,168,76,0.15);
+            border-color: var(--gold-light, #e8c96a);
+        }
+        
+        .module .addlink::before {
+            content: "+ ";
+            font-weight: bold;
+        }
+        
+        /* App listesini grid yap */
+        #content-main .app-list-wrap {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        
+        #content-main .app-list-wrap .module {
+            margin-bottom: 0;
+        }
+        
+        /* Responsive - 3 sütun */
+        @media (min-width: 1600px) {
+            #content-main .app-list-wrap {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
+        
+        /* Responsive - 1 sütun */
+        @media (max-width: 992px) {
+            #content-main .app-list-wrap {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Dashboard istatistikleri için düzenlemeler */
+        .solgar-dashboard {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        
+        .stat-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-card {
+            flex: 1 1 160px;
+            background: var(--dark2, #1a1610);
+            border: 1px solid var(--border, rgba(201,168,76,0.22));
+            border-radius: 8px;
+            padding: 18px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+        }
+        
+        .stat-card .num {
+            font-size: 2rem;
+            font-weight: 500;
+            color: var(--gold-light, #e8c96a);
+            font-family: 'Cormorant Garamond', serif;
+        }
+        
+        .stat-card .lbl {
+            font-size: 0.78rem;
+            color: var(--text-dim, #9a917f);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 16px;
+        }
+        
+        .chart-card {
+            background: var(--dark2, #1a1610);
+            border: 1px solid var(--border, rgba(201,168,76,0.22));
+            border-radius: 8px;
+            padding: 16px 18px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+        }
+        
+        .chart-card h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 500;
+            color: var(--gold-light, #e8c96a);
+            font-size: 1.05rem;
+            margin: 0 0 12px;
+            letter-spacing: 0.02em;
+        }
+        
+        .chart-card canvas {
+            max-height: 240px;
+            width: 100% !important;
+        }
+    </style>
 {% endblock %}
 
 {% block branding %}

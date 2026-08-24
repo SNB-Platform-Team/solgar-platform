@@ -2,106 +2,320 @@
 {% load static %}
 {% load admin_stats %}
 
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Dashboard ve app listesini yan yana yerleştir */
+    #content-main {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        max-width: 100%;
+    }
+    
+    .solgar-dashboard {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .app-list-wrap {
+        width: 100%;
+    }
+    
+    /* App listesini grid yap */
+    .app-list-wrap .module {
+        background: var(--dark2, #1a1610);
+        border: 1px solid var(--border, rgba(201,168,76,0.22));
+        border-radius: 8px;
+        margin-bottom: 15px;
+        overflow: hidden;
+    }
+    
+    .app-list-wrap .module table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .app-list-wrap .module caption {
+        background: rgba(201,168,76,0.1);
+        padding: 12px 20px;
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: var(--gold-light, #e8c96a);
+        text-align: left;
+        border-bottom: 1px solid var(--border, rgba(201,168,76,0.22));
+    }
+    
+    .app-list-wrap .module caption a {
+        color: var(--gold-light, #e8c96a);
+        text-decoration: none;
+    }
+    
+    .app-list-wrap .module caption a:hover {
+        color: #f5e6b8;
+    }
+    
+    .app-list-wrap .module th,
+    .app-list-wrap .module td {
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border, rgba(201,168,76,0.08));
+        text-align: left;
+    }
+    
+    .app-list-wrap .module th {
+        width: 60%;
+        font-weight: 400;
+    }
+    
+    .app-list-wrap .module td {
+        width: 20%;
+        text-align: center;
+    }
+    
+    .app-list-wrap .module tr:last-child th,
+    .app-list-wrap .module tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .app-list-wrap .module tr:hover {
+        background: rgba(201,168,76,0.05);
+    }
+    
+    .app-list-wrap .addlink,
+    .app-list-wrap .changelink {
+        color: var(--gold-light, #e8c96a);
+        text-decoration: none;
+        font-size: 0.9rem;
+        padding: 4px 12px;
+        border: 1px solid rgba(201,168,76,0.3);
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    .app-list-wrap .addlink:hover,
+    .app-list-wrap .changelink:hover {
+        background: rgba(201,168,76,0.15);
+        border-color: var(--gold-light, #e8c96a);
+    }
+    
+    .app-list-wrap .addlink::before {
+        content: "+ ";
+        font-weight: bold;
+    }
+    
+    /* Responsive */
+    @media (min-width: 1200px) {
+        #content-main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        
+        .solgar-dashboard {
+            grid-column: 1 / -1;
+        }
+        
+        .app-list-wrap {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .app-list-wrap .module {
+            margin-bottom: 0;
+        }
+    }
+    
+    @media (min-width: 1600px) {
+        .app-list-wrap {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="solgar-dashboard">
-    <h1 style="font-family:'Cormorant Garamond',serif;font-weight:400;margin-bottom:20px;">Обзор платформы</h1>
+<div id="content-main">
+    <div class="solgar-dashboard">
+        <h1 style="font-family:'Cormorant Garamond',serif;font-weight:400;margin-bottom:20px;color:var(--gold-light, #e8c96a);">Обзор платформы</h1>
 
-    <!-- Sayı kartları -->
-    <div class="stat-cards" id="stat-cards"></div>
+        <div class="stat-cards" id="stat-cards"></div>
 
-    <!-- Grafikler -->
-    <div class="chart-grid">
-        <div class="chart-card">
-            <h3>Активность (14 дней)</h3>
-            <canvas id="chartActivity"></canvas>
-        </div>
-        <div class="chart-card">
-            <h3>Типы действий</h3>
-            <canvas id="chartActions"></canvas>
-        </div>
-        <div class="chart-card">
-            <h3>Активные пользователи (30 дней)</h3>
-            <canvas id="chartUsers"></canvas>
-        </div>
-        <div class="chart-card">
-            <h3>Входы (14 дней)</h3>
-            <canvas id="chartLogins"></canvas>
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Активность (14 дней)</h3>
+                <canvas id="chartActivity"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Типы действий</h3>
+                <canvas id="chartActions"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Активные пользователи (30 дней)</h3>
+                <canvas id="chartUsers"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Входы (14 дней)</h3>
+                <canvas id="chartLogins"></canvas>
+            </div>
         </div>
     </div>
-</div>
 
-
-<!-- Orijinal uygulama listesi -->
-<div class="app-list-wrap">
-{% if app_list %}
-    {% for app in app_list %}
-    <div class="module">
-        <table>
-            <caption><a href="{{ app.app_url }}" class="section">{{ app.name }}</a></caption>
-            {% for model in app.models %}
-            <tr>
-                <th scope="row">{% if model.admin_url %}<a href="{{ model.admin_url }}">{{ model.name }}</a>{% else %}{{ model.name }}{% endif %}</th>
-                <td>{% if model.add_url %}<a href="{{ model.add_url }}" class="addlink">Добавить</a>{% endif %}</td>
-                <td>{% if model.admin_url %}<a href="{{ model.admin_url }}" class="changelink">Изменить</a>{% endif %}</td>
-            </tr>
+    <div class="app-list-wrap">
+        {% if app_list %}
+            {% for app in app_list %}
+            <div class="module">
+                <table>
+                    <caption><a href="{{ app.app_url }}" class="section">{{ app.name }}</a></caption>
+                    {% for model in app.models %}
+                    <tr>
+                        <th scope="row">
+                            {% if model.admin_url %}
+                                <a href="{{ model.admin_url }}">{{ model.name }}</a>
+                            {% else %}
+                                {{ model.name }}
+                            {% endif %}
+                        </th>
+                        <td>
+                            {% if model.add_url %}
+                                <a href="{{ model.add_url }}" class="addlink">Добавить</a>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if model.admin_url %}
+                                <a href="{{ model.admin_url }}" class="changelink">Изменить</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
             {% endfor %}
-        </table>
+        {% else %}
+            <p>Нет доступных моделей.</p>
+        {% endif %}
     </div>
-    {% endfor %}
-{% else %}
-    <p>Нет доступных моделей.</p>
-{% endif %}
 </div>
-
 
 <style>
-    .solgar-dashboard { margin-bottom: 30px; }
-    .stat-cards { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+    .solgar-dashboard { margin-bottom: 10px; }
+    .stat-cards { 
+        display: flex; 
+        flex-wrap: wrap; 
+        gap: 14px; 
+        margin-bottom: 24px; 
+    }
     .stat-card {
-        flex: 1 1 160px; background: var(--dark2, #1a1610);
+        flex: 1 1 160px; 
+        background: var(--dark2, #1a1610);
         border: 1px solid var(--border, rgba(201,168,76,0.22));
-        border-radius: 8px; padding: 18px 20px;
+        border-radius: 8px; 
+        padding: 18px 20px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.25);
     }
-    .stat-card .num { font-size: 2rem; font-weight: 500; color: var(--gold-light, #e8c96a); font-family: 'Cormorant Garamond',serif; }
-    .stat-card .lbl { font-size: 0.78rem; color: var(--text-dim, #9a917f); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
-    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+    .stat-card .num { 
+        font-size: 2rem; 
+        font-weight: 500; 
+        color: var(--gold-light, #e8c96a); 
+        font-family: 'Cormorant Garamond',serif; 
+    }
+    .stat-card .lbl { 
+        font-size: 0.78rem; 
+        color: var(--text-dim, #9a917f); 
+        text-transform: uppercase; 
+        letter-spacing: 0.05em; 
+        margin-top: 4px; 
+    }
+    .chart-grid { 
+        display: grid; 
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); 
+        gap: 16px; 
+    }
     .chart-card {
         background: var(--dark2, #1a1610);
         border: 1px solid var(--border, rgba(201,168,76,0.22));
-        border-radius: 8px; padding: 16px 18px;
+        border-radius: 8px; 
+        padding: 16px 18px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.25);
     }
     .chart-card h3 {
-        font-family: 'Cormorant Garamond',serif; font-weight: 500;
-        color: var(--gold-light, #e8c96a); font-size: 1.05rem;
-        margin: 0 0 12px; letter-spacing: 0.02em;
+        font-family: 'Cormorant Garamond',serif; 
+        font-weight: 500;
+        color: var(--gold-light, #e8c96a); 
+        font-size: 1.05rem;
+        margin: 0 0 12px; 
+        letter-spacing: 0.02em;
     }
-    .chart-card canvas { max-height: 240px; }
+    .chart-card canvas { 
+        max-height: 240px; 
+        width: 100% !important;
+    }
 </style>
 
 <script src="{% static 'admin/js/chart.min.js' %}"></script>
-<script id="solgar-stats" type="application/json">{% solgar_admin_stats %}</script>
+<script id="solgar-stats" type="application/json">{% autoescape off %}{% solgar_admin_stats %}{% endautoescape %}</script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     var statsEl = document.getElementById("solgar-stats");
-    if (!statsEl) { console.error("solgar-stats element bulunamadi"); return; }
-    var stats = JSON.parse(statsEl.textContent);
+    if (!statsEl) { 
+        console.error("solgar-stats element bulunamadi"); 
+        return; 
+    }
+    
+    var rawText = statsEl.textContent || statsEl.innerText || '';
+    var statsText = rawText.trim();
+    
+    if (statsText.includes('&quot;')) {
+        statsText = statsText.replace(/&quot;/g, '"')
+                             .replace(/&#39;/g, "'")
+                             .replace(/&amp;/g, '&')
+                             .replace(/&lt;/g, '<')
+                             .replace(/&gt;/g, '>');
+    }
+    
+    var stats;
+    try {
+        stats = JSON.parse(statsText);
+    } catch (e) {
+        console.error("JSON Parse Error:", e);
+        console.log("Problematic data:", statsText);
+        stats = {
+            counts: { users: 0, screens: 0, chains: 0, dad_queries: 0 },
+            activity_by_day: { labels: [], values: [] },
+            activity_by_action: { labels: ['Veri Yok'], values: [0] },
+            top_users: { labels: ['Veri Yok'], values: [0] },
+            logins_by_day: { labels: [], values: [] }
+        };
+    }
+    
+    if (!stats || typeof stats !== 'object') {
+        stats = {
+            counts: { users: 0, screens: 0, chains: 0, dad_queries: 0 },
+            activity_by_day: { labels: [], values: [] },
+            activity_by_action: { labels: ['Veri Yok'], values: [0] },
+            top_users: { labels: ['Veri Yok'], values: [0] },
+            logins_by_day: { labels: [], values: [] }
+        };
+    }
+
     var GOLD = "#c9a84c", GOLD_L = "#e8c96a", GOLD_D = "#a8873a", CREAM = "#f5efe0", DIM = "#9a917f";
     var GRID = "rgba(201,168,76,0.1)";
 
-    // Chart.js global defaults (dark theme)
     if (window.Chart) {
         Chart.defaults.color = DIM;
         Chart.defaults.borderColor = GRID;
         Chart.defaults.font.family = "'Jost', sans-serif";
     }
 
-    // Sayı kartları
     var counts = stats.counts || {};
     var cardDefs = [
-        ["users", "Пользователи"], ["screens", "Экраны"],
-        ["chains", "Сети"], ["dad_queries", "SQL-скрипты"]
+        ["users", "Пользователи"], 
+        ["screens", "Экраны"],
+        ["chains", "Сети"], 
+        ["dad_queries", "SQL-скрипты"]
     ];
     var cardsHtml = "";
     cardDefs.forEach(function (c) {
@@ -118,51 +332,80 @@ document.addEventListener("DOMContentLoaded", function () {
         return g;
     }
 
-    // 1) Aktivite (14 gün) - çizgi
-    if (stats.activity_by_day) {
+    if (stats.activity_by_day && stats.activity_by_day.labels && stats.activity_by_day.labels.length > 0) {
         var c = document.getElementById("chartActivity").getContext("2d");
         new Chart(c, {
             type: "line",
-            data: { labels: stats.activity_by_day.labels, datasets: [{
-                label: "Действия", data: stats.activity_by_day.values,
-                borderColor: GOLD, backgroundColor: goldGradient(c),
-                fill: true, tension: 0.35, pointRadius: 2, pointBackgroundColor: GOLD_L
-            }]},
-            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            data: { 
+                labels: stats.activity_by_day.labels, 
+                datasets: [{
+                    label: "Действия", 
+                    data: stats.activity_by_day.values,
+                    borderColor: GOLD, 
+                    backgroundColor: goldGradient(c),
+                    fill: true, 
+                    tension: 0.35, 
+                    pointRadius: 2, 
+                    pointBackgroundColor: GOLD_L
+                }]
+            },
+            options: { 
+                plugins: { legend: { display: false } }, 
+                scales: { y: { beginAtZero: true } } 
+            }
         });
     }
 
-    // 2) İşlem tipleri - donut
-    if (stats.activity_by_action) {
+    if (stats.activity_by_action && stats.activity_by_action.labels && stats.activity_by_action.labels.length > 0) {
         new Chart(document.getElementById("chartActions"), {
             type: "doughnut",
-            data: { labels: stats.activity_by_action.labels, datasets: [{
-                data: stats.activity_by_action.values,
-                backgroundColor: [GOLD, GOLD_L, GOLD_D, "#7a6329", CREAM, "#5a4a1f", DIM]
-            }]},
-            options: { plugins: { legend: { position: "right" } } }
+            data: { 
+                labels: stats.activity_by_action.labels, 
+                datasets: [{
+                    data: stats.activity_by_action.values,
+                    backgroundColor: [GOLD, GOLD_L, GOLD_D, "#7a6329", CREAM, "#5a4a1f", DIM]
+                }]
+            },
+            options: { 
+                plugins: { legend: { position: "right" } } 
+            }
         });
     }
 
-    // 3) Aktif kullanıcılar - yatay bar
-    if (stats.top_users) {
+    if (stats.top_users && stats.top_users.labels && stats.top_users.labels.length > 0) {
         new Chart(document.getElementById("chartUsers"), {
             type: "bar",
-            data: { labels: stats.top_users.labels, datasets: [{
-                label: "Действия", data: stats.top_users.values, backgroundColor: GOLD
-            }]},
-            options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+            data: { 
+                labels: stats.top_users.labels, 
+                datasets: [{
+                    label: "Действия", 
+                    data: stats.top_users.values, 
+                    backgroundColor: GOLD
+                }]
+            },
+            options: { 
+                indexAxis: "y", 
+                plugins: { legend: { display: false } }, 
+                scales: { x: { beginAtZero: true } } 
+            }
         });
     }
 
-    // 4) Girişler (14 gün) - bar
-    if (stats.logins_by_day) {
+    if (stats.logins_by_day && stats.logins_by_day.labels && stats.logins_by_day.labels.length > 0) {
         new Chart(document.getElementById("chartLogins"), {
             type: "bar",
-            data: { labels: stats.logins_by_day.labels, datasets: [{
-                label: "Входы", data: stats.logins_by_day.values, backgroundColor: GOLD_D
-            }]},
-            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            data: { 
+                labels: stats.logins_by_day.labels, 
+                datasets: [{
+                    label: "Входы", 
+                    data: stats.logins_by_day.values, 
+                    backgroundColor: GOLD_D
+                }]
+            },
+            options: { 
+                plugins: { legend: { display: false } }, 
+                scales: { y: { beginAtZero: true } } 
+            }
         });
     }
 });
