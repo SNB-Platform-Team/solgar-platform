@@ -109,3 +109,46 @@ class LoginLog(models.Model):
     def __str__(self) -> str:
         """Readable representation."""
         return f"{self.user} — {self.get_event_type_display()} — {self.timestamp}"
+
+class ActivityLog(models.Model):
+    """
+    Records user activity across the platform: page views and actions
+    (create/update/delete/report/upload). Populated automatically by
+    ActivityLogMiddleware. Separate from LoginLog, which only tracks
+    authentication events.
+    """
+
+    ACTION_CHOICES = [
+        ("VIEW", "Просмотр"),        # sayfa goruntuleme (GET)
+        ("CREATE", "Создание"),      # kayit ekleme
+        ("UPDATE", "Изменение"),     # kayit guncelleme
+        ("DELETE", "Удаление"),      # kayit silme
+        ("REPORT", "Отчёт"),         # rapor calistirma
+        ("UPLOAD", "Загрузка"),      # dosya yukleme
+        ("ACTION", "Действие"),      # diger POST islemleri
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="activity_logs",
+        verbose_name="Пользователь",
+    )
+    action_type = models.CharField(
+        "Тип действия", max_length=12, choices=ACTION_CHOICES, default="VIEW"
+    )
+    screen = models.CharField("Экран", max_length=120, blank=True)
+    path = models.CharField("Путь", max_length=255)
+    method = models.CharField("Метод", max_length=8, blank=True)
+    detail = models.CharField("Детали", max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField("IP-адрес", null=True, blank=True)
+    timestamp = models.DateTimeField("Время", auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "accounts_activity_log"
+        ordering = ["-timestamp"]
+        verbose_name = "Журнал активности"
+        verbose_name_plural = "Журнал активности"
+
+    def __str__(self):
+        return f"{self.user} · {self.action_type} · {self.screen or self.path}"

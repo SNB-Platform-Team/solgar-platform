@@ -22,8 +22,7 @@ class UserAdmin(BaseUserAdmin):
     )
 
 
-from .models import LoginLog
-
+from .models import LoginLog, ActivityLog
 
 @admin.register(LoginLog)
 class LoginLogAdmin(admin.ModelAdmin):
@@ -37,4 +36,23 @@ class LoginLogAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         """Logs are created by the system, not manually."""
+        return False
+
+@admin.register(ActivityLog)
+class ActivityLogAdmin(admin.ModelAdmin):
+    """Read-only admin view of user activity."""
+
+    list_display = ("timestamp", "user", "action_type", "screen", "method", "path", "ip_address")
+    list_filter = ("action_type", "method", "timestamp", "user")
+    search_fields = ("user__username", "path", "screen", "detail")
+    date_hierarchy = "timestamp"
+    ordering = ("-timestamp",)
+    list_per_page = 50
+
+    def has_add_permission(self, request):
+        """Activity logs are written by middleware, not added by hand."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Logs are immutable."""
         return False

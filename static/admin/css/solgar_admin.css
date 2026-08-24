@@ -1,0 +1,196 @@
+/* ============================================================
+   Solgar Platform - Django Admin theme (dark + gold)
+   Overrides the default admin look to match the main platform.
+   Self-contained: no external dependencies.
+   ============================================================ */
+
+:root {
+    --gold: #c9a84c;
+    --gold-light: #e8c96a;
+    --gold-dim: #a8873a;
+    --cream: #f5efe0;
+    --dark: #0d0b08;
+    --dark2: #1a1610;
+    --dark3: #221d15;
+    --border: rgba(201,168,76,0.22);
+    --text-dim: #9a917f;
+}
+
+/* ---- Base ---- */
+body {
+    background: var(--dark);
+    color: var(--cream);
+    font-family: 'Jost', -apple-system, sans-serif;
+}
+a:link, a:visited { color: var(--gold); }
+a:hover, a:focus { color: var(--gold-light); }
+
+/* ---- Header ---- */
+#header {
+    background: linear-gradient(135deg, var(--dark2), var(--dark3));
+    color: var(--cream);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+#branding #site-name, #site-name a:link, #site-name a:visited {
+    color: var(--gold-light);
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: 1.4rem;
+    letter-spacing: 0.02em;
+}
+#user-tools { color: var(--text-dim); font-size: 0.8rem; }
+#user-tools a { border-bottom-color: var(--border); }
+
+/* ---- Breadcrumbs ---- */
+div.breadcrumbs {
+    background: var(--dark2);
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 40px;
+}
+div.breadcrumbs a { color: var(--gold-dim); }
+div.breadcrumbs a:hover { color: var(--gold); }
+
+/* ---- Content area ---- */
+#content { background: var(--dark); }
+.module {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    overflow: hidden;
+    margin-bottom: 18px;
+}
+.module h2, .module caption, .inline-group h2 {
+    background: linear-gradient(90deg, rgba(201,168,76,0.18), rgba(201,168,76,0.04));
+    color: var(--gold-light);
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 500;
+    font-size: 1.05rem;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+}
+h1 { color: var(--cream); font-family: 'Cormorant Garamond', serif; font-weight: 400; }
+.dashboard #content-main { width: 100%; }
+
+/* ---- Tables / change lists ---- */
+table { border-color: var(--border); }
+thead th {
+    background: var(--dark3);
+    color: var(--gold);
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+thead th a:link, thead th a:visited { color: var(--gold); }
+tbody tr { background: var(--dark2); }
+tbody tr:nth-child(even) { background: var(--dark3); }
+tbody tr:hover { background: rgba(201,168,76,0.07); }
+td, th { border-bottom: 1px solid rgba(201,168,76,0.08); color: var(--cream); }
+#changelist-filter {
+    background: var(--dark2);
+    border-left: 1px solid var(--border);
+}
+#changelist-filter h2 { background: var(--dark3); color: var(--gold); }
+#changelist-filter li.selected a { color: var(--gold-light); }
+#changelist-filter a { color: var(--text-dim); }
+#changelist-filter a:hover { color: var(--gold); }
+
+/* ---- Buttons ---- */
+.button, input[type=submit], input[type=button], .submit-row input, a.button {
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    color: var(--dark);
+    font-family: 'Jost', sans-serif;
+    font-weight: 500;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+}
+.button:hover, input[type=submit]:hover, input[type=button]:hover,
+.submit-row input:hover, a.button:hover {
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: var(--dark);
+}
+.button.default, input[type=submit].default {
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+}
+.deletelink, a.deletelink {
+    background: linear-gradient(135deg, #7a2b2b, #a03a3a) !important;
+    color: var(--cream) !important;
+}
+
+/* ---- Forms ---- */
+.form-row { border-bottom: 1px solid rgba(201,168,76,0.08); }
+label { color: var(--text-dim); font-size: 0.82rem; }
+input[type=text], input[type=password], input[type=email], input[type=url],
+input[type=number], input[type=tel], textarea, select, .vTextField {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--cream);
+    padding: 7px 9px;
+}
+input:focus, textarea:focus, select:focus {
+    border-color: var(--gold);
+    outline: none;
+}
+select option { background: var(--dark2); }
+fieldset { border: none; }
+.help, p.help, .form-row .help { color: var(--text-dim); font-size: 0.78rem; }
+
+/* ---- Submit row ---- */
+.submit-row {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+/* ---- Pagination ---- */
+.paginator a:link, .paginator a:visited {
+    background: var(--dark3);
+    color: var(--gold);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+}
+.paginator a:hover { background: var(--gold-dim); color: var(--dark); }
+.paginator .this-page { background: var(--gold); color: var(--dark); border-radius: 3px; padding: 2px 8px; }
+
+/* ---- Messages ---- */
+ul.messagelist li {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--cream);
+}
+ul.messagelist li.success { border-left: 3px solid var(--gold); }
+ul.messagelist li.error { border-left: 3px solid #a03a3a; }
+
+/* ---- Login page ---- */
+body.login { background: linear-gradient(135deg, var(--dark), var(--dark2)); }
+.login #container {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+.login #header { border-radius: 10px 10px 0 0; }
+.login .submit-row { border: none; background: none; }
+
+/* ---- Selector (m2m) ---- */
+.selector-available h2, .selector-chosen h2 { background: var(--dark3); }
+.selector .selector-filter { background: var(--dark2); }
+.selector select { background: var(--dark2); }
+
+/* ---- Object tools (Add button etc.) ---- */
+.object-tools a:link, .object-tools a:visited {
+    background: var(--dark3);
+    color: var(--gold);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.object-tools a:hover { background: var(--gold-dim); color: var(--dark); }
+.object-tools a.addlink:hover { background: var(--gold); }
