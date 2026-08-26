@@ -28,4 +28,6 @@ urlpatterns = [
     path("onec-react/", views.onec_react_view, name="onec_react"),
     path("api/doctor-managerial/", api.doctor_managerial_api, name="doctor_managerial_api"),
     path("api/pharm-managerial/", api.pharm_managerial_api, name="pharm_managerial_api"),
+    path("api/pharmacy/", api.pharmacy_api, name="pharmacy_api"),
+    path("api/doctor/", api.doctor_api, name="doctor_api"),
 ]

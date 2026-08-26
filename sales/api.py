@@ -260,3 +260,153 @@ def pharm_managerial_api(request):
             "begin": begin, "end": end,
         },
     })
+
+
+# ==================== Pharmacy Entry API (DRF) ====================
+
+# Tabloda gosterilecek kolonlar (entry ekranindaki ana alanlar).
+# match_key bir @property (DB kolonu degil), o yuzden liste disinda.
+_PHARMACY_API_COLUMNS = [
+    ("pharmacy_name", "Название"),
+    ("country", "Страна"),
+    ("region", "Регион"),
+    ("city", "Город"),
+    ("pharmacy_address", "Адрес"),
+    ("group_company", "Сеть"),
+    ("pharmacy_category", "Категория"),
+    ("pharmacy_type", "Тип"),
+]
+
+PHARMACY_API_BRANDS = [
+    {"value": "SOLGAR", "label": "SOLGAR"},
+    {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharmacy_api(request):
+    """
+    Pharmacy entry list API (read-only, paginated, searchable).
+
+    Query params:
+      brand   - SOLGAR / BOUNTY (default SOLGAR)
+      page    - 1-based page (default 1)
+      search  - name / city / address filter (optional)
+
+    Response:
+      {
+        brands, brand, columns, rows, total_rows,
+        page, num_pages, has_prev, has_next, search
+      }
+    """
+    from .services import PharmacyViewService
+
+    service = PharmacyViewService()
+
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    search = (request.GET.get("search") or "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+
+    try:
+        result = service.query(brand=brand, search=search, page=page)
+    except Exception as exc:
+        return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
+
+    # Model instance'larini satir listesine cevir (secili kolonlar)
+    col_keys = [c[0] for c in _PHARMACY_API_COLUMNS]
+    col_labels = [c[1] for c in _PHARMACY_API_COLUMNS]
+    rows = []
+    for rec in result["records"]:
+        rows.append([_json_safe(getattr(rec, k, "")) for k in col_keys])
+
+    return Response({
+        "brands": PHARMACY_API_BRANDS,
+        "brand": brand,
+        "columns": col_labels,
+        "rows": rows,
+        "total_rows": result["total_rows"],
+        "page": result["page"],
+        "num_pages": result["num_pages"],
+        "has_prev": result["has_prev"],
+        "has_next": result["has_next"],
+        "search": search,
+    })
+
+
+# ==================== Doctor Entry API (DRF) ====================
+
+# Tabloda gosterilecek kolonlar (doctor entry ana alanlari).
+_DOCTOR_API_COLUMNS = [
+    ("doctor_name", "ФИО врача"),
+    ("country", "Страна"),
+    ("region", "Регион"),
+    ("city", "Город"),
+    ("specialty", "Специальность"),
+    ("clinic_name", "Клиника"),
+    ("medrep", "Мед. представитель"),
+    ("category", "Категория"),
+]
+
+# doctor_data'da brand tam isim olarak saklanir (SOLGAR / NATURES BOUNTY).
+DOCTOR_API_BRANDS = [
+    {"value": "", "label": "Все"},
+    {"value": "SOLGAR", "label": "SOLGAR"},
+    {"value": "NATURES BOUNTY", "label": "NATURES BOUNTY"},
+]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def doctor_api(request):
+    """
+    Doctor entry list API (read-only, paginated, searchable).
+
+    Query params:
+      brand   - "" (all) / SOLGAR / "NATURES BOUNTY"
+      page    - 1-based page (default 1)
+      search  - name / city / clinic filter (optional)
+
+    Response:
+      {
+        brands, brand, columns, rows, total_rows,
+        page, num_pages, has_prev, has_next, search
+      }
+    """
+    from .services import DoctorViewService
+
+    service = DoctorViewService()
+
+    brand = (request.GET.get("brand") or "").strip()
+    search = (request.GET.get("search") or "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+
+    try:
+        result = service.query(brand=brand, search=search, page=page)
+    except Exception as exc:
+        return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
+
+    col_keys = [c[0] for c in _DOCTOR_API_COLUMNS]
+    col_labels = [c[1] for c in _DOCTOR_API_COLUMNS]
+    rows = []
+    for rec in result["records"]:
+        rows.append([_json_safe(getattr(rec, k, "")) for k in col_keys])
+
+    return Response({
+        "brands": DOCTOR_API_BRANDS,
+        "brand": brand,
+        "columns": col_labels,
+        "rows": rows,
+        "total_rows": result["total_rows"],
+        "page": result["page"],
+        "num_pages": result["num_pages"],
+        "has_prev": result["has_prev"],
+        "has_next": result["has_next"],
+        "search": search,
+    })
