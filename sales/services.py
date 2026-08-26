@@ -557,12 +557,48 @@ class DoctorViewService:
             "unified_specialties": self.repository.unified_specialties(),
         }
 
+    PAGE_SIZE = 200
+
+    def _paginate(self, qs, page, total):
+        """Slice the queryset to the requested page and return a result dict."""
+        try:
+            page = int(page)
+        except (TypeError, ValueError):
+            page = 1
+        if page < 1:
+            page = 1
+        size = self.PAGE_SIZE
+        start = (page - 1) * size
+        records = list(qs[start:start + size])
+        num_pages = max(1, (total + size - 1) // size)
+        return {
+            "records": records,
+            "total_rows": total,
+            "page": page,
+            "num_pages": num_pages,
+            "page_size": size,
+            "has_prev": page > 1,
+            "has_next": page < num_pages,
+        }
+
+    def _paged_count_doctor(self, qs, has_filter):
+        """Total doctor count; cache the unfiltered count for 5 minutes."""
+        if has_filter:
+            return qs.count()
+        from django.core.cache import cache
+        total = cache.get("doctor_total")
+        if total is None:
+            total = qs.count()
+            cache.set("doctor_total", total, 300)
+        return total
+
     def query(
         self,
         brand: str = "", country: str = "", area: str = "", region: str = "",
         city: str = "", medrep: str = "", specialty: str = "",
         unified_specialty: str = "", category: str = "", activeness: str = "",
-        doctor_name: str = "", clinic_status: str = "",
+        doctor_name: str = "", clinic_status: str = "", search: str = "",
+        page: int = 1,
     ) -> dict:
         """
         Return doctor rows matching the given filters (all optional, empty
@@ -598,10 +634,24 @@ class DoctorViewService:
         if clinic_status:
             qs = qs.filter(clinic_status=clinic_status)
 
+        # Genis arama: isim + sehir + klinik (tek kutu)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(doctor_name__icontains=search)
+                | Q(city__icontains=search)
+                | Q(clinic_name__icontains=search)
+            )
+
         qs = qs.order_by("country", "area", "region", "city", "doctor_name")
 
-        records = list(qs[:500])  # cap for display, like chain report
-        return {"records": records, "total_rows": qs.count()}
+        has_filter = any([
+            brand, country, area, region, city, medrep, specialty,
+            unified_specialty, category, activeness, doctor_name,
+            clinic_status, search,
+        ])
+        total = self._paged_count_doctor(qs, has_filter)
+        return self._paginate(qs, page, total)
 
 
 class DoctorWriteService:
@@ -704,11 +754,52 @@ class PharmacyViewService:
             "marketing_staff": r.marketing_staff(brand),
         }
 
+    PAGE_SIZE = 200
+
+    def _paginate(self, qs, page, total):
+        """Slice the queryset to the requested page and return a result dict."""
+        try:
+            page = int(page)
+        except (TypeError, ValueError):
+            page = 1
+        if page < 1:
+            page = 1
+        size = self.PAGE_SIZE
+        start = (page - 1) * size
+        records = list(qs[start:start + size])
+        num_pages = max(1, (total + size - 1) // size)
+        return {
+            "records": records,
+            "total_rows": total,
+            "page": page,
+            "num_pages": num_pages,
+            "page_size": size,
+            "has_prev": page > 1,
+            "has_next": page < num_pages,
+        }
+
+    def _paged_count(self, qs, model, has_filter, brand):
+        """
+        Total row count for pagination. Filtered results are counted directly
+        (cheap, small). The unfiltered full-table count is cached for 5 minutes
+        so that many concurrent users don't each scan the whole table.
+        """
+        if has_filter:
+            return qs.count()
+        from django.core.cache import cache
+        key = f"pharm_total_{model.__name__}_{brand}"
+        total = cache.get(key)
+        if total is None:
+            total = qs.count()
+            cache.set(key, total, 300)  # 5 dk
+        return total
+
     def query(self, brand: str = "", country: str = "", area: str = "", region: str = "",
               city: str = "", group_company: str = "", subgroup_company: str = "",
               pharmacy_category: str = "", pharmacy_type: str = "", promo: str = "",
               marketing_staff: str = "", pharmacy_activeness: str = "",
-              pharmacy_address: str = "") -> dict:
+              pharmacy_address: str = "", search: str = "",
+              page: int = 1) -> dict:
         """
         Return pharmacy rows for a brand matching the filters (empty ignored).
         Mirrors the Java getPharmInfo query. Only active rows (status=1).
@@ -741,9 +832,28 @@ class PharmacyViewService:
         if pharmacy_address:
             qs = qs.filter(pharmacy_address__icontains=pharmacy_address)
 
+        # Genis arama: isim + sehir + adres (tek kutu, cok-kullanici dostu)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(pharmacy_name__icontains=search)
+                | Q(city__icontains=search)
+                | Q(pharmacy_address__icontains=search)
+            )
+
         qs = qs.order_by("country", "area", "region", "city", "group_company")
-        records = list(qs[:500])
-        return {"records": records, "total_rows": qs.count()}
+
+        # --- Sayfalama (200/sayfa) + dengeli sayim ---
+        # Filtre/arama varsa sonuc kucuk -> count ucuz.
+        # Filtresiz ham liste -> toplam sayiyi cache'le (5 dk), boylece 500
+        # kullanici her acilista 77K saymaz.
+        has_filter = any([
+            country, area, region, city, group_company, subgroup_company,
+            pharmacy_category, pharmacy_type, promo, marketing_staff,
+            pharmacy_activeness, pharmacy_address, search,
+        ])
+        total = self._paged_count(qs, model, has_filter, brand)
+        return self._paginate(qs, page, total)
 
 
 class PharmacyWriteService:

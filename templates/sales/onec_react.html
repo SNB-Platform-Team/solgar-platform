@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}1C - Склад (React){% endblock %}
+{% block nav_onec_stock %}active{% endblock %}
+
+{% block content %}
+<div id="onec-react-root"></div>
+
+<!-- React (CDN, kurulum yok) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+    .onec-r-wrap { color: var(--cream); }
+    .onec-r-title { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 1.8rem; color: var(--gold-light); margin-bottom: 4px; }
+    .onec-r-sub { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 20px; }
+    .onec-r-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .onec-r-tab { background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.3); border-radius: 6px 6px 0 0; padding: 10px 20px; color: var(--gold-light); font-family: 'Jost',sans-serif; font-size: 0.88rem; cursor: pointer; transition: background 0.2s; }
+    .onec-r-tab:hover { background: rgba(201,168,76,0.1); }
+    .onec-r-tab.active { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border-color: var(--gold); font-weight: 500; }
+    .onec-r-searchbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .onec-r-input { flex: 1; min-width: 240px; max-width: 400px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.85rem; }
+    .onec-r-input:focus { border-color: var(--gold); outline: none; }
+    .onec-r-btn { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border: none; border-radius: 4px; padding: 8px 18px; font-family: 'Jost',sans-serif; font-weight: 500; font-size: 0.85rem; cursor: pointer; }
+    .onec-r-clear { color: var(--text-dim); font-size: 0.8rem; background: none; border: none; cursor: pointer; padding: 8px; }
+    .onec-r-clear:hover { color: var(--gold-light); }
+    .onec-r-count { color: var(--text-dim); font-size: 0.82rem; margin-bottom: 10px; }
+    .onec-r-scroll { max-height: 600px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+    .onec-r-table { border-collapse: collapse; white-space: nowrap; font-size: 0.78rem; width: max-content; }
+    .onec-r-table th { text-align: left; font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--dark2); }
+    .onec-r-table td { padding: 6px 12px; border-bottom: 1px solid rgba(201,168,76,0.08); font-weight: 300; color: var(--cream); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .onec-r-table tbody tr:hover { background: rgba(201,168,76,0.06); }
+    .onec-r-pag { display: flex; gap: 14px; align-items: center; justify-content: center; margin: 18px 0; }
+    .onec-r-pgbtn { background: rgba(201,168,76,0.1); border: 1px solid var(--border); border-radius: 4px; padding: 8px 16px; color: var(--gold-light); cursor: pointer; font-size: 0.85rem; }
+    .onec-r-pgbtn:hover:not(:disabled) { background: rgba(201,168,76,0.2); }
+    .onec-r-pgbtn:disabled { opacity: 0.35; cursor: default; }
+    .onec-r-pginfo { color: var(--text-dim); font-size: 0.85rem; }
+    .onec-r-loading { color: var(--gold-light); padding: 30px; text-align: center; font-style: italic; }
+    .onec-r-empty { text-align: center; padding: 30px; color: var(--text-dim); font-style: italic; }
+    .onec-r-error { background: rgba(224,85,85,0.12); border: 1px solid rgba(224,85,85,0.35); color: #f4a0a0; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.86rem; }
+    .onec-r-badge { display: inline-block; background: rgba(201,168,76,0.15); color: var(--gold-light); font-size: 0.62rem; padding: 2px 8px; border-radius: 3px; margin-left: 10px; letter-spacing: 0.05em; vertical-align: middle; }
+</style>
+
+<script type="text/babel">{% verbatim %}
+const { useState, useEffect, useCallback } = React;
+
+const API_URL = "/sales/api/onec/";
+
+function OneCApp() {
+    const [tabs, setTabs] = useState([]);
+    const [tab, setTab] = useState("orders");
+    const [searchInput, setSearchInput] = useState("");
+    const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const params = new URLSearchParams({ tab, page: String(page) });
+            if (search) params.set("search", search);
+            const resp = await fetch(API_URL + "?" + params.toString(), {
+                headers: { "Accept": "application/json" },
+                credentials: "same-origin",
+            });
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const json = await resp.json();
+            if (json.error) throw new Error(json.error);
+            setData(json);
+            if (json.tabs && json.tabs.length) setTabs(json.tabs);
+        } catch (e) {
+            setError("Ошибка загрузки: " + e.message);
+            setData(null);
+        } finally {
+            setLoading(false);
+        }
+    }, [tab, page, search]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    function changeTab(key) {
+        setTab(key);
+        setPage(1);
+        setSearch("");
+        setSearchInput("");
+    }
+    function doSearch() {
+        setSearch(searchInput.trim());
+        setPage(1);
+    }
+    function clearSearch() {
+        setSearch("");
+        setSearchInput("");
+        setPage(1);
+    }
+
+    return (
+        <div className="onec-r-wrap">
+            <div className="onec-r-title">
+                1C - Склад
+                <span className="onec-r-badge">REACT</span>
+            </div>
+            <div className="onec-r-sub">Заказы, поставки, продажи и свободные остатки (только просмотр)</div>
+
+            <div className="onec-r-tabs">
+                {tabs.map(t => (
+                    <div key={t.key}
+                         className={"onec-r-tab" + (tab === t.key ? " active" : "")}
+                         onClick={() => changeTab(t.key)}>
+                        {t.label}
+                    </div>
+                ))}
+            </div>
+
+            <div className="onec-r-searchbar">
+                <input className="onec-r-input"
+                       type="text"
+                       placeholder="Поиск: наименование или SAP..."
+                       value={searchInput}
+                       onChange={e => setSearchInput(e.target.value)}
+                       onKeyDown={e => { if (e.key === "Enter") doSearch(); }} />
+                <button className="onec-r-btn" onClick={doSearch}>Поиск</button>
+                {search && <button className="onec-r-clear" onClick={clearSearch}>Сбросить</button>}
+            </div>
+
+            {error && <div className="onec-r-error">{error}</div>}
+
+            {loading && <div className="onec-r-loading">Загрузка...</div>}
+
+            {!loading && data && (
+                <React.Fragment>
+                    <div className="onec-r-count">
+                        Всего: {data.total_rows} · Страница {data.page} из {data.num_pages}
+                    </div>
+                    <div className="onec-r-scroll">
+                        <table className="onec-r-table">
+                            <thead>
+                                <tr>{data.columns.map((c, i) => <th key={i}>{c}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                                {data.rows.map((row, ri) => (
+                                    <tr key={ri}>
+                                        {row.map((cell, ci) => <td key={ci}>{cell}</td>)}
+                                    </tr>
+                                ))}
+                                {data.rows.length === 0 && (
+                                    <tr><td colSpan={data.columns.length} className="onec-r-empty">Нет данных</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {data.num_pages > 1 && (
+                        <div className="onec-r-pag">
+                            <button className="onec-r-pgbtn"
+                                    disabled={!data.has_prev}
+                                    onClick={() => setPage(p => p - 1)}>← Назад</button>
+                            <span className="onec-r-pginfo">Страница {data.page} из {data.num_pages}</span>
+                            <button className="onec-r-pgbtn"
+                                    disabled={!data.has_next}
+                                    onClick={() => setPage(p => p + 1)}>Вперёд →</button>
+                        </div>
+                    )}
+                </React.Fragment>
+            )}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("onec-react-root")).render(<OneCApp />);
+{% endverbatim %}</script>
+{% endblock %}

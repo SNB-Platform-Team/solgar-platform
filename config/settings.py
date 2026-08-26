@@ -59,9 +59,24 @@ INSTALLED_APPS: list[str] = [
     "authorization",
     "approvals",
     "sales",
+    "rest_framework",
+    "corsheaders"
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+}
+
 MIDDLEWARE: list[str] = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -71,6 +86,7 @@ MIDDLEWARE: list[str] = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "accounts.middleware.ActivityLogMiddleware",
+
 ]
 
 ROOT_URLCONF: str = "config.urls"
@@ -96,6 +112,13 @@ TEMPLATES: list[dict[str, Any]] = [
 
 WSGI_APPLICATION: str = "config.wsgi.application"
 
+# --- Connection pooling ---
+# Cok-kullanicili ortamda (hedef: ~500 kullanici) her HTTP isteginde yeni DB
+# baglantisi acmak pahalidir. CONN_MAX_AGE ile baglanti belirli sure canli
+# tutulup yeniden kullanilir. 60 sn guvenli: Azure Entra token suresinden
+# (saatler) cok kisa, dis sunucunun bosta-timeout'undan buyuk ihtimalle kisa.
+DB_CONN_MAX_AGE: int = int(get_secret("DB_CONN_MAX_AGE", "60"))
+
 # --- Database ---
 # USE_AZURE_MYSQL=True  → Azure MySQL with Entra ID token auth (production)
 # otherwise             → local Docker MySQL with a static password
@@ -120,6 +143,7 @@ REFERENCE_DB = {
     "USER": _ref_secret("EXTERNAL_DB_USER", "REFDB_USER", ""),
     "PASSWORD": _ref_secret("EXTERNAL_DB_PASSWORD", "REFDB_PASSWORD", ""),
     "OPTIONS": {"charset": "utf8mb4"},
+    "CONN_MAX_AGE": DB_CONN_MAX_AGE,
 }
 
 if USE_AZURE_MYSQL:
@@ -132,6 +156,7 @@ if USE_AZURE_MYSQL:
             "HOST": get_secret("DB_HOST"),
             "PORT": get_secret("DB_PORT", "3306"),
             "OPTIONS": {"charset": "utf8mb4", "ssl": {"ssl-mode": "REQUIRED"}},
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
         },
         "refdb": REFERENCE_DB,
     }
@@ -147,6 +172,7 @@ else:
             "OPTIONS": {
                 "charset": "utf8mb4",
             },
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
         },
         "refdb": REFERENCE_DB,
     }
@@ -235,3 +261,11 @@ SQLSERVER_CONFIG = {
     "PASSWORD": get_secret("SQLSERVER_PASSWORD", ""),
     "NAME": get_secret("SQLSERVER_NAME", ""),
 }
+
+
+# --- CORS (React frontend erişimi) ---
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+]
+CORS_ALLOW_CREDENTIALS = True

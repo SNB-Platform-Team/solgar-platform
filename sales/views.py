@@ -660,7 +660,13 @@ def doctor_entry_view(request: HttpRequest) -> HttpResponse:
         "doctor_name", "clinic_status",
     )}
  
-    result = view_service.query(**filters)
+    search = request.GET.get("search", "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+
+    result = view_service.query(search=search, page=page, **filters)
     options = view_service.address_options(
         country=filters["country"], area=filters["area"], region=filters["region"],
     )
@@ -668,6 +674,11 @@ def doctor_entry_view(request: HttpRequest) -> HttpResponse:
     context = {
         "records": result["records"],
         "total_rows": result["total_rows"],
+        "page": result.get("page", 1),
+        "num_pages": result.get("num_pages", 1),
+        "has_prev": result.get("has_prev", False),
+        "has_next": result.get("has_next", False),
+        "search": search,
         "options": options,
         "categories": DOCTOR_CATEGORIES,
         "activeness_list": DOCTOR_ACTIVENESS,
@@ -790,8 +801,13 @@ def pharmacy_entry_view(request: HttpRequest) -> HttpResponse:
         "pharmacy_category", "pharmacy_type", "promo", "marketing_staff",
         "pharmacy_activeness", "pharmacy_address",
     )}
+    search = request.GET.get("search", "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
 
-    result = view_service.query(brand=brand, **filters)
+    result = view_service.query(brand=brand, search=search, page=page, **filters)
     options = view_service.dropdown_options(
         brand=brand, country=filters["country"], area=filters["area"],
         region=filters["region"], city=filters["city"],
@@ -800,6 +816,11 @@ def pharmacy_entry_view(request: HttpRequest) -> HttpResponse:
     context = {
         "records": result["records"],
         "total_rows": result["total_rows"],
+        "page": result.get("page", 1),
+        "num_pages": result.get("num_pages", 1),
+        "has_prev": result.get("has_prev", False),
+        "has_next": result.get("has_next", False),
+        "search": search,
         "options": options,
         "brands": PHARMACY_BRANDS,
         "activeness_list": PHARMACY_ACTIVENESS,
@@ -871,14 +892,18 @@ class OneCService:
 
         self.repository = OneCRepository()
 
-    def get_table(self, key: str) -> dict:
-        """Return {columns, rows, total_rows} for the given table key."""
-        result = self.repository.fetch_table(key)
+    def get_table(self, key: str, page: int = 1, search: str = "") -> dict:
+        """Return a paginated/filtered table slice with pagination metadata."""
+        result = self.repository.fetch_table(key, page=page, search=search)
         return {
             "columns": result["columns"],
             "rows": result["rows"],
-            "total_rows": len(result["rows"]),
+            "total_rows": result["total_rows"],
             "table": result["table"],
+            "page": result["page"],
+            "num_pages": result["num_pages"],
+            "has_prev": result["has_prev"],
+            "has_next": result["has_next"],
         }
 
 
@@ -909,10 +934,16 @@ def onec_stock_view(request: HttpRequest) -> HttpResponse:
     if tab not in valid:
         tab = "orders"
 
+    search = (request.GET.get("search") or "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+
     report = None
     error = ""
     try:
-        report = service.get_table(tab)
+        report = service.get_table(tab, page=page, search=search)
     except Exception as exc:
         error = f"Ошибка загрузки данных: {exc}"
 
@@ -921,6 +952,7 @@ def onec_stock_view(request: HttpRequest) -> HttpResponse:
         "tab": tab,
         "report": report,
         "error": error,
+        "search": search,
     }
     return render(request, "sales/onec_stock.html", context)
 
@@ -1103,3 +1135,11 @@ def doctor_managerial_view(request: HttpRequest) -> HttpResponse:
               "begin": begin, "end": end},
     }
     return render(request, "sales/doctor_managerial.html", context)
+
+@login_required
+@require_screen("ONEC_STOCK")
+@require_http_methods(["GET"])
+def onec_react_view(request):
+    """1C stock screen rendered with React (single-file, calls the JSON API)."""
+    from django.shortcuts import render
+    return render(request, "sales/onec_react.html", {})

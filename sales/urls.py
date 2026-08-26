@@ -4,6 +4,8 @@ from django.urls import path
 
 from . import views
 
+from . import api
+
 app_name = "sales"
 
 urlpatterns = [
@@ -22,4 +24,6 @@ urlpatterns = [
     path("1c-stock/", views.onec_stock_view, name="onec_stock"),
     path("pharm-managerial/", views.pharm_managerial_view, name="pharm_managerial"),
     path("doctor-managerial/", views.doctor_managerial_view, name="doctor_managerial"),
+    path("api/onec/", api.onec_api, name="onec_api"),
+    path("onec-react/", views.onec_react_view, name="onec_react"),
 ]

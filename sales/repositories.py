@@ -594,6 +594,16 @@ class OneCRepository:
         "residues": "[UPS]",
     }
 
+    # Searchable columns per table (product description + SAP code). Whitelisted.
+    _SEARCH_COLS = {
+        "orders": ["Item_Description", "SAP"],
+        "shipments": ["Item_Description", "SAP"],
+        "sales": ["Item_Description", "SAP"],
+        "residues": ["Item_Description_EN", "SAP"],
+    }
+
+    PAGE_SIZE = 200
+
     def _connect(self):
         """Open a pymssql connection from settings config."""
         import pymssql
@@ -610,31 +620,101 @@ class OneCRepository:
             timeout=30,
         )
 
-    def fetch_table(self, key: str) -> dict:
+    def _esc_like(self, value: str) -> str:
+        """Escape a value for a safe single-quoted LIKE literal (T-SQL)."""
+        v = str(value or "").replace("'", "''")
+        # LIKE ozel karakterlerini de notrle
+        v = v.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]")
+        return v.strip()
+
+    def fetch_table(self, key: str, page: int = 1, search: str = "") -> dict:
         """
-        Return {columns, rows, table} for a whitelisted table/view. `key` is
-        one of _TABLES. Read-only SELECT with a fixed column list, so this is
-        injection-safe.
+        Return a paginated, optionally filtered slice of a whitelisted table.
+
+        `key` is one of _TABLES. `page` is 1-based; PAGE_SIZE rows per page via
+        SQL Server OFFSET/FETCH. `search` filters product description + SAP.
+        Column list and searchable columns are whitelisted, and search values
+        are escaped, so no user input reaches SQL unsanitised. Read-only.
+
+        Returns {columns, rows, table, page, num_pages, total_rows,
+        has_prev, has_next}.
         """
         if key not in self._TABLES:
             raise ValueError(f"Unknown table: {key}")
 
         table_name, columns = self._TABLES[key]
         col_sql = ", ".join(f"[{c}]" for c in columns)
-        order_by = self._ORDER_BY.get(key)
-        sql = f"SELECT {col_sql} FROM dbo.{table_name}"
-        if order_by:
-            sql += f" ORDER BY {order_by}"
+        order_by = self._ORDER_BY.get(key) or f"[{columns[0]}]"
+
+        # page -> guvenli int
+        try:
+            page = int(page)
+        except (TypeError, ValueError):
+            page = 1
+        if page < 1:
+            page = 1
+
+        # Arama WHERE (whitelisted kolonlar + escape'li deger)
+        where = ""
+        search = (search or "").strip()
+        if search:
+            safe = self._esc_like(search)
+            cols = self._SEARCH_COLS.get(key, [])
+            if cols:
+                conds = " OR ".join(
+                    f"[{c}] LIKE '%{safe}%'" for c in cols
+                )
+                where = f" WHERE ({conds})"
+
+        size = self.PAGE_SIZE
+        offset = (page - 1) * size
 
         conn = self._connect()
         try:
             cur = conn.cursor()
+
+            # Toplam sayi (arama varsa filtreli). Filtresiz sayim 5 dk cache'lenir.
+            total = self._count(cur, table_name, where, key, bool(search))
+
+            # Sayfalanmis veri
+            sql = (
+                f"SELECT {col_sql} FROM dbo.{table_name}{where} "
+                f"ORDER BY {order_by} "
+                f"OFFSET {offset} ROWS FETCH NEXT {size} ROWS ONLY"
+            )
             cur.execute(sql)
             rows = cur.fetchall()
         finally:
             conn.close()
 
-        return {"columns": columns, "rows": rows, "table": table_name}
+        num_pages = max(1, (total + size - 1) // size)
+        return {
+            "columns": columns,
+            "rows": rows,
+            "table": table_name,
+            "page": page,
+            "num_pages": num_pages,
+            "total_rows": total,
+            "has_prev": page > 1,
+            "has_next": page < num_pages,
+        }
+
+    def _count(self, cur, table_name, where, key, has_search):
+        """
+        COUNT(*) for pagination. Unfiltered counts are cached 5 min so many
+        concurrent users don't each re-scan the view.
+        """
+        if has_search:
+            cur.execute(f"SELECT COUNT(*) FROM dbo.{table_name}{where}")
+            return cur.fetchone()[0]
+        from django.core.cache import cache
+        ckey = f"onec_total_{key}"
+        total = cache.get(ckey)
+        if total is None:
+            cur.execute(f"SELECT COUNT(*) FROM dbo.{table_name}")
+            total = cur.fetchone()[0]
+            cache.set(ckey, total, 300)
+        return total
 
 
 class PharmManagerialRepository:

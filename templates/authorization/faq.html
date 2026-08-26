@@ -78,14 +78,31 @@
 (function () {
     "use strict";
     window.faqShow = function (key, btn) {
-        //tum cevaplari gizle ve butonlari pasifle
+
+        //tum cevaplari gizle ve butonu pasifle
         document.querySelectorAll(".faq-answer").forEach(function (a) { a.classList.remove("show"); });
         document.querySelectorAll(".faq-q-btn").forEach(function (b) { b.classList.remove("active"); });
-        //sadece secileni goster
+        
+        //secileni goster
         var ans = document.getElementById("faq-" + key);
         if (ans) ans.classList.add("show");
         if (btn) btn.classList.add("active");
+
+        /*
+        userDiv.className = 'message user-message';
+        userDiv.textContent = question;
+        msgs.appendChild(userDiv);
+        const botDiv = document.createElement('div');
+        botDiv.classname = 'message bot-message';
+        botDiv.textContent = answer || "Информация по данному вопросу не указана";
+        msgs.appendChild(botDiv);
+        msgs.scrollTop = msgs.scrollHeight;
+        
+
+        
+        
     };
+
 })();
 </script>
 {% endblock %}

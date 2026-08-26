@@ -285,6 +285,18 @@
     /* Tablo icerik kadar genis; kapsayiciyi asinca table-scroll'da scroll cikar */
     .doc-table { width: max-content; max-width: none; border-collapse: collapse; white-space: nowrap; }
     .doc-table th, .doc-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    /* Arama + sayfalama */
+    .doc-search-bar { display: flex; gap: 8px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+    .doc-search-input { flex: 1; min-width: 240px; max-width: 400px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--cream); font-family: 'Jost',sans-serif; font-size: 0.85rem; }
+    .doc-search-input:focus { border-color: var(--gold); outline: none; }
+    .doc-search-btn { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--dark); border: none; border-radius: 4px; padding: 8px 18px; font-family: 'Jost',sans-serif; font-weight: 500; font-size: 0.85rem; cursor: pointer; }
+    .doc-search-clear { color: var(--text-dim); font-size: 0.8rem; text-decoration: none; padding: 8px; }
+    .doc-search-clear:hover { color: var(--gold-light); }
+    .doc-pagination { display: flex; gap: 14px; align-items: center; justify-content: center; margin: 18px 0; }
+    .pg-btn { background: rgba(201,168,76,0.1); border: 1px solid var(--border); border-radius: 4px; padding: 8px 16px; color: var(--gold-light); text-decoration: none; font-size: 0.85rem; transition: background 0.2s; }
+    .pg-btn:hover { background: rgba(201,168,76,0.2); }
+    .pg-disabled { opacity: 0.35; cursor: default; }
+    .pg-info { color: var(--text-dim); font-size: 0.85rem; }
 </style>
 
 <h1 class="page-title">Врач вход Обновление</h1>
@@ -485,7 +497,15 @@
     </div>
 </form>
 
-<div class="doc-count">Всего: {{ total_rows }}{% if total_rows > 500 %} (показаны первые 500){% endif %}</div>
+<!-- Arama kutusu: isim / sehir / klinik -->
+<form method="get" class="doc-search-bar">
+    <input type="text" name="search" value="{{ search|default:'' }}"
+           placeholder="Поиск: имя, город или клиника..." class="doc-search-input">
+    <button type="submit" class="doc-search-btn">Поиск</button>
+    {% if search %}<a href="?" class="doc-search-clear">Сбросить</a>{% endif %}
+</form>
+
+<div class="doc-count">Всего: {{ total_rows }} · Страница {{ page }} из {{ num_pages }}</div>
 
 <div class="table-scroll">
 <table class="doc-table">
@@ -534,6 +554,23 @@
     </tbody>
 </table>
 </div>
+
+<!-- Sayfalama -->
+{% if num_pages > 1 %}
+<div class="doc-pagination">
+    {% if has_prev %}
+    <a href="?{% if search %}search={{ search }}&{% endif %}page={{ page|add:'-1' }}" class="pg-btn">← Назад</a>
+    {% else %}
+    <span class="pg-btn pg-disabled">← Назад</span>
+    {% endif %}
+    <span class="pg-info">Страница {{ page }} из {{ num_pages }}</span>
+    {% if has_next %}
+    <a href="?{% if search %}search={{ search }}&{% endif %}page={{ page|add:'1' }}" class="pg-btn">Вперёд →</a>
+    {% else %}
+    <span class="pg-btn pg-disabled">Вперёд →</span>
+    {% endif %}
+</div>
+{% endif %}
 
 <script>
 (function () {
