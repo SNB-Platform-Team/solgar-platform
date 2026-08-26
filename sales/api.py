@@ -86,3 +86,177 @@ def _json_safe(value):
     if isinstance(value, (datetime.date, datetime.datetime)):
         return value.isoformat()
     return value
+
+
+# ==================== Doctor Managerial API (DRF) ====================
+
+DOC_MGR_COMP_TYPES_API = [
+    {"value": "", "label": "—"},
+    {"value": "SOLGAR", "label": "SOLGAR"},
+    {"value": "OBF", "label": "OBF"},
+    {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+]
+DOC_MGR_REP_TYPES_API = ["REGIONS", "MAIN_DISTRICT", "CITY", "MAIN_SPECIALITY",
+                         "SUB_SPECIALITY", "MED_REPS", "CLINIC_NAME", "ACTIVATION_DATE"]
+DOC_MGR_PARAMETERS_API = ["TOTAL_QUANTITY", "TOTAL_CATEGORY"]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def doctor_managerial_api(request):
+    """
+    Doctor Managerial report API. Returns dropdown options plus, when run=1,
+    a grouped/counted report (columns + rows) as JSON for the React frontend.
+
+    Query params (all optional):
+      run        - "1" to actually run the report (otherwise only options)
+      brand, rep_type, parameter
+      country, region, city, speciality, sub_speciality, clinic, medrep,
+      activeness, begin, end
+
+    Response:
+      {
+        options: {comp_types, rep_types, parameters},
+        report: {columns, rows, total_rows} | null,
+        error: str,
+        f: {...echoed filters...}
+      }
+    """
+    from .views import DoctorManagerialService
+
+    service = DoctorManagerialService()
+
+    brand = (request.GET.get("brand") or "").strip()
+    rep_type = (request.GET.get("rep_type") or "REGIONS").strip()
+    parameter = (request.GET.get("parameter") or "TOTAL_QUANTITY").strip()
+    country = (request.GET.get("country") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    speciality = (request.GET.get("speciality") or "").strip()
+    sub_speciality = (request.GET.get("sub_speciality") or "").strip()
+    clinic = (request.GET.get("clinic") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    activeness = (request.GET.get("activeness") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    report = None
+    error = ""
+    if request.GET.get("run"):
+        try:
+            result = service.run(
+                brand=brand, rep_type=rep_type, parameter=parameter,
+                country=country, region=region, city=city,
+                speciality=speciality, sub_speciality=sub_speciality,
+                clinic=clinic, medrep=medrep, activeness=activeness,
+                begin=begin.replace("-", ""), end=end.replace("-", ""),
+            )
+            rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+            report = {
+                "columns": result["columns"],
+                "rows": rows,
+                "total_rows": result.get("total_rows", len(rows)),
+            }
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    return Response({
+        "options": {
+            "comp_types": DOC_MGR_COMP_TYPES_API,
+            "rep_types": DOC_MGR_REP_TYPES_API,
+            "parameters": DOC_MGR_PARAMETERS_API,
+        },
+        "report": report,
+        "error": error,
+        "f": {
+            "brand": brand, "rep_type": rep_type, "parameter": parameter,
+            "country": country, "region": region, "city": city,
+            "speciality": speciality, "sub_speciality": sub_speciality,
+            "clinic": clinic, "medrep": medrep, "activeness": activeness,
+            "begin": begin, "end": end,
+        },
+    })
+
+
+# ==================== Pharmacy Managerial API (DRF) ====================
+
+PHARM_MGR_COMP_TYPES_API = [
+    {"value": "SOLGAR", "label": "SOLGAR"},
+    {"value": "OBF", "label": "OBF"},
+    {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+]
+PHARM_MGR_REP_TYPES_API = ["REGIONS", "MAIN_DISTRICT", "CITY", "MED_REPS",
+                           "CHAINS", "ACTIVATION_DATE"]
+PHARM_MGR_PARAMETERS_API = ["TOTAL_QUANTITY", "TOTAL_CATEGORY", "TOTAL_ACTIVENESS"]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharm_managerial_api(request):
+    """
+    Pharmacy Managerial report API. Returns dropdown options plus, when run=1,
+    a grouped/counted report (columns + rows) as JSON for the React frontend.
+
+    Query params (all optional):
+      run        - "1" to actually run the report (otherwise only options)
+      brand, rep_type, parameter
+      country, region, city, chain, medrep, activeness, begin, end
+
+    Response:
+      {
+        options: {comp_types, rep_types, parameters},
+        report: {columns, rows, total_rows} | null,
+        error: str,
+        f: {...echoed filters...}
+      }
+    """
+    from .views import PharmManagerialService
+
+    service = PharmManagerialService()
+
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    rep_type = (request.GET.get("rep_type") or "REGIONS").strip()
+    parameter = (request.GET.get("parameter") or "TOTAL_QUANTITY").strip()
+    country = (request.GET.get("country") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    chain = (request.GET.get("chain") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    activeness = (request.GET.get("activeness") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    report = None
+    error = ""
+    if request.GET.get("run"):
+        try:
+            result = service.run(
+                brand=brand, rep_type=rep_type, parameter=parameter,
+                country=country, region=region, city=city, chain=chain,
+                medrep=medrep, activeness=activeness,
+                begin=begin.replace("-", ""), end=end.replace("-", ""),
+            )
+            rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+            report = {
+                "columns": result["columns"],
+                "rows": rows,
+                "total_rows": result.get("total_rows", len(rows)),
+            }
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    return Response({
+        "options": {
+            "comp_types": PHARM_MGR_COMP_TYPES_API,
+            "rep_types": PHARM_MGR_REP_TYPES_API,
+            "parameters": PHARM_MGR_PARAMETERS_API,
+        },
+        "report": report,
+        "error": error,
+        "f": {
+            "brand": brand, "rep_type": rep_type, "parameter": parameter,
+            "country": country, "region": region, "city": city, "chain": chain,
+            "medrep": medrep, "activeness": activeness,
+            "begin": begin, "end": end,
+        },
+    })

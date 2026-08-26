@@ -26,4 +26,6 @@ urlpatterns = [
     path("doctor-managerial/", views.doctor_managerial_view, name="doctor_managerial"),
     path("api/onec/", api.onec_api, name="onec_api"),
     path("onec-react/", views.onec_react_view, name="onec_react"),
+    path("api/doctor-managerial/", api.doctor_managerial_api, name="doctor_managerial_api"),
+    path("api/pharm-managerial/", api.pharm_managerial_api, name="pharm_managerial_api"),
 ]
