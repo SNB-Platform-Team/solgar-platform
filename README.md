@@ -18,8 +18,9 @@ activates once app registration details are supplied.
 | Layer | Technology |
 |---|---|
 | Backend | Django 5.1 (server-side rendering) |
+| Frontend | React |
 | Database | MySQL 8.0 (Docker locally, Azure Database for MySQL in production) |
-| Auth | Django sessions; Azure AD SSO (code ready, pending registration) |
+| Auth | Django sessions; Azure AD SSO, JWT (code ready, pending registration) |
 | Bot protection | reCAPTCHA v3 (invisible, activates when keys are set) |
 | Hosting | Azure App Service (Linux, Python 3.10) |
 | Deployment | GitHub Actions (automatic on push to `main`) |
