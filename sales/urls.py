@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/doctor-managerial/", api.doctor_managerial_api, name="doctor_managerial_api"),
     path("api/pharm-managerial/", api.pharm_managerial_api, name="pharm_managerial_api"),
     path("api/pharmacy/", api.pharmacy_api, name="pharmacy_api"),
+    path("api/pharmacy/filter-options/", api.pharmacy_filter_options_api, name="pharmacy_filter_options_api"),
     path("api/doctor/", api.doctor_api, name="doctor_api"),
     path("api/chain-report/", api.chain_report_api, name="chain_report_api"),  
     path("api/sales-obs/", api.sales_obs_api, name="sales_obs_api"),   
@@ -43,4 +44,5 @@ urlpatterns = [
     path("api/distributor-upload/options/", api.distributor_upload_options_api, name="distributor_upload_options_api"),
     path("api/distributor-upload/preview/", api.distributor_upload_preview_api, name="distributor_upload_preview_api"),
     path("api/distributor-upload/save/", api.distributor_upload_save_api, name="distributor_upload_save_api"),
+    path("api/doctor/filter-options/", api.doctor_filter_options_api, name="doctor_filter_options_api"),
 ]

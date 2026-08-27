@@ -312,8 +312,14 @@ def pharmacy_api(request):
     except (TypeError, ValueError):
         page = 1
 
+    fkeys = [
+        "country", "area", "region", "city", "group_company",
+        "subgroup_company", "pharmacy_category", "pharmacy_type", "promo",
+        "marketing_staff", "pharmacy_activeness", "pharmacy_address",
+    ]
+    filters = {k: (request.GET.get(k) or "").strip() for k in fkeys}
     try:
-        result = service.query(brand=brand, search=search, page=page)
+        result = service.query(brand=brand, search=search, page=page, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -335,6 +341,7 @@ def pharmacy_api(request):
         "has_prev": result["has_prev"],
         "has_next": result["has_next"],
         "search": search,
+        "filters": filters,
     })
 
 
@@ -388,8 +395,15 @@ def doctor_api(request):
     except (TypeError, ValueError):
         page = 1
 
+    dfkeys = [
+        "country", "area", "region", "city", "medrep", "specialty",
+        "unified_specialty", "category", "activeness", "doctor_name",
+        "clinic_status",
+    ]
+    filters = {k: (request.GET.get(k) or "").strip() for k in dfkeys}
+
     try:
-        result = service.query(brand=brand, search=search, page=page)
+        result = service.query(brand=brand, search=search, page=page, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -410,6 +424,7 @@ def doctor_api(request):
         "has_prev": result["has_prev"],
         "has_next": result["has_next"],
         "search": search,
+        "filters": filters,
     })
 
 
@@ -1025,3 +1040,115 @@ def distributor_upload_save_api(request):
         return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
 
     return Response({"created": created, "error": ""})
+
+
+# ==================== Pharmacy Filter Options API (cascading dropdowns) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharmacy_filter_options_api(request):
+    """
+    Dropdown data for the Pharmacy screen filters. Brand-scoped.
+
+    Two modes:
+      1) No `level` param: returns ALL top-level lists at once (initial load) --
+         countries, chains, categories, types, promos, marketing_staff.
+      2) With `level` param: returns ONE cascading list based on parent values
+         (level=area/region/city/metro/subchain), mirroring the Java AJAX
+         cascade. Used when the user picks a parent value.
+
+    Query params:
+      brand (SOLGAR/BOUNTY), level, country, area, region, city, group_company
+    """
+    from .repositories import PharmacyRepository
+
+    repo = PharmacyRepository()
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    level = (request.GET.get("level") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+    area = (request.GET.get("area") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    group_company = (request.GET.get("group_company") or "").strip()
+
+    # --- Cascading single-level mode ---
+    if level:
+        if level == "area":
+            options = repo.areas(brand, country=country)
+        elif level == "region":
+            options = repo.regions(brand, country=country, area=area)
+        elif level == "city":
+            options = repo.cities(brand, country=country, area=area, region=region)
+        elif level == "metro":
+            options = repo.metros(brand, city=city)
+        elif level == "subchain":
+            options = repo.subchains(brand, group_company=group_company)
+        else:
+            options = []
+        return Response({"level": level, "options": list(options)})
+
+    # --- Initial load: all top-level lists at once ---
+    def _safe(fn, *a, **kw):
+        try:
+            return list(fn(*a, **kw))
+        except Exception:
+            return []
+
+    return Response({
+        "countries": _safe(repo.countries, brand),
+        "chains": _safe(repo.chains, brand),
+        "categories": _safe(repo.pharmacy_categories, brand),
+        "types": _safe(repo.pharmacy_types, brand),
+        "promos": _safe(repo.promos, brand),
+        "marketing_staff": _safe(repo.marketing_staff, brand),
+    })
+
+
+# ==================== Doctor Filter Options API (cascading dropdowns) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def doctor_filter_options_api(request):
+    """
+    Dropdown data for the Doctor screen filters.
+
+    Two modes:
+      1) No `level`: all top-level lists (countries, specialties,
+         unified_specialties, medreps).
+      2) With `level` (area/region/city): one cascading list narrowed by
+         parent selections, mirroring the Java country->area->region->city
+         cascade.
+
+    Query params: level, country, area, region
+    """
+    from .repositories import DoctorRepository
+
+    repo = DoctorRepository()
+    level = (request.GET.get("level") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+    area = (request.GET.get("area") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+
+    if level:
+        if level == "area":
+            options = repo.areas(country=country)
+        elif level == "region":
+            options = repo.regions(country=country, area=area)
+        elif level == "city":
+            options = repo.cities(country=country, area=area, region=region)
+        else:
+            options = []
+        return Response({"level": level, "options": list(options)})
+
+    def _safe(fn, *a, **kw):
+        try:
+            return list(fn(*a, **kw))
+        except Exception:
+            return []
+
+    return Response({
+        "countries": _safe(repo.countries),
+        "specialties": _safe(repo.specialties),
+        "unified_specialties": _safe(repo.unified_specialties),
+        "medreps": _safe(repo.medreps),
+    })
