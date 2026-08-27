@@ -169,47 +169,9 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-@require_screen("DASHBOARD")
 def home_view(request: HttpRequest) -> HttpResponse:
-    """Dashboard with live stats: employees, logins, and approval activity."""
-    from employees.models import Employee
-    from approvals.models import EquipmentRequest
-    from .models import LoginLog
-
-    employee_total = Employee.objects.filter(is_active=True).count()
-    unit_total = (
-        Employee.objects.filter(is_active=True)
-        .exclude(unit="")
-        .values("unit")
-        .distinct()
-        .count()
-    )
-    recent_logins = LoginLog.objects.select_related("user").filter(
-        event_type=LoginLog.EventType.LOGIN
-    )[:5]
-
-    # Approval activity for the current user (as approver).
-    my_pending = EquipmentRequest.objects.filter(
-        approver=request.user, status=EquipmentRequest.Status.PENDING
-    ).count()
-    # Overall approval counts (platform-wide).
-    approved_total = EquipmentRequest.objects.filter(
-        status=EquipmentRequest.Status.APPROVED
-    ).count()
-    pending_total = EquipmentRequest.objects.filter(
-        status=EquipmentRequest.Status.PENDING
-    ).count()
-
-    context: dict[str, Any] = {
-        "employee_total": employee_total,
-        "unit_total": unit_total,
-        "recent_logins": recent_logins,
-        "my_pending": my_pending,
-        "approved_total": approved_total,
-        "pending_total": pending_total,
-    }
-    return render(request, "accounts/home.html", context)
-# ==== FAQ (Часто задаваемые вопросы) ====
+    """Serve the React SPA entry point (single-page app root)."""
+    return render(request, "index.html")
 
 @login_required
 @require_http_methods(["GET"])

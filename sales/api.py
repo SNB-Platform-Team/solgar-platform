@@ -1152,3 +1152,26 @@ def doctor_filter_options_api(request):
         "unified_specialties": _safe(repo.unified_specialties),
         "medreps": _safe(repo.medreps),
     })
+
+
+# ==================== Current user (auth check) API ====================
+
+from rest_framework.permissions import AllowAny as _AllowAny
+
+
+@api_view(["GET"])
+@permission_classes([_AllowAny])
+def me_api(request):
+    """
+    Returns the current user's auth state. React calls this on load to decide
+    whether to show the app or redirect to login. AllowAny so it can be called
+    while logged out (returns authenticated: false instead of 403).
+    """
+    if request.user and request.user.is_authenticated:
+        return Response({
+            "authenticated": True,
+            "username": request.user.username,
+            "display_name": request.user.get_full_name() or request.user.username,
+            "is_staff": request.user.is_staff,
+        })
+    return Response({"authenticated": False})

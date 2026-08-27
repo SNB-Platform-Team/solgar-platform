@@ -1,0 +1,1 @@
+import{t as e}from"./forbidden-CyfGe2d9.js";var t=e;export{t as component};
