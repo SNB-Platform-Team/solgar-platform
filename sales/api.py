@@ -267,12 +267,13 @@ def pharm_managerial_api(request):
 # Tabloda gosterilecek kolonlar (entry ekranindaki ana alanlar).
 # match_key bir @property (DB kolonu degil), o yuzden liste disinda.
 _PHARMACY_API_COLUMNS = [
-    ("pharmacy_name", "Название"),
+    ("pharmacy_no", "Номер аптеки"),
+    ("group_company", "Сеть"),
     ("country", "Страна"),
     ("region", "Регион"),
     ("city", "Город"),
     ("pharmacy_address", "Адрес"),
-    ("group_company", "Сеть"),
+    ("pharmacy_response_person", "Ответственный"),
     ("pharmacy_category", "Категория"),
     ("pharmacy_type", "Тип"),
 ]
@@ -628,18 +629,8 @@ def _dash_int(v):
 @permission_classes([IsAuthenticated])
 def dashboard_api(request):
     """
-    Dashboard summary API. Returns headline counters, top chains (bar chart),
-    and a monthly sales trend (line chart) built from the CHAIN_SALES pivot.
-
-    Cached for 10 minutes (heavy aggregation, hit on every dashboard load).
-
-    Response:
-      {
-        cards: {pharmacies, doctors, chains, sales_total},
-        top_chains: [{name, total}, ...],   # up to 10
-        monthly: [{month, total}, ...],     # 12 months
-        period: {begin, end, comp_type}
-      }
+    Dashboard summary API: headline counters, top chains, monthly sales trend.
+    Cached 10 minutes.
     """
     from .services import ReportService, PharmacyViewService, DoctorViewService
 
@@ -647,11 +638,10 @@ def dashboard_api(request):
     if cached is not None:
         return Response(cached)
 
-    # --- Period: current year Jan..Dec (pivot expects YYYYMMDD) ---
     year = _dt_dash.date.today().year
     begin = f"{year}0101"
     end = f"{year}1231"
-    comp_type = "SL"  # SOLGAR headline
+    comp_type = "SL"
 
     report = None
     try:
@@ -667,8 +657,6 @@ def dashboard_api(request):
     if report and report.get("rows"):
         columns = report["columns"]
         rows = report["rows"]
-
-        # Kolon indekslerini isimle bul (pivot: PRODUCT, chain, <aylar>, pharmacy_count, Total)
         try:
             chain_idx = columns.index("chain")
         except ValueError:
@@ -678,11 +666,9 @@ def dashboard_api(request):
         except ValueError:
             total_idx = len(columns) - 1
 
-        # Ay kolonlari: "YYYY_Mon" formatinda olanlar
         month_cols = [(i, c) for i, c in enumerate(columns)
                       if "_" in c and c.split("_")[0].isdigit()]
 
-        # Top zincirler (Total'e gore)
         chain_totals = []
         for r in rows:
             name = str(r[chain_idx])
@@ -692,7 +678,6 @@ def dashboard_api(request):
         chain_totals.sort(key=lambda x: x[1], reverse=True)
         top_chains = [{"name": n, "total": t} for n, t in chain_totals[:10]]
 
-        # Aylik toplam (tum zincirler, her ay kolonu icin)
         _MONTH_RU = {
             "Jan": "Янв", "Feb": "Фев", "Mar": "Мар", "Apr": "Апр",
             "May": "Май", "Jun": "Июн", "Jul": "Июл", "Aug": "Авг",
@@ -703,7 +688,6 @@ def dashboard_api(request):
             label = cname.split("_")[-1]
             monthly.append({"month": _MONTH_RU.get(label, label), "total": msum})
 
-    # --- Sayimlar (cache'li count'lardan hizli) ---
     pharmacies = 0
     doctors = 0
     try:
@@ -734,7 +718,7 @@ def dashboard_api(request):
         "period": {"begin": begin, "end": end, "comp_type": comp_type},
     }
 
-    _dash_cache.set("dashboard_summary_v1", payload, 600)  # 10 dk
+    _dash_cache.set("dashboard_summary_v1", payload, 600)
     return Response(payload)
 
 
@@ -743,17 +727,7 @@ def dashboard_api(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def faq_api(request):
-    """
-    Rule-based FAQ API. Returns the user's accessible screens (dynamic) plus
-    static informational FAQ entries, as JSON for the React frontend.
-
-    Response:
-      {
-        user_display: str,
-        my_screens: [str, ...],      # Russian names of reachable screens
-        faq: [{q, a}, ...]           # static question/answer pairs
-      }
-    """
+    """Rule-based FAQ: user's accessible screens + static Q/A."""
     from authorization.models import Screen
     from authorization.context_processors import accessible_screens as _acc
 
@@ -762,34 +736,24 @@ def faq_api(request):
     my_screens = sorted({name_by_code.get(c, c) for c in codes if c in name_by_code})
 
     faq = [
-        {
-            "q": "Что это за платформа?",
-            "a": ("Внутренняя платформа Solgar — веб-версия системы Solgar Intern. "
-                  "Она объединяет отчёты по продажам, справочники аптек и врачей, "
-                  "данные 1С-склада и аналитику в одном месте."),
-        },
-        {
-            "q": "Какие разделы мне доступны?",
-            "a": ("Ниже перечислены экраны, к которым у вас есть доступ. "
-                  "Если нужного раздела нет в списке, обратитесь к администратору."),
-        },
-        {
-            "q": "Откуда берутся данные?",
-            "a": ("Справочные данные (аптеки, врачи, регионы) поступают из внешней "
-                  "базы; данные о продажах загружаются из Excel-файлов; складские "
-                  "остатки и заказы — напрямую из 1С."),
-        },
-        {
-            "q": "Как сформировать отчёт?",
-            "a": ("Откройте нужный экран отчёта, выберите фильтры (компания, период, "
-                  "регион и т.д.) и нажмите «Сформировать отчёт». Результат появится "
-                  "в виде таблицы."),
-        },
-        {
-            "q": "К кому обращаться за помощью?",
-            "a": ("По вопросам доступа и работы платформы обращайтесь к вашему "
-                  "администратору или в отдел ИТ."),
-        },
+        {"q": "Что это за платформа?",
+         "a": ("Внутренняя платформа Solgar — веб-версия системы Solgar Intern. "
+               "Она объединяет отчёты по продажам, справочники аптек и врачей, "
+               "данные 1С-склада и аналитику в одном месте.")},
+        {"q": "Какие разделы мне доступны?",
+         "a": ("Ниже перечислены экраны, к которым у вас есть доступ. "
+               "Если нужного раздела нет в списке, обратитесь к администратору.")},
+        {"q": "Откуда берутся данные?",
+         "a": ("Справочные данные (аптеки, врачи, регионы) поступают из внешней "
+               "базы; данные о продажах загружаются из Excel-файлов; складские "
+               "остатки и заказы — напрямую из 1С.")},
+        {"q": "Как сформировать отчёт?",
+         "a": ("Откройте нужный экран отчёта, выберите фильтры (компания, период, "
+               "регион и т.д.) и нажмите «Сформировать отчёт». Результат появится "
+               "в виде таблицы.")},
+        {"q": "К кому обращаться за помощью?",
+         "a": ("По вопросам доступа и работы платформы обращайтесь к вашему "
+               "администратору или в отдел ИТ.")},
     ]
 
     return Response({
@@ -799,7 +763,22 @@ def faq_api(request):
     })
 
 
-# ==================== Sales Upload API (DRF) - preview + save ====================
+# ==================== CSRF token endpoint ====================
+
+from django.http import JsonResponse as _CsrfJsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie as _ensure_csrf_cookie
+from django.contrib.auth.decorators import login_required as _csrf_login_required
+
+
+@_ensure_csrf_cookie
+@_csrf_login_required
+def csrf_api(request):
+    """Sets the csrftoken cookie so React can send X-CSRFToken on POSTs."""
+    from django.middleware.csrf import get_token
+    return _CsrfJsonResponse({"csrfToken": get_token(request)})
+
+
+# ==================== Sales Upload API (preview + save + options) ====================
 
 from decimal import Decimal as _UL_Decimal
 from datetime import datetime as _ul_datetime
@@ -814,7 +793,6 @@ def sales_upload_options_api(request):
         from .views import COUNTRIES
     except Exception:
         COUNTRIES = []
-
     chains = list(
         ChainDefinition.objects.filter(is_active=True).values_list("name", flat=True)
     )
@@ -824,19 +802,7 @@ def sales_upload_options_api(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def sales_upload_preview_api(request):
-    """
-    Parse an uploaded chain sales Excel file and return the parsed rows as JSON
-    (stateless preview -- nothing is saved yet).
-
-    multipart/form-data:
-      excel_file   - the Excel file
-      report_date  - YYYY-MM-DD
-      chain_name   - active chain name
-      country      - country
-
-    Response:
-      {rows: [...], total_rows, meta: {report_date, chain_name, country}, error}
-    """
+    """Parse an uploaded chain sales Excel file and return parsed rows (stateless)."""
     from .models import ChainDefinition
     from .services import SalesUploadService, SalesParseError
 
@@ -871,19 +837,15 @@ def sales_upload_preview_api(request):
     rows = []
     for r in result.rows:
         rows.append({
-            "product_name": r.product_name,
-            "brand": r.brand,
-            "pharmacy": r.pharmacy,
-            "city": r.city,
-            "count": _json_safe(r.count),
-            "amount": _json_safe(r.amount),
+            "product_name": r.product_name, "brand": r.brand,
+            "pharmacy": r.pharmacy, "city": r.city,
+            "count": _json_safe(r.count), "amount": _json_safe(r.amount),
             "remaining_count": _json_safe(r.remaining_count),
             "remaining_amount": _json_safe(r.remaining_amount),
         })
 
     return Response({
-        "rows": rows,
-        "total_rows": result.total_rows,
+        "rows": rows, "total_rows": result.total_rows,
         "meta": {"report_date": report_date, "chain_name": chain_name, "country": country},
         "error": "",
     })
@@ -892,18 +854,8 @@ def sales_upload_preview_api(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def sales_upload_save_api(request):
-    """
-    Save previously previewed rows. The frontend sends back the rows and meta
-    it received from the preview endpoint.
-
-    JSON body:
-      {rows: [...], report_date, chain_name, country}
-
-    Response:
-      {created: int, error}
-    """
-    from .services import SalesUploadService
-    from .services import ParsedRow, ParseResult
+    """Save previously previewed sales rows sent back by the frontend."""
+    from .services import SalesUploadService, ParsedRow, ParseResult
 
     data = request.data or {}
     rows_in = data.get("rows") or []
@@ -924,12 +876,9 @@ def sales_upload_save_api(request):
     try:
         rows = [
             ParsedRow(
-                product_name=r["product_name"],
-                brand=r["brand"],
-                pharmacy=r["pharmacy"],
-                city=r["city"],
-                count=int(r["count"]),
-                amount=_UL_Decimal(str(r["amount"])),
+                product_name=r["product_name"], brand=r["brand"],
+                pharmacy=r["pharmacy"], city=r["city"],
+                count=int(r["count"]), amount=_UL_Decimal(str(r["amount"])),
                 remaining_count=int(r["remaining_count"]),
                 remaining_amount=_UL_Decimal(str(r["remaining_amount"])),
             )
@@ -948,28 +897,7 @@ def sales_upload_save_api(request):
     return Response({"created": created, "error": ""})
 
 
-# ==================== CSRF token endpoint ====================
-
-from django.http import JsonResponse
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.contrib.auth.decorators import login_required
-
-
-@ensure_csrf_cookie
-@login_required
-def csrf_api(request):
-    """
-    Sets the csrftoken cookie so the React frontend can read it and send
-    X-CSRFToken on subsequent POST requests. Called once on app load.
-
-    Not a DRF view on purpose: @ensure_csrf_cookie must wrap a plain Django
-    view to reliably set the cookie.
-    """
-    from django.middleware.csrf import get_token
-    return JsonResponse({"csrfToken": get_token(request)})
-
-
-# ==================== Distributor Upload API (DRF) - preview + save ====================
+# ==================== Distributor Upload API (preview + save + options) ====================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -980,14 +908,12 @@ def distributor_upload_options_api(request):
         from .views import COUNTRIES
     except Exception:
         COUNTRIES = []
-
     distributors = list(
         ChainDefinition.objects.filter(
             is_active=True, source_type=ChainDefinition.SourceType.DISTRIBUTOR
         ).values_list("name", flat=True)
     )
     operations = [{"value": v, "label": l} for v, l in DistributorRecord.Operation.choices]
-
     return Response({
         "distributors": sorted(distributors),
         "countries": list(COUNTRIES),
@@ -998,12 +924,7 @@ def distributor_upload_options_api(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def distributor_upload_preview_api(request):
-    """
-    Parse a distributor Excel file, return parsed rows as JSON (stateless).
-
-    multipart/form-data:
-      excel_file, distributor, operation_type, country, begin_date, end_date
-    """
+    """Parse a distributor Excel file, return parsed rows as JSON (stateless)."""
     from .models import ChainDefinition
     from .services import DistributorUploadService, SalesParseError
 
@@ -1038,21 +959,15 @@ def distributor_upload_preview_api(request):
     rows = []
     for r in result.rows:
         rows.append({
-            "product_name": r.product_name,
-            "brand": r.brand,
-            "client": r.pharmacy,   # distributor parse'inde pharmacy alani = client
-            "city": r.city,
-            "count": _json_safe(r.count),
-            "amount": _json_safe(r.amount),
+            "product_name": r.product_name, "brand": r.brand,
+            "client": r.pharmacy, "city": r.city,
+            "count": _json_safe(r.count), "amount": _json_safe(r.amount),
         })
 
     return Response({
-        "rows": rows,
-        "total_rows": result.total_rows,
-        "meta": {
-            "distributor": distributor, "operation_type": operation_type,
-            "country": country, "begin_date": begin_date, "end_date": end_date,
-        },
+        "rows": rows, "total_rows": result.total_rows,
+        "meta": {"distributor": distributor, "operation_type": operation_type,
+                 "country": country, "begin_date": begin_date, "end_date": end_date},
         "error": "",
     })
 
@@ -1060,12 +975,7 @@ def distributor_upload_preview_api(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def distributor_upload_save_api(request):
-    """
-    Save previously previewed distributor rows.
-
-    JSON body:
-      {rows, distributor, operation_type, country, begin_date, end_date}
-    """
+    """Save previously previewed distributor rows."""
     from .services import DistributorUploadService, ParsedRow, ParseResult
     from decimal import Decimal as _DL_Decimal
     from datetime import datetime as _dl_datetime
