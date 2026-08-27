@@ -410,3 +410,708 @@ def doctor_api(request):
         "has_next": result["has_next"],
         "search": search,
     })
+
+
+
+import datetime as _dt
+
+CHAIN_REPORT_BRANDS_API = [
+    {"value": "", "label": "Все"},
+    {"value": "SL", "label": "SOLGAR"},
+    {"value": "BN", "label": "NATURES BOUNTY"},
+#   {"value": "OFB", "label": "OTHERS"},     
+    ]
+
+_CHAIN_REPORT_PAGE_SIZE = 200
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def chain_report_api(request):
+    """
+    Chain sales report API (Аптечная сеть продаж). Date-range chain sales with
+    brand totals, paginated table.
+
+    Query params (all optional):
+      brand, chain_name, country, city, date_from, date_to, search (q)
+      main_group, sub_group, region, district
+      page
+
+    Response:
+      {
+        brands, columns, rows, total_rows, page, num_pages, has_prev, has_next,
+        totals: {solgar_count, solgar_amount, bounty_count, bounty_amount},
+        f: {...echoed filters...}
+      }
+    """
+    from .services import SalesViewService
+
+    service = SalesViewService()
+
+    filters = {}
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    if date_from:
+        try:
+            filters["date_from"] = _dt.datetime.strptime(date_from, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            filters["date_to"] = _dt.datetime.strptime(date_to, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    for key in ("chain_name", "country", "brand", "city"):
+        val = (request.GET.get(key) or "").strip()
+        if val:
+            filters[key] = val
+    search = (request.GET.get("q") or request.GET.get("search") or "").strip()
+    if search:
+        filters["search"] = search
+
+    main_group = (request.GET.get("main_group") or "").strip()
+    sub_group = (request.GET.get("sub_group") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    district = (request.GET.get("district") or "").strip()
+
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+    if page < 1:
+        page = 1
+
+    try:
+        result = service.chain_report(
+            main_group=main_group, sub_group=sub_group,
+            region=region, district=district, **filters
+        )
+    except Exception as exc:
+        return Response({"error": f"Ошибка отчета: {exc}"}, status=500)
+
+    qs = result["records"]
+    total = result["total_rows"]
+
+    size = _CHAIN_REPORT_PAGE_SIZE
+    start = (page - 1) * size
+    page_records = list(qs[start:start + size])
+    num_pages = max(1, (total + size - 1) // size)
+
+    columns = ["Компания", "Наименование", "Сеть", "Дата", "Город",
+               "Аптека", "Кол-во", "Сумма"]
+    rows = []
+    for rec in page_records:
+        rows.append([
+            rec.get_brand_display() if hasattr(rec, "get_brand_display") else _json_safe(getattr(rec, "brand", "")),
+            _json_safe(getattr(rec, "product_name", "")),
+            _json_safe(getattr(rec, "chain_name", "")),
+            rec.report_date.strftime("%d.%m.%Y") if getattr(rec, "report_date", None) else "",
+            _json_safe(getattr(rec, "city", "") or ""),
+            _json_safe(getattr(rec, "pharmacy", "") or ""),
+            _json_safe(getattr(rec, "count", 0)),
+            _json_safe(getattr(rec, "amount", 0)),
+        ])
+
+    return Response({
+        "brands": CHAIN_REPORT_BRANDS_API,
+        "columns": columns,
+        "rows": rows,
+        "total_rows": total,
+        "page": page,
+        "num_pages": num_pages,
+        "has_prev": page > 1,
+        "has_next": page < num_pages,
+        "totals": {
+            "solgar_count": _json_safe(result.get("solgar_count", 0)),
+            "solgar_amount": _json_safe(result.get("solgar_amount", 0)),
+            "bounty_count": _json_safe(result.get("bounty_count", 0)),
+            "bounty_amount": _json_safe(result.get("bounty_amount", 0)),
+        },
+        "f": {
+            "brand": request.GET.get("brand", ""), "chain_name": request.GET.get("chain_name", ""),
+            "country": request.GET.get("country", ""), "city": request.GET.get("city", ""),
+            "date_from": date_from, "date_to": date_to, "search": search,
+        },
+    })
+
+
+# ==================== Sales Report Observation API (DRF) ====================
+
+SALES_OBS_COMP_TYPES_API = [
+    {"value": "SL", "label": "SOLGAR"},
+    {"value": "OS", "label": "OBF"},
+    {"value": "BN", "label": "NATURES BOUNTY"},
+]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_obs_api(request):
+    """
+    Sales Report Observation API (Просмотр Сток и Продажа). Monthly CHAIN_SALES
+    pivot report. Returns filter options plus, when a valid date range is given,
+    the pivot (columns + rows).
+
+    Query params:
+      comp_type  - SL / OS / BN (default SL)
+      begin, end - YYYY-MM-DD (both required to run)
+      chain, country - optional filters
+
+    Response:
+      {
+        comp_types, options: {chains, countries},
+        report: {columns, rows, total_rows} | null,
+        error, f
+      }
+    """
+    from .services import ReportService
+
+    service = ReportService()
+
+    comp_type = (request.GET.get("comp_type") or "SL").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+    chain = (request.GET.get("chain") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+
+    try:
+        options = service.dropdown_options(comp_type)
+    except Exception:
+        options = {"chains": [], "countries": []}
+
+    report = None
+    error = ""
+    if begin and end:
+        b = begin.replace("-", "")
+        e = end.replace("-", "")
+        if len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
+            try:
+                result = service.run_chain_sales(comp_type, b, e, chain=chain, country=country)
+                rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+                report = {
+                    "columns": result["columns"],
+                    "rows": rows,
+                    "total_rows": result.get("total_rows", len(rows)),
+                }
+            except Exception as exc:
+                error = f"Ошибка отчета: {exc}"
+        else:
+            error = "Неверный формат даты."
+
+    return Response({
+        "comp_types": SALES_OBS_COMP_TYPES_API,
+        "options": {
+            "chains": list(options.get("chains", [])),
+            "countries": list(options.get("countries", [])),
+        },
+        "report": report,
+        "error": error,
+        "f": {"comp_type": comp_type, "begin": begin, "end": end,
+              "chain": chain, "country": country},
+    })
+
+
+# ==================== Dashboard API (DRF) ====================
+
+import datetime as _dt_dash
+from django.core.cache import cache as _dash_cache
+
+
+def _dash_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def dashboard_api(request):
+    """
+    Dashboard summary API. Returns headline counters, top chains (bar chart),
+    and a monthly sales trend (line chart) built from the CHAIN_SALES pivot.
+
+    Cached for 10 minutes (heavy aggregation, hit on every dashboard load).
+
+    Response:
+      {
+        cards: {pharmacies, doctors, chains, sales_total},
+        top_chains: [{name, total}, ...],   # up to 10
+        monthly: [{month, total}, ...],     # 12 months
+        period: {begin, end, comp_type}
+      }
+    """
+    from .services import ReportService, PharmacyViewService, DoctorViewService
+
+    cached = _dash_cache.get("dashboard_summary_v1")
+    if cached is not None:
+        return Response(cached)
+
+    # --- Period: current year Jan..Dec (pivot expects YYYYMMDD) ---
+    year = _dt_dash.date.today().year
+    begin = f"{year}0101"
+    end = f"{year}1231"
+    comp_type = "SL"  # SOLGAR headline
+
+    report = None
+    try:
+        service = ReportService()
+        report = service.run_chain_sales(comp_type, begin, end, chain="", country="")
+    except Exception:
+        report = None
+
+    top_chains = []
+    monthly = []
+    sales_total = 0
+
+    if report and report.get("rows"):
+        columns = report["columns"]
+        rows = report["rows"]
+
+        # Kolon indekslerini isimle bul (pivot: PRODUCT, chain, <aylar>, pharmacy_count, Total)
+        try:
+            chain_idx = columns.index("chain")
+        except ValueError:
+            chain_idx = 1
+        try:
+            total_idx = columns.index("Total")
+        except ValueError:
+            total_idx = len(columns) - 1
+
+        # Ay kolonlari: "YYYY_Mon" formatinda olanlar
+        month_cols = [(i, c) for i, c in enumerate(columns)
+                      if "_" in c and c.split("_")[0].isdigit()]
+
+        # Top zincirler (Total'e gore)
+        chain_totals = []
+        for r in rows:
+            name = str(r[chain_idx])
+            total = _dash_int(r[total_idx])
+            chain_totals.append((name, total))
+            sales_total += total
+        chain_totals.sort(key=lambda x: x[1], reverse=True)
+        top_chains = [{"name": n, "total": t} for n, t in chain_totals[:10]]
+
+        # Aylik toplam (tum zincirler, her ay kolonu icin)
+        _MONTH_RU = {
+            "Jan": "Янв", "Feb": "Фев", "Mar": "Мар", "Apr": "Апр",
+            "May": "Май", "Jun": "Июн", "Jul": "Июл", "Aug": "Авг",
+            "Sep": "Сен", "Oct": "Окт", "Nov": "Ноя", "Dec": "Дек",
+        }
+        for i, cname in month_cols:
+            msum = sum(_dash_int(r[i]) for r in rows)
+            label = cname.split("_")[-1]
+            monthly.append({"month": _MONTH_RU.get(label, label), "total": msum})
+
+    # --- Sayimlar (cache'li count'lardan hizli) ---
+    pharmacies = 0
+    doctors = 0
+    try:
+        pv = PharmacyViewService()
+        res_s = pv.query(brand="SOLGAR", search="", page=1)
+        res_b = pv.query(brand="BOUNTY", search="", page=1)
+        pharmacies = _dash_int(res_s.get("total_rows", 0)) + _dash_int(res_b.get("total_rows", 0))
+    except Exception:
+        pharmacies = 0
+    try:
+        dv = DoctorViewService()
+        res_d = dv.query(brand="", search="", page=1)
+        doctors = _dash_int(res_d.get("total_rows", 0))
+    except Exception:
+        doctors = 0
+
+    chains_count = len(report["rows"]) if (report and report.get("rows")) else 0
+
+    payload = {
+        "cards": {
+            "pharmacies": pharmacies,
+            "doctors": doctors,
+            "chains": chains_count,
+            "sales_total": sales_total,
+        },
+        "top_chains": top_chains,
+        "monthly": monthly,
+        "period": {"begin": begin, "end": end, "comp_type": comp_type},
+    }
+
+    _dash_cache.set("dashboard_summary_v1", payload, 600)  # 10 dk
+    return Response(payload)
+
+
+# ==================== FAQ API (DRF) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def faq_api(request):
+    """
+    Rule-based FAQ API. Returns the user's accessible screens (dynamic) plus
+    static informational FAQ entries, as JSON for the React frontend.
+
+    Response:
+      {
+        user_display: str,
+        my_screens: [str, ...],      # Russian names of reachable screens
+        faq: [{q, a}, ...]           # static question/answer pairs
+      }
+    """
+    from authorization.models import Screen
+    from authorization.context_processors import accessible_screens as _acc
+
+    codes = _acc(request).get("accessible_screens", set())
+    name_by_code = dict(Screen.objects.values_list("code", "name"))
+    my_screens = sorted({name_by_code.get(c, c) for c in codes if c in name_by_code})
+
+    faq = [
+        {
+            "q": "Что это за платформа?",
+            "a": ("Внутренняя платформа Solgar — веб-версия системы Solgar Intern. "
+                  "Она объединяет отчёты по продажам, справочники аптек и врачей, "
+                  "данные 1С-склада и аналитику в одном месте."),
+        },
+        {
+            "q": "Какие разделы мне доступны?",
+            "a": ("Ниже перечислены экраны, к которым у вас есть доступ. "
+                  "Если нужного раздела нет в списке, обратитесь к администратору."),
+        },
+        {
+            "q": "Откуда берутся данные?",
+            "a": ("Справочные данные (аптеки, врачи, регионы) поступают из внешней "
+                  "базы; данные о продажах загружаются из Excel-файлов; складские "
+                  "остатки и заказы — напрямую из 1С."),
+        },
+        {
+            "q": "Как сформировать отчёт?",
+            "a": ("Откройте нужный экран отчёта, выберите фильтры (компания, период, "
+                  "регион и т.д.) и нажмите «Сформировать отчёт». Результат появится "
+                  "в виде таблицы."),
+        },
+        {
+            "q": "К кому обращаться за помощью?",
+            "a": ("По вопросам доступа и работы платформы обращайтесь к вашему "
+                  "администратору или в отдел ИТ."),
+        },
+    ]
+
+    return Response({
+        "user_display": request.user.get_full_name() or request.user.username,
+        "my_screens": my_screens,
+        "faq": faq,
+    })
+
+
+# ==================== Sales Upload API (DRF) - preview + save ====================
+
+from decimal import Decimal as _UL_Decimal
+from datetime import datetime as _ul_datetime
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_upload_options_api(request):
+    """Dropdown options for the sales upload screen: active chains + countries."""
+    from .models import ChainDefinition
+    try:
+        from .views import COUNTRIES
+    except Exception:
+        COUNTRIES = []
+
+    chains = list(
+        ChainDefinition.objects.filter(is_active=True).values_list("name", flat=True)
+    )
+    return Response({"chains": sorted(chains), "countries": list(COUNTRIES)})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sales_upload_preview_api(request):
+    """
+    Parse an uploaded chain sales Excel file and return the parsed rows as JSON
+    (stateless preview -- nothing is saved yet).
+
+    multipart/form-data:
+      excel_file   - the Excel file
+      report_date  - YYYY-MM-DD
+      chain_name   - active chain name
+      country      - country
+
+    Response:
+      {rows: [...], total_rows, meta: {report_date, chain_name, country}, error}
+    """
+    from .models import ChainDefinition
+    from .services import SalesUploadService, SalesParseError
+
+    report_date = (request.POST.get("report_date") or "").strip()
+    chain_name = (request.POST.get("chain_name") or "").strip()
+    country = (request.POST.get("country") or "").strip()
+    excel_file = request.FILES.get("excel_file")
+
+    if not excel_file:
+        return Response({"error": "Выберите файл Excel."}, status=400)
+    if not report_date or not chain_name or not country:
+        return Response({"error": "Заполните дату, сеть и страну."}, status=400)
+    try:
+        _ul_datetime.strptime(report_date, "%Y-%m-%d")
+    except ValueError:
+        return Response({"error": "Неверный формат даты (ГГГГ-ММ-ДД)."}, status=400)
+
+    try:
+        definition = ChainDefinition.objects.get(name=chain_name, is_active=True)
+    except ChainDefinition.DoesNotExist:
+        return Response({"error": f"Определение для сети «{chain_name}» не найдено."}, status=400)
+
+    service = SalesUploadService()
+    try:
+        result = service.preview(excel_file, definition, excel_file.name)
+    except SalesParseError as exc:
+        return Response({"error": str(exc)}, status=400)
+
+    if result.total_rows == 0:
+        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+    rows = []
+    for r in result.rows:
+        rows.append({
+            "product_name": r.product_name,
+            "brand": r.brand,
+            "pharmacy": r.pharmacy,
+            "city": r.city,
+            "count": _json_safe(r.count),
+            "amount": _json_safe(r.amount),
+            "remaining_count": _json_safe(r.remaining_count),
+            "remaining_amount": _json_safe(r.remaining_amount),
+        })
+
+    return Response({
+        "rows": rows,
+        "total_rows": result.total_rows,
+        "meta": {"report_date": report_date, "chain_name": chain_name, "country": country},
+        "error": "",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sales_upload_save_api(request):
+    """
+    Save previously previewed rows. The frontend sends back the rows and meta
+    it received from the preview endpoint.
+
+    JSON body:
+      {rows: [...], report_date, chain_name, country}
+
+    Response:
+      {created: int, error}
+    """
+    from .services import SalesUploadService
+    from .services import ParsedRow, ParseResult
+
+    data = request.data or {}
+    rows_in = data.get("rows") or []
+    report_date_str = (data.get("report_date") or "").strip()
+    chain_name = (data.get("chain_name") or "").strip()
+    country = (data.get("country") or "").strip()
+
+    if not rows_in:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+    if not report_date_str or not chain_name or not country:
+        return Response({"error": "Отсутствуют дата, сеть или страна."}, status=400)
+
+    try:
+        report_date = _ul_datetime.strptime(report_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response({"error": "Неверный формат даты."}, status=400)
+
+    try:
+        rows = [
+            ParsedRow(
+                product_name=r["product_name"],
+                brand=r["brand"],
+                pharmacy=r["pharmacy"],
+                city=r["city"],
+                count=int(r["count"]),
+                amount=_UL_Decimal(str(r["amount"])),
+                remaining_count=int(r["remaining_count"]),
+                remaining_amount=_UL_Decimal(str(r["remaining_amount"])),
+            )
+            for r in rows_in
+        ]
+    except (KeyError, ValueError, TypeError) as exc:
+        return Response({"error": f"Некорректные данные строк: {exc}"}, status=400)
+
+    result = ParseResult(rows=rows)
+    service = SalesUploadService()
+    try:
+        created = service.save_records(result, report_date, chain_name, country, request.user)
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": created, "error": ""})
+
+
+# ==================== CSRF token endpoint ====================
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.contrib.auth.decorators import login_required
+
+
+@ensure_csrf_cookie
+@login_required
+def csrf_api(request):
+    """
+    Sets the csrftoken cookie so the React frontend can read it and send
+    X-CSRFToken on subsequent POST requests. Called once on app load.
+
+    Not a DRF view on purpose: @ensure_csrf_cookie must wrap a plain Django
+    view to reliably set the cookie.
+    """
+    from django.middleware.csrf import get_token
+    return JsonResponse({"csrfToken": get_token(request)})
+
+
+# ==================== Distributor Upload API (DRF) - preview + save ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def distributor_upload_options_api(request):
+    """Dropdown options: active distributors, countries, operation types."""
+    from .models import ChainDefinition, DistributorRecord
+    try:
+        from .views import COUNTRIES
+    except Exception:
+        COUNTRIES = []
+
+    distributors = list(
+        ChainDefinition.objects.filter(
+            is_active=True, source_type=ChainDefinition.SourceType.DISTRIBUTOR
+        ).values_list("name", flat=True)
+    )
+    operations = [{"value": v, "label": l} for v, l in DistributorRecord.Operation.choices]
+
+    return Response({
+        "distributors": sorted(distributors),
+        "countries": list(COUNTRIES),
+        "operations": operations,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def distributor_upload_preview_api(request):
+    """
+    Parse a distributor Excel file, return parsed rows as JSON (stateless).
+
+    multipart/form-data:
+      excel_file, distributor, operation_type, country, begin_date, end_date
+    """
+    from .models import ChainDefinition
+    from .services import DistributorUploadService, SalesParseError
+
+    distributor = (request.POST.get("distributor") or "").strip()
+    operation_type = (request.POST.get("operation_type") or "").strip()
+    country = (request.POST.get("country") or "").strip()
+    begin_date = (request.POST.get("begin_date") or "").strip()
+    end_date = (request.POST.get("end_date") or "").strip()
+    excel_file = request.FILES.get("excel_file")
+
+    if not excel_file:
+        return Response({"error": "Выберите файл Excel."}, status=400)
+    if not distributor or not operation_type or not country:
+        return Response({"error": "Заполните дистрибьютора, тип операции и страну."}, status=400)
+
+    try:
+        definition = ChainDefinition.objects.get(
+            name=distributor, is_active=True,
+            source_type=ChainDefinition.SourceType.DISTRIBUTOR,
+        )
+    except ChainDefinition.DoesNotExist:
+        return Response({"error": f"Определение для «{distributor}» не найдено."}, status=400)
+
+    try:
+        result = DistributorUploadService().preview(excel_file, definition, excel_file.name)
+    except SalesParseError as exc:
+        return Response({"error": str(exc)}, status=400)
+
+    if result.total_rows == 0:
+        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+    rows = []
+    for r in result.rows:
+        rows.append({
+            "product_name": r.product_name,
+            "brand": r.brand,
+            "client": r.pharmacy,   # distributor parse'inde pharmacy alani = client
+            "city": r.city,
+            "count": _json_safe(r.count),
+            "amount": _json_safe(r.amount),
+        })
+
+    return Response({
+        "rows": rows,
+        "total_rows": result.total_rows,
+        "meta": {
+            "distributor": distributor, "operation_type": operation_type,
+            "country": country, "begin_date": begin_date, "end_date": end_date,
+        },
+        "error": "",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def distributor_upload_save_api(request):
+    """
+    Save previously previewed distributor rows.
+
+    JSON body:
+      {rows, distributor, operation_type, country, begin_date, end_date}
+    """
+    from .services import DistributorUploadService, ParsedRow, ParseResult
+    from decimal import Decimal as _DL_Decimal
+    from datetime import datetime as _dl_datetime
+
+    data = request.data or {}
+    rows_in = data.get("rows") or []
+    distributor = (data.get("distributor") or "").strip()
+    operation_type = (data.get("operation_type") or "").strip()
+    country = (data.get("country") or "").strip()
+    begin_date_str = (data.get("begin_date") or "").strip()
+    end_date_str = (data.get("end_date") or "").strip()
+
+    if not rows_in:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+    if not distributor or not operation_type or not country:
+        return Response({"error": "Отсутствуют дистрибьютор, тип операции или страна."}, status=400)
+
+    begin_date = None
+    end_date = None
+    try:
+        if begin_date_str:
+            begin_date = _dl_datetime.strptime(begin_date_str, "%Y-%m-%d").date()
+        if end_date_str:
+            end_date = _dl_datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response({"error": "Неверный формат даты."}, status=400)
+
+    try:
+        rows = [
+            ParsedRow(
+                product_name=r["product_name"], brand=r["brand"],
+                pharmacy=r["client"], city=r["city"],
+                count=int(r["count"]), amount=_DL_Decimal(str(r["amount"])),
+                remaining_count=0, remaining_amount=_DL_Decimal("0"),
+            )
+            for r in rows_in
+        ]
+    except (KeyError, ValueError, TypeError) as exc:
+        return Response({"error": f"Некорректные данные строк: {exc}"}, status=400)
+
+    result = ParseResult(rows=rows)
+    try:
+        created = DistributorUploadService().save_records(
+            result, distributor, operation_type, country, begin_date, end_date, request.user
+        )
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": created, "error": ""})

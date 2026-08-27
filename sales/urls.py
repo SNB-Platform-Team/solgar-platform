@@ -30,4 +30,17 @@ urlpatterns = [
     path("api/pharm-managerial/", api.pharm_managerial_api, name="pharm_managerial_api"),
     path("api/pharmacy/", api.pharmacy_api, name="pharmacy_api"),
     path("api/doctor/", api.doctor_api, name="doctor_api"),
+    path("api/chain-report/", api.chain_report_api, name="chain_report_api"),  
+    path("api/sales-obs/", api.sales_obs_api, name="sales_obs_api"),   
+    path("api/dashboard/", api.dashboard_api, name="dashboard_api"), 
+    path("api/dashboard/", api.dashboard_api, name="dashboard_api"),
+    path("api/sales-obs/", api.sales_obs_api, name="sales_obs_api"), #
+    path("api/faq/", api.faq_api, name="faq_api"),
+    path("api/sales-upload/options/", api.sales_upload_options_api, name="sales_upload_options_api"),
+    path("api/sales-upload/preview/", api.sales_upload_preview_api, name="sales_upload_preview_api"),
+    path("api/sales-upload/save/", api.sales_upload_save_api, name="sales_upload_save_api"),
+    path("api/csrf/", api.csrf_api, name="csrf_api"),
+    path("api/distributor-upload/options/", api.distributor_upload_options_api, name="distributor_upload_options_api"),
+    path("api/distributor-upload/preview/", api.distributor_upload_preview_api, name="distributor_upload_preview_api"),
+    path("api/distributor-upload/save/", api.distributor_upload_save_api, name="distributor_upload_save_api"),
 ]

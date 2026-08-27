@@ -271,3 +271,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# --- CSRF trusted origins (React dev frontend) ---
+# Dev'de React (localhost:5173) POST istekleri icin origin guveni.
+# Production'da yukaridaki `if not DEBUG` blogundaki https origin'ler gecerli.
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
