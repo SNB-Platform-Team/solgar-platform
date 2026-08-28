@@ -1,5 +1,4 @@
-# ==================== 1C API (DRF) ====================
-
+#1c api
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -88,7 +87,6 @@ def _json_safe(value):
     return value
 
 
-# ==================== Doctor Managerial API (DRF) ====================
 
 DOC_MGR_COMP_TYPES_API = [
     {"value": "", "label": "—"},
@@ -178,7 +176,6 @@ def doctor_managerial_api(request):
     })
 
 
-# ==================== Pharmacy Managerial API (DRF) ====================
 
 PHARM_MGR_COMP_TYPES_API = [
     {"value": "SOLGAR", "label": "SOLGAR"},
@@ -262,7 +259,6 @@ def pharm_managerial_api(request):
     })
 
 
-# ==================== Pharmacy Entry API (DRF) ====================
 
 # Tabloda gosterilecek kolonlar (entry ekranindaki ana alanlar).
 # match_key bir @property (DB kolonu degil), o yuzden liste disinda.
@@ -312,7 +308,7 @@ def pharmacy_api(request):
     except (TypeError, ValueError):
         page = 1
 
-    fkeys = [
+        fkeys = [
         "country", "area", "region", "city", "group_company",
         "subgroup_company", "pharmacy_category", "pharmacy_type", "promo",
         "marketing_staff", "pharmacy_activeness", "pharmacy_address",
@@ -345,7 +341,6 @@ def pharmacy_api(request):
     })
 
 
-# ==================== Doctor Entry API (DRF) ====================
 
 # Tabloda gosterilecek kolonlar (doctor entry ana alanlari).
 _DOCTOR_API_COLUMNS = [
@@ -395,15 +390,8 @@ def doctor_api(request):
     except (TypeError, ValueError):
         page = 1
 
-    dfkeys = [
-        "country", "area", "region", "city", "medrep", "specialty",
-        "unified_specialty", "category", "activeness", "doctor_name",
-        "clinic_status",
-    ]
-    filters = {k: (request.GET.get(k) or "").strip() for k in dfkeys}
-
     try:
-        result = service.query(brand=brand, search=search, page=page, **filters)
+        result = service.query(brand=brand, search=search, page=page)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -424,7 +412,6 @@ def doctor_api(request):
         "has_prev": result["has_prev"],
         "has_next": result["has_next"],
         "search": search,
-        "filters": filters,
     })
 
 
@@ -551,7 +538,6 @@ def chain_report_api(request):
     })
 
 
-# ==================== Sales Report Observation API (DRF) ====================
 
 SALES_OBS_COMP_TYPES_API = [
     {"value": "SL", "label": "SOLGAR"},
@@ -627,7 +613,6 @@ def sales_obs_api(request):
     })
 
 
-# ==================== Dashboard API (DRF) ====================
 
 import datetime as _dt_dash
 from django.core.cache import cache as _dash_cache
@@ -737,8 +722,7 @@ def dashboard_api(request):
     return Response(payload)
 
 
-# ==================== FAQ API (DRF) ====================
-
+#faq
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def faq_api(request):
@@ -778,7 +762,6 @@ def faq_api(request):
     })
 
 
-# ==================== CSRF token endpoint ====================
 
 from django.http import JsonResponse as _CsrfJsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie as _ensure_csrf_cookie
@@ -793,7 +776,6 @@ def csrf_api(request):
     return _CsrfJsonResponse({"csrfToken": get_token(request)})
 
 
-# ==================== Sales Upload API (preview + save + options) ====================
 
 from decimal import Decimal as _UL_Decimal
 from datetime import datetime as _ul_datetime
@@ -859,8 +841,25 @@ def sales_upload_preview_api(request):
             "remaining_amount": _json_safe(r.remaining_amount),
         })
 
+    solgar_remaining = sum(
+        r.remaining_amount for r in result.rows if r.brand == "SOLGAR"
+    )
+    bounty_remaining = sum(
+        r.remaining_amount for r in result.rows if r.brand != "SOLGAR"
+    )
+
     return Response({
-        "rows": rows, "total_rows": result.total_rows,
+        "rows": rows,
+        "total_rows": result.total_rows,
+        "summary": {
+            "solgar_count": _json_safe(result.solgar_count),
+            "solgar_amount": _json_safe(result.solgar_amount),
+            "bounty_count": _json_safe(result.bounty_count),
+            "bounty_amount": _json_safe(result.bounty_amount),
+            "solgar_remaining": _json_safe(solgar_remaining),
+            "bounty_remaining": _json_safe(bounty_remaining),
+            "product_types": _json_safe(result.product_types),
+        },
         "meta": {"report_date": report_date, "chain_name": chain_name, "country": country},
         "error": "",
     })
@@ -912,7 +911,6 @@ def sales_upload_save_api(request):
     return Response({"created": created, "error": ""})
 
 
-# ==================== Distributor Upload API (preview + save + options) ====================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1042,7 +1040,6 @@ def distributor_upload_save_api(request):
     return Response({"created": created, "error": ""})
 
 
-# ==================== Pharmacy Filter Options API (cascading dropdowns) ====================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1071,7 +1068,6 @@ def pharmacy_filter_options_api(request):
     city = (request.GET.get("city") or "").strip()
     group_company = (request.GET.get("group_company") or "").strip()
 
-    # --- Cascading single-level mode ---
     if level:
         if level == "area":
             options = repo.areas(brand, country=country)
@@ -1087,7 +1083,6 @@ def pharmacy_filter_options_api(request):
             options = []
         return Response({"level": level, "options": list(options)})
 
-    # --- Initial load: all top-level lists at once ---
     def _safe(fn, *a, **kw):
         try:
             return list(fn(*a, **kw))
@@ -1104,6 +1099,9 @@ def pharmacy_filter_options_api(request):
     })
 
 
+
+
+
 # ==================== Doctor Filter Options API (cascading dropdowns) ====================
 
 @api_view(["GET"])
@@ -1116,8 +1114,7 @@ def doctor_filter_options_api(request):
       1) No `level`: all top-level lists (countries, specialties,
          unified_specialties, medreps).
       2) With `level` (area/region/city): one cascading list narrowed by
-         parent selections, mirroring the Java country->area->region->city
-         cascade.
+         parent selections (country -> area -> region -> city).
 
     Query params: level, country, area, region
     """
