@@ -1,1 +1,0 @@
-import{a as e,t}from"./jsx-runtime-B-hcVAMW.js";import{i as n,n as r,t as i}from"./dist-BnTIFkSI.js";var a=e(t(),1);function o({...e}){return(0,a.jsx)(n,{"data-slot":`collapsible`,...e})}function s({...e}){return(0,a.jsx)(r,{"data-slot":`collapsible-trigger`,...e})}function c({...e}){return(0,a.jsx)(i,{"data-slot":`collapsible-content`,...e})}export{c as n,s as r,o as t};
