@@ -45,5 +45,6 @@ urlpatterns = [
     path("api/distributor-upload/preview/", api.distributor_upload_preview_api, name="distributor_upload_preview_api"),
     path("api/distributor-upload/save/", api.distributor_upload_save_api, name="distributor_upload_save_api"),
     path("api/doctor/filter-options/", api.doctor_filter_options_api, name="doctor_filter_options_api"),
-    path("api/me/", api.me_api, name="me_api"),
+    path("api/me/", api.me_api, name="me_api"), 
+    path("api/chain-report/filter-options/", api.chain_report_filter_options_api, name="chain_report_filter_options_api"),
 ]      

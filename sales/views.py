@@ -77,12 +77,10 @@ def sales_upload_view(request: HttpRequest) -> HttpResponse:
         created = service.save_records(
             result, report_date, stashed["chain_name"], stashed["country"], request.user
         )
-        # Clear the stash after saving.
         request.session.pop(SESSION_KEY, None)
         messages.success(request, f"Сохранено записей: {created}.")
         return redirect("sales:upload")
 
-    # ---- PREVIEW: parse the uploaded file ----
     report_date_str = request.POST.get("report_date", "").strip()
     chain_name = request.POST.get("chain_name", "").strip()
     country = request.POST.get("country", "").strip()
@@ -862,7 +860,7 @@ def sales_report_obs_view(request: HttpRequest) -> HttpResponse:
     report = None
     error = ""
     if begin and end:
-        # Tarih formatini normalize et: YYYY-MM-DD (input type=date) -> YYYYMMDD
+        # Tarih formati
         b = begin.replace("-", "")
         e = end.replace("-", "")
         if len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
@@ -907,7 +905,6 @@ class OneCService:
         }
 
 
-# ============================ 1C VIEW ============================
 ONEC_TABS = [
     ("orders", "Заказы"),
     ("shipments", "Поставки"),
@@ -993,7 +990,6 @@ class PharmManagerialService:
         }
 
 
-# ==================== PHARMACY MANAGERIAL VIEW ====================
 
 PHARM_MGR_COMP_TYPES = [("SOLGAR", "SOLGAR"), ("OBF", "OBF"), ("BOUNTY", "NATURES BOUNTY")]
 PHARM_MGR_REP_TYPES = ["REGIONS", "MAIN_DISTRICT", "CITY", "MED_REPS", "CHAINS", "ACTIVATION_DATE"]
@@ -1051,7 +1047,6 @@ def pharm_managerial_view(request: HttpRequest) -> HttpResponse:
               "medrep": medrep, "activeness": activeness, "begin": begin, "end": end},
     }
     return render(request, "sales/pharm_managerial.html", context)
-# ==================== DOCTOR MANAGERIAL SERVICE ====================
 
 class DoctorManagerialService:
     """Orchestrates the Doctor Managerial screen (Экран администрирования врача)."""
@@ -1071,7 +1066,6 @@ class DoctorManagerialService:
         }
 
 
-# ==================== DOCTOR MANAGERIAL VIEW ====================
 
 DOC_MGR_COMP_TYPES = [("", "—"), ("SOLGAR", "SOLGAR"), ("OBF", "OBF"), ("BOUNTY", "NATURES BOUNTY")]
 DOC_MGR_REP_TYPES = ["REGIONS", "MAIN_DISTRICT", "CITY", "MAIN_SPECIALITY",

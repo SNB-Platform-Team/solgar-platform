@@ -1172,3 +1172,41 @@ def me_api(request):
             "is_staff": request.user.is_staff,
         })
     return Response({"authenticated": False})
+
+
+# ==================== Chain Report Filter Options API (cascading) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def chain_report_filter_options_api(request):
+    """
+    Dropdown data for the Chain Report (Аптечная сеть продаж) filters.
+
+    Mirrors the Java country -> dependent cascade: when a country is chosen,
+    the chains / regions / districts lists narrow to that country. Called with
+    ?country=... to refresh dependents, or without for the full initial set.
+
+    Query params: country (optional)
+
+    Response: {countries, chains, regions, districts}
+    """
+    from .services import SalesViewService
+    try:
+        from .views import COUNTRIES
+    except Exception:
+        COUNTRIES = []
+
+    country = (request.GET.get("country") or "").strip()
+    service = SalesViewService()
+
+    try:
+        options = service.filter_options(country=country)
+    except Exception:
+        options = {}
+
+    return Response({
+        "countries": list(COUNTRIES),
+        "chains": list(options.get("chains", [])),
+        "regions": list(options.get("regions", [])),
+        "districts": list(options.get("districts", [])),
+    })
