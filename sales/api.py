@@ -308,7 +308,7 @@ def pharmacy_api(request):
     except (TypeError, ValueError):
         page = 1
 
-        fkeys = [
+    fkeys = [
         "country", "area", "region", "city", "group_company",
         "subgroup_company", "pharmacy_category", "pharmacy_type", "promo",
         "marketing_staff", "pharmacy_activeness", "pharmacy_address",
@@ -575,6 +575,10 @@ def sales_obs_api(request):
     end = (request.GET.get("end") or "").strip()
     chain = (request.GET.get("chain") or "").strip()
     country = (request.GET.get("country") or "").strip()
+    area = (request.GET.get("area") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
 
     try:
         options = service.dropdown_options(comp_type)
@@ -588,7 +592,10 @@ def sales_obs_api(request):
         e = end.replace("-", "")
         if len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
             try:
-                result = service.run_chain_sales(comp_type, b, e, chain=chain, country=country)
+                result = service.run_chain_sales(
+                    comp_type, b, e, chain=chain, country=country,
+                    area=area, region=region, city=city, medrep=medrep,
+                )
                 rows = [[_json_safe(v) for v in r] for r in result["rows"]]
                 report = {
                     "columns": result["columns"],
@@ -609,8 +616,37 @@ def sales_obs_api(request):
         "report": report,
         "error": error,
         "f": {"comp_type": comp_type, "begin": begin, "end": end,
-              "chain": chain, "country": country},
+              "chain": chain, "country": country, "area": area,
+              "region": region, "city": city, "medrep": medrep},
     })
+
+
+# ==================== Sales Obs Filter Options API (cascading geo) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_obs_filter_options_api(request):
+    """
+    Cascading geographic dropdown for the Sales Report Observation screen.
+    Country -> Area -> Region -> City, each level narrowed by parents.
+
+    Query params: level (area/region/city), country, area, region
+    """
+    from .services import ReportService
+
+    level = (request.GET.get("level") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+    area = (request.GET.get("area") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+
+    try:
+        options = ReportService().cascade_options(
+            level, country=country, area=area, region=region
+        )
+    except Exception:
+        options = []
+
+    return Response({"level": level, "options": list(options)})
 
 
 

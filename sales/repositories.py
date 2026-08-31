@@ -511,7 +511,7 @@ class ReportRepository:
             where_extra += " and a.country = %s "
             params.append(country)
         if area:
-            where_extra += " and e.country = %s "
+            where_extra += " and e.administrative_area_name = %s "
             params.append(area)
         if region:
             where_extra += " and e.region = %s "
@@ -556,6 +556,74 @@ class ReportRepository:
         sql = ("SELECT DISTINCT country FROM solgar_tst.sales_pharmacy "
                "WHERE product_type = %s AND country IS NOT NULL AND country <> '' "
                "ORDER BY country")
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, [product_type])
+            return [r[0] for r in cur.fetchall()]
+
+    # --- Cascading geographic dropdowns (from solgar_address_group, joined in
+    #     chain_sales_monthly as alias e). Mirror the Java Country -> Area ->
+    #     Region -> City cascade. Each level narrows by the parent selections. ---
+
+    def filter_areas(self, country: str = "") -> list:
+        """Distinct administrative areas, optionally narrowed by country."""
+        from django.db import connections
+        sql = ("SELECT DISTINCT administrative_area_name "
+               "FROM solgar_tst.solgar_address_group "
+               "WHERE administrative_area_name IS NOT NULL "
+               "AND administrative_area_name <> '' ")
+        params = []
+        if country:
+            sql += "AND country = %s "
+            params.append(country)
+        sql += "ORDER BY administrative_area_name"
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            return [r[0] for r in cur.fetchall()]
+
+    def filter_regions(self, country: str = "", area: str = "") -> list:
+        """Distinct regions, narrowed by country and/or administrative area."""
+        from django.db import connections
+        sql = ("SELECT DISTINCT region FROM solgar_tst.solgar_address_group "
+               "WHERE region IS NOT NULL AND region <> '' ")
+        params = []
+        if country:
+            sql += "AND country = %s "
+            params.append(country)
+        if area:
+            sql += "AND administrative_area_name = %s "
+            params.append(area)
+        sql += "ORDER BY region"
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            return [r[0] for r in cur.fetchall()]
+
+    def filter_cities(self, country: str = "", area: str = "", region: str = "") -> list:
+        """Distinct cities, narrowed by country, area and/or region."""
+        from django.db import connections
+        sql = ("SELECT DISTINCT city FROM solgar_tst.solgar_address_group "
+               "WHERE city IS NOT NULL AND city <> '' ")
+        params = []
+        if country:
+            sql += "AND country = %s "
+            params.append(country)
+        if area:
+            sql += "AND administrative_area_name = %s "
+            params.append(area)
+        if region:
+            sql += "AND region = %s "
+            params.append(region)
+        sql += "ORDER BY city"
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            return [r[0] for r in cur.fetchall()]
+
+    def filter_medreps(self, comp_type: str = "SL") -> list:
+        """Distinct medical reps (marketing_staff) for a brand, from sales data."""
+        from django.db import connections
+        _, product_type = self._BRAND_MAP.get((comp_type or "SL").upper(), ("SOLGAR", "SL"))
+        sql = ("SELECT DISTINCT marketing_staff FROM solgar_tst.sales_pharmacy "
+               "WHERE product_type = %s AND marketing_staff IS NOT NULL "
+               "AND marketing_staff <> '' ORDER BY marketing_staff")
         with connections["refdb"].cursor() as cur:
             cur.execute(sql, [product_type])
             return [r[0] for r in cur.fetchall()]

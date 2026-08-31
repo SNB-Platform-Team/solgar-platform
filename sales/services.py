@@ -959,17 +959,35 @@ class ReportService:
         self.repository = ReportRepository()
 
     def dropdown_options(self, comp_type: str = "SL") -> dict:
-        """Filter dropdowns for the given brand."""
+        """Top-level filter dropdowns for the given brand (initial page load)."""
         return {
             "chains": self.repository.filter_chains(comp_type),
             "countries": self.repository.filter_countries(comp_type),
         }
 
+    def cascade_options(self, level: str, country: str = "", area: str = "",
+                        region: str = "") -> list:
+        """
+        One cascading geographic list for the Country -> Area -> Region -> City
+        cascade, narrowed by the parent selections.
+
+        level: 'area' | 'region' | 'city'
+        """
+        if level == "area":
+            return self.repository.filter_areas(country=country)
+        if level == "region":
+            return self.repository.filter_regions(country=country, area=area)
+        if level == "city":
+            return self.repository.filter_cities(country=country, area=area, region=region)
+        return []
+
     def run_chain_sales(self, comp_type: str, begin: str, end: str,
-                        chain: str = "", country: str = "") -> dict:
+                        chain: str = "", country: str = "", area: str = "",
+                        region: str = "", city: str = "", medrep: str = "") -> dict:
         """Run the CHAIN_SALES monthly report. Returns {columns, rows, total_rows}."""
         result = self.repository.chain_sales_monthly(
             comp_type=comp_type, begin=begin, end=end, chain=chain, country=country,
+            area=area, region=region, city=city, medrep=medrep,
         )
         return {
             "columns": result["columns"],
