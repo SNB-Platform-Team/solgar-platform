@@ -652,11 +652,15 @@ def sales_obs_filter_options_api(request):
     if level == "product_name":
         main_group = (request.GET.get("main_group") or "").strip()
         sub_group = (request.GET.get("sub_group") or "").strip()
+        # Grup secilmeden TUM urunleri dondurmek cok agir (binlerce) ve
+        # tarayiciyi kilitler. En az bir grup filtresi sart.
+        if not main_group and not sub_group:
+            return Response({"level": level, "options": []})
         try:
             options = ReportService().product_names(main_group, sub_group)
         except Exception:
             options = []
-        return Response({"level": level, "options": list(options)})
+        return Response({"level": level, "options": list(options[:500])})
 
     try:
         options = ReportService().cascade_options(

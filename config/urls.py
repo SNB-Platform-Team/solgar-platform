@@ -23,3 +23,5 @@ urlpatterns = [
         name="react_catchall",
     ),
 ]
+
+
