@@ -1,0 +1,1 @@
+import{w as e}from"./index-CPSkan5u.js";var t=e;export{t as component};

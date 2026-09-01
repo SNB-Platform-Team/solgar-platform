@@ -1,1 +1,0 @@
-import{a as e,t}from"./jsx-runtime-B-hcVAMW.js";import{s as n}from"./index-ZIvJan9W.js";import{t as r}from"./placeholder-BYe4aoYm.js";var i=e(t()),a=()=>(0,i.jsx)(r,{title:`Сотрудники`,description:`Раздел в разработке. Здесь появится реестр сотрудников организации.`,icon:n});export{a as component};

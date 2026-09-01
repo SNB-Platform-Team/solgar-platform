@@ -1,1 +1,0 @@
-import{C as e}from"./index-ZIvJan9W.js";var t=e;export{t as component};
