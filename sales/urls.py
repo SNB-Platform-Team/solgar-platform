@@ -47,5 +47,6 @@ urlpatterns = [
     path("api/doctor/filter-options/", api.doctor_filter_options_api, name="doctor_filter_options_api"),
     path("api/me/", api.me_api, name="me_api"), 
     path("api/chain-report/filter-options/", api.chain_report_filter_options_api, name="chain_report_filter_options_api"),
-    path("api/sales-obs/filter-options/", api.sales_obs_filter_options_api, name="sales_obs_filter_options_api"),    
+    path("api/sales-obs/filter-options/", api.sales_obs_filter_options_api, name="sales_obs_filter_options_api"),
+    path("api/profile/", api.profile_api, name="profile_api"),        
 ]      

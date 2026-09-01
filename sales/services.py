@@ -960,9 +960,17 @@ class ReportService:
 
     def dropdown_options(self, comp_type: str = "SL") -> dict:
         """Top-level filter dropdowns for the given brand (initial page load)."""
+        groups = {}
+        try:
+            from .repositories import SalesRepository
+            groups = SalesRepository().group_options()
+        except Exception:
+            groups = {}
         return {
             "chains": self.repository.filter_chains(comp_type),
             "countries": self.repository.filter_countries(comp_type),
+            "main_groups": list(groups.get("main_groups", [])),
+            "sub_groups": list(groups.get("sub_groups", [])),
         }
 
     def cascade_options(self, level: str, country: str = "", area: str = "",
@@ -981,13 +989,25 @@ class ReportService:
             return self.repository.filter_cities(country=country, area=area, region=region)
         return []
 
+    def product_names(self, main_group: str = "", sub_group: str = "") -> list:
+        """Product names for the selected main/sub group (cascading)."""
+        try:
+            from .repositories import SalesRepository
+            names = SalesRepository().product_names_for_group(main_group, sub_group)
+            return sorted(names) if names else []
+        except Exception:
+            return []
+
     def run_chain_sales(self, comp_type: str, begin: str, end: str,
                         chain: str = "", country: str = "", area: str = "",
-                        region: str = "", city: str = "", medrep: str = "") -> dict:
+                        region: str = "", city: str = "", medrep: str = "",
+                        main_group: str = "", sub_group: str = "",
+                        product_name: str = "") -> dict:
         """Run the CHAIN_SALES monthly report. Returns {columns, rows, total_rows}."""
         result = self.repository.chain_sales_monthly(
             comp_type=comp_type, begin=begin, end=end, chain=chain, country=country,
             area=area, region=region, city=city, medrep=medrep,
+            main_group=main_group, sub_group=sub_group, product_name=product_name,
         )
         return {
             "columns": result["columns"],

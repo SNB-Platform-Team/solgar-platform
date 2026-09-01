@@ -579,11 +579,14 @@ def sales_obs_api(request):
     region = (request.GET.get("region") or "").strip()
     city = (request.GET.get("city") or "").strip()
     medrep = (request.GET.get("medrep") or "").strip()
+    main_group = (request.GET.get("main_group") or "").strip()
+    sub_group = (request.GET.get("sub_group") or "").strip()
+    product_name = (request.GET.get("product_name") or "").strip()
 
     try:
         options = service.dropdown_options(comp_type)
     except Exception:
-        options = {"chains": [], "countries": []}
+        options = {"chains": [], "countries": [], "main_groups": [], "sub_groups": []}
 
     report = None
     error = ""
@@ -595,6 +598,8 @@ def sales_obs_api(request):
                 result = service.run_chain_sales(
                     comp_type, b, e, chain=chain, country=country,
                     area=area, region=region, city=city, medrep=medrep,
+                    main_group=main_group, sub_group=sub_group,
+                    product_name=product_name,
                 )
                 rows = [[_json_safe(v) for v in r] for r in result["rows"]]
                 report = {
@@ -612,12 +617,16 @@ def sales_obs_api(request):
         "options": {
             "chains": list(options.get("chains", [])),
             "countries": list(options.get("countries", [])),
+            "main_groups": list(options.get("main_groups", [])),
+            "sub_groups": list(options.get("sub_groups", [])),
         },
         "report": report,
         "error": error,
         "f": {"comp_type": comp_type, "begin": begin, "end": end,
               "chain": chain, "country": country, "area": area,
-              "region": region, "city": city, "medrep": medrep},
+              "region": region, "city": city, "medrep": medrep,
+              "main_group": main_group, "sub_group": sub_group,
+              "product_name": product_name},
     })
 
 
@@ -638,6 +647,16 @@ def sales_obs_filter_options_api(request):
     country = (request.GET.get("country") or "").strip()
     area = (request.GET.get("area") or "").strip()
     region = (request.GET.get("region") or "").strip()
+
+    # Ürün kademesi: level=product_name, main_group + sub_group parametreleriyle.
+    if level == "product_name":
+        main_group = (request.GET.get("main_group") or "").strip()
+        sub_group = (request.GET.get("sub_group") or "").strip()
+        try:
+            options = ReportService().product_names(main_group, sub_group)
+        except Exception:
+            options = []
+        return Response({"level": level, "options": list(options)})
 
     try:
         options = ReportService().cascade_options(
@@ -1245,4 +1264,55 @@ def chain_report_filter_options_api(request):
         "chains": list(options.get("chains", [])),
         "regions": list(options.get("regions", [])),
         "districts": list(options.get("districts", [])),
+    })
+
+
+# ==================== User Profile API (view + update) ====================
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def profile_api(request):
+    """
+    Current user's profile. GET returns the editable + read-only fields;
+    POST updates the editable ones (first_name, last_name, email, phone,
+    department). Username, user_type and access level are read-only.
+
+    For Azure (SSO) users, edits here only affect the local Django record;
+    the frontend shows a note that Azure-managed fields may be overwritten
+    on next sign-in.
+    """
+    user = request.user
+
+    if request.method == "POST":
+        data = request.data or {}
+        # Only these fields are editable; everything else is ignored.
+        for field in ("first_name", "last_name", "email", "phone", "department"):
+            if field in data:
+                setattr(user, field, (data.get(field) or "").strip())
+        try:
+            user.save(update_fields=[
+                "first_name", "last_name", "email", "phone", "department",
+            ])
+        except Exception as exc:
+            return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    access_level = ""
+    try:
+        if getattr(user, "access_level", None):
+            access_level = str(user.access_level)
+    except Exception:
+        access_level = ""
+
+    return Response({
+        "username": user.username,
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "email": user.email or "",
+        "phone": getattr(user, "phone", "") or "",
+        "department": getattr(user, "department", "") or "",
+        "user_type": getattr(user, "user_type", "") or "",
+        "is_azure": getattr(user, "user_type", "") == "AZURE",
+        "access_level": access_level,
+        "is_staff": user.is_staff,
+        "display_name": user.get_full_name() or user.username,
     })

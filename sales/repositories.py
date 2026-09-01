@@ -472,7 +472,9 @@ class ReportRepository:
 
     def chain_sales_monthly(self, comp_type: str, begin: str, end: str,
                             chain: str = "", country: str = "", area: str = "",
-                            region: str = "", city: str = "", medrep: str = "") -> dict:
+                            region: str = "", city: str = "", medrep: str = "",
+                            main_group: str = "", sub_group: str = "",
+                            product_name: str = "") -> dict:
         """
         CHAIN_SALES report, monthly, SALE. Returns {columns, rows}.
 
@@ -522,6 +524,15 @@ class ReportRepository:
         if medrep:
             where_extra += " and marketing_staff = %s "
             params.append(medrep)
+        if main_group:
+            where_extra += " and f.product_main_group = %s "
+            params.append(main_group)
+        if sub_group:
+            where_extra += " and f.product_sub_group = %s "
+            params.append(sub_group)
+        if product_name:
+            where_extra += " and f.product_name = %s "
+            params.append(product_name)
 
         group_by = " group by a.main_group order by Total desc "
 
