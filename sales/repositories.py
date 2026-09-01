@@ -573,7 +573,7 @@ class ReportRepository:
                "AND administrative_area_name <> '' ")
         params = []
         if country:
-            sql += "AND country = %s "
+            sql += "AND cntry = %s "
             params.append(country)
         sql += "ORDER BY administrative_area_name"
         with connections["refdb"].cursor() as cur:
@@ -587,7 +587,7 @@ class ReportRepository:
                "WHERE region IS NOT NULL AND region <> '' ")
         params = []
         if country:
-            sql += "AND country = %s "
+            sql += "AND cntry = %s "
             params.append(country)
         if area:
             sql += "AND administrative_area_name = %s "
@@ -601,10 +601,11 @@ class ReportRepository:
         """Distinct cities, narrowed by country, area and/or region."""
         from django.db import connections
         sql = ("SELECT DISTINCT city FROM solgar_tst.solgar_address_group "
-               "WHERE city IS NOT NULL AND city <> '' ")
+               "WHERE city IS NOT NULL AND city <> '' "
+               "AND city NOT IN ('(пусто)', '(empty)', '-') ")
         params = []
         if country:
-            sql += "AND country = %s "
+            sql += "AND cntry = %s "
             params.append(country)
         if area:
             sql += "AND administrative_area_name = %s "
