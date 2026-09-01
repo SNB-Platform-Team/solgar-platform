@@ -161,7 +161,7 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
     return redirect("accounts:home")
 
 
-@require_http_methods(["POST"])
+@require_http_methods(["GET", "POST"])
 def logout_view(request: HttpRequest) -> HttpResponse:
     """Log the current user out and return to the login page."""
     logout(request)
