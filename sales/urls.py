@@ -8,6 +8,9 @@ from . import api
 
 app_name = "sales"
 
+#profile
+#employees
+
 urlpatterns = [
     path("upload/", views.sales_upload_view, name="upload"),
     path("report/", views.sales_report_view, name="report"),
@@ -45,8 +48,14 @@ urlpatterns = [
     path("api/distributor-upload/preview/", api.distributor_upload_preview_api, name="distributor_upload_preview_api"),
     path("api/distributor-upload/save/", api.distributor_upload_save_api, name="distributor_upload_save_api"),
     path("api/doctor/filter-options/", api.doctor_filter_options_api, name="doctor_filter_options_api"),
-    path("api/me/", api.me_api, name="me_api"), 
-    path("api/chain-report/filter-options/", api.chain_report_filter_options_api, name="chain_report_filter_options_api"),
+    path("api/me/", api.me_api, name="_me_api"), 
+    path("api/chain-report/filter-options/",api.chain_report_filter_options_api , name="chain_report_filter_options_api"),
     path("api/sales-obs/filter-options/", api.sales_obs_filter_options_api, name="sales_obs_filter_options_api"),
-    path("api/profile/", api.profile_api, name="profile_api"),        
+    path("api/profile/", api.profile_api, name="profile_api"),    
+    path("api/employees/", api.employees_api, name="employees_api"),  
+    path("api/country-options/", api.country_options_api, name="country_options_api"),    
+    path("api/storage-options/", api.storage_options_api, name="storage_options_api"),    
 ]      
+
+
+

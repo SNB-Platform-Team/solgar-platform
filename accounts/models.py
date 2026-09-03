@@ -60,11 +60,18 @@ class User(AbstractUser):
     )
     department = models.CharField("Department", max_length=100, blank=True)
     phone = models.CharField("Phone", max_length=20, blank=True)
+    country = models.CharField(
+        "Country",
+        max_length=45,
+        blank=True,
+        help_text="Kullanicinin ulkesi (bos = kisit yok). is_staff ise tum ulkeler.",
+    )
     is_enabled = models.BooleanField(
         "Is enabled",
         default=True,
         help_text="Disabled users cannot sign in.",
     )
+
     created_at = models.DateTimeField("Created at", auto_now_add=True)
     updated_at = models.DateTimeField("Updated at", auto_now=True)
 

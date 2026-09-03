@@ -1229,6 +1229,7 @@ def me_api(request):
             "username": request.user.username,
             "display_name": request.user.get_full_name() or request.user.username,
             "is_staff": request.user.is_staff,
+            "country": getattr(request.user, "country", "") or "",
         })
     return Response({"authenticated": False})
 
@@ -1320,3 +1321,188 @@ def profile_api(request):
         "is_staff": user.is_staff,
         "display_name": user.get_full_name() or user.username,
     })
+
+
+# ==================== Employees / Users list API ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employees_api(request):
+    """
+    Staff (User) list for the Сотрудники screen. Paginated + searchable.
+    Read-only: shows name, email, phone, department, status, role.
+
+    Query params: search, page
+    """
+    from django.contrib.auth import get_user_model
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+
+    User = get_user_model()
+
+    search = (request.GET.get("search") or "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+
+    qs = User.objects.all().order_by("username")
+    if search:
+        qs = qs.filter(
+            Q(username__icontains=search)
+            | Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(email__icontains=search)
+            | Q(department__icontains=search)
+        )
+
+    paginator = Paginator(qs, 15)
+    page_obj = paginator.get_page(page)
+
+    rows = []
+    for u in page_obj.object_list:
+        # Status: enabled/disabled + account type
+        if not getattr(u, "is_enabled", True):
+            status = "disabled"
+            status_label = "Отключён"
+        elif getattr(u, "user_type", "") == "AZURE":
+            status = "azure"
+            status_label = "Azure"
+        else:
+            status = "active"
+            status_label = "Активен"
+
+        # Role: access level name, or staff/user
+        role = ""
+        try:
+            if getattr(u, "access_level", None):
+                role = str(u.access_level)
+        except Exception:
+            role = ""
+        if not role:
+            role = "Администратор" if u.is_staff else "Пользователь"
+
+        rows.append({
+            "username": u.username,
+            "name": u.get_full_name() or u.username,
+            "email": u.email or "",
+            "phone": getattr(u, "phone", "") or "",
+            "department": getattr(u, "department", "") or "",
+            "status": status,
+            "status_label": status_label,
+            "role": role,
+        })
+
+    return Response({
+        "rows": rows,
+        "total_rows": paginator.count,
+        "page": page_obj.number,
+        "num_pages": paginator.num_pages,
+        "has_prev": page_obj.has_previous(),
+        "has_next": page_obj.has_next(),
+        "search": search,
+    })
+
+
+# ==================== Country options API (user-scoped) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def country_options_api(request):
+    """
+    Country dropdown options from solgar_prm.prm_countries, scoped to the
+    current user:
+      - Staff/admin: all active countries, dropdown editable.
+      - Regular user with a country set: only that country, dropdown LOCKED.
+
+    Response:
+      {
+        countries: [str, ...],     # allowed countries for this user
+        locked: bool,              # true => user must not change (single country)
+        user_country: str,         # the user's own country ("" for admin)
+        is_staff: bool,
+      }
+    """
+    from django.db import connections
+
+    user = request.user
+    is_staff = bool(user.is_staff)
+    user_country = (getattr(user, "country", "") or "").strip()
+
+    # Full active country list from prm_countries.
+    all_countries = []
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                "SELECT country FROM solgar_prm.prm_countries "
+                "WHERE status = 1 ORDER BY country"
+            )
+            all_countries = [r[0] for r in cur.fetchall()]
+    except Exception:
+        all_countries = []
+
+    # Admin/staff -> all countries, not locked.
+    if is_staff or not user_country:
+        return Response({
+            "countries": all_countries,
+            "locked": False,
+            "user_country": user_country,
+            "is_staff": is_staff,
+        })
+
+    # Regular user with a country -> only that country, locked.
+    allowed = [c for c in all_countries if c == user_country] or [user_country]
+    return Response({
+        "countries": allowed,
+        "locked": True,
+        "user_country": user_country,
+        "is_staff": is_staff,
+    })
+
+
+# ==================== Storage options API (distributor, country-scoped) ====================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def storage_options_api(request):
+    """
+    Distributor storage (склад) options from solgar_prm.prm_storages,
+    filtered by country. If the user is country-restricted (non-staff with a
+    country set), the country is forced to the user's own regardless of the
+    query param.
+
+    Query params: country (optional; ignored/overridden for restricted users)
+
+    Response: {storages: [str, ...], country: str}
+    """
+    from django.db import connections
+
+    user = request.user
+    requested = (request.GET.get("country") or "").strip()
+    user_country = (getattr(user, "country", "") or "").strip()
+
+    # Country-restricted user: force their own country.
+    if not user.is_staff and user_country:
+        country = user_country
+    else:
+        country = requested
+
+    storages = []
+    try:
+        with connections["refdb"].cursor() as cur:
+            if country:
+                cur.execute(
+                    "SELECT storage FROM solgar_prm.prm_storages "
+                    "WHERE country = %s ORDER BY storage",
+                    [country],
+                )
+            else:
+                cur.execute(
+                    "SELECT DISTINCT storage FROM solgar_prm.prm_storages "
+                    "ORDER BY storage"
+                )
+            storages = [r[0] for r in cur.fetchall()]
+    except Exception:
+        storages = []
+
+    return Response({"storages": storages, "country": country})
