@@ -1506,3 +1506,203 @@ def storage_options_api(request):
         storages = []
 
     return Response({"storages": storages, "country": country})
+
+
+# ==================== Depo (parametrik parser) upload API ====================
+# Yeni parametrik parser (DepoStorageParser + config) tabanli distributor
+# upload. Java StorageSalesStockUpload'in Python karsiligi.
+
+def _open_sheet(excel_file):
+    """
+    Yuklenen Excel'i oku, ilk sayfayi 0-indexli okunabilir bir wrapper olarak
+    dondur (DepoStorageParser sheet.cell(row+1, col+1) bekliyor - openpyxl).
+    Hem .xlsx (openpyxl) hem .xls (xlrd) destekler.
+    """
+    import io
+    name = (getattr(excel_file, "name", "") or "").lower()
+    data = excel_file.read()
+
+    # Once openpyxl (xlsx) dene, olmazsa xlrd (xls).
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
+        return wb.active, None
+    except Exception:
+        pass
+
+    try:
+        import xlrd
+        book = xlrd.open_workbook(file_contents=data)
+        sheet = book.sheet_by_index(0)
+
+        # xlrd sheet'i openpyxl-benzeri cell(row=, column=) arayuze sar.
+        class _XlrdCell:
+            def __init__(self, value):
+                self.value = value
+
+        class _XlrdSheetWrapper:
+            def __init__(self, s):
+                self._s = s
+                self.max_row = s.nrows
+                self.max_column = s.ncols
+            def cell(self, row, column):
+                # openpyxl 1-indexli; xlrd 0-indexli
+                r, c = row - 1, column - 1
+                if 0 <= r < self._s.nrows and 0 <= c < self._s.ncols:
+                    return _XlrdCell(self._s.cell_value(r, c))
+                return _XlrdCell(None)
+
+        return _XlrdSheetWrapper(sheet), None
+    except Exception as exc:
+        return None, f"Excel okunamadi: {exc}"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def depo_upload_preview_api(request):
+    """
+    Parametrik parser ile distributor Excel onizleme (stateless).
+
+    multipart/form-data:
+      excel_file, distributor, country, begin_date, end_date
+
+    Config ve SALES/STOCK tipi dosya adindan belirlenir (Java mantigi).
+    """
+    from .depo_upload_service import DepoUploadService
+
+    distributor = (request.POST.get("distributor") or "").strip()
+    country = (request.POST.get("country") or "").strip()
+    begin_date = (request.POST.get("begin_date") or "").strip()
+    end_date = (request.POST.get("end_date") or "").strip()
+    excel_file = request.FILES.get("excel_file")
+
+    # Ulke kisitli kullanici -> ulkeyi kendi ulkesine zorla (guvenlik).
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    if not excel_file:
+        return Response({"error": "Выберите файл Excel."}, status=400)
+    if not distributor or not country:
+        return Response({"error": "Заполните дистрибьютора и страну."}, status=400)
+
+    sheet, err = _open_sheet(excel_file)
+    if err:
+        return Response({"error": err}, status=400)
+
+    file_name = getattr(excel_file, "name", "") or ""
+    main_group = ""  # istenirse ileride urun ana grubu secimi eklenir
+
+    service = DepoUploadService()
+    result = service.preview(
+        sheet, file_name, distributor, main_group,
+        sheet.max_row, sheet.max_column,
+    )
+
+    if result.error:
+        return Response({"error": result.error}, status=400)
+    if not result.rows:
+        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+    return Response({
+        "rows": result.rows,
+        "total_rows": len(result.rows),
+        "type": result.stock_sales_type,
+        "summary": {
+            "solgar_count": result.total_count_solgar,
+            "solgar_amount": round(result.total_amount_solgar, 2),
+            "bounty_count": result.total_count_bounty,
+            "bounty_amount": round(result.total_amount_bounty, 2),
+        },
+        "meta": {"distributor": distributor, "country": country,
+                 "begin_date": begin_date, "end_date": end_date},
+        "error": "",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def depo_upload_save_api(request):
+    """
+    Parametrik parser onizlemesinden gelen satirlari DistributorRecord'a
+    kaydeder. Frontend, preview'dan aldigi rows + meta'yi geri gonderir.
+
+    JSON body:
+      {rows: [...], distributor, country, begin_date, end_date, type}
+    """
+    from .models import DistributorRecord
+    from decimal import Decimal as _Dec
+    from datetime import datetime as _dt
+
+    data = request.data or {}
+    rows_in = data.get("rows") or []
+    distributor = (data.get("distributor") or "").strip()
+    country = (data.get("country") or "").strip()
+    begin_date_str = (data.get("begin_date") or "").strip()
+    end_date_str = (data.get("end_date") or "").strip()
+    op_type = (data.get("type") or "SALES").strip()
+
+    # Ulke kisitli kullanici -> kendi ulkesi
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    if not rows_in:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+    if not distributor or not country:
+        return Response({"error": "Отсутствуют дистрибьютор или страна."}, status=400)
+
+    begin_date = end_date = None
+    try:
+        if begin_date_str:
+            begin_date = _dt.strptime(begin_date_str, "%Y-%m-%d").date()
+        if end_date_str:
+            end_date = _dt.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response({"error": "Неверный формат даты."}, status=400)
+
+    # product_type (SL/BN/OS) -> Brand kodu eslesmesi
+    def _brand(pt: str) -> str:
+        pt = (pt or "").upper()
+        if pt == "BN":
+            return "BOUNTY"
+        if pt == "OS":
+            return "OS"
+        return "SOLGAR"
+
+    # operation_type: SALES/STOCK -> model kodu (SALE/STOCK). Model choices'a gore.
+    op_code = "SALE" if op_type.upper().startswith("SAL") else "STOCK"
+
+    objs = []
+    try:
+        for r in rows_in:
+            objs.append(DistributorRecord(
+                distributor=distributor,
+                operation_type=op_code,
+                country=country,
+                begin_date=begin_date,
+                end_date=end_date,
+                product_name=(r.get("product") or "")[:300],
+                product_type=(r.get("product_type") or "")[:120],
+                brand=_brand(r.get("product_type")),
+                count=int(r.get("count") or 0),
+                amount=_Dec(str(r.get("amount") or "0")),
+                city=(r.get("city") or "")[:150],
+                client=(r.get("client") or "")[:300],
+                legal_address=(r.get("legal_address") or "")[:400],
+                actual_address=(r.get("actual_address") or "")[:400],
+                inn=(r.get("inn") or "")[:30],
+                segment=(r.get("segment") or "")[:120],
+                uploaded_by=request.user,
+            ))
+    except (KeyError, ValueError, TypeError) as exc:
+        return Response({"error": f"Некорректные данные строк: {exc}"}, status=400)
+
+    try:
+        DistributorRecord.objects.bulk_create(objs, batch_size=500)
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": len(objs), "error": ""})

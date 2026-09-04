@@ -54,7 +54,9 @@ urlpatterns = [
     path("api/profile/", api.profile_api, name="profile_api"),    
     path("api/employees/", api.employees_api, name="employees_api"),  
     path("api/country-options/", api.country_options_api, name="country_options_api"),    
-    path("api/storage-options/", api.storage_options_api, name="storage_options_api"),    
+    path("api/storage-options/", api.storage_options_api, name="storage_options_api"),
+    path("api/depo-upload/preview/", api.depo_upload_preview_api, name="depo_upload_preview_api"),        
+    path("api/depo-upload/save/", api.depo_upload_save_api, name="depo_upload_save_api"),
 ]      
 
 
