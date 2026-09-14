@@ -124,10 +124,10 @@ class ChainParser:
             return Decimal("0")
 
     def _read_sheet(self, file_obj, filename: str = "") -> list[list]:
-        """Read the first worksheet into a list of rows (.xls or .xlsx)."""
+        
         name = (filename or getattr(file_obj, "name", "")).lower()
 
-        if name.endswith(".xls"):
+        if name.endswith(".xls"): 
             try:
                 import xlrd
 

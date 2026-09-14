@@ -33,7 +33,11 @@ class DepoStorageParser:
             val = sheet.cell(row=row + 1, column=col + 1).value  # openpyxl 1-indexli
         except Exception:
             return ""
-        return "" if val is None else str(val)
+        if val is None:
+            return ""
+        if isinstance(val, float) and val.is_integer():
+            return str(int(val))
+        return str(val)
 
     @staticmethod
     def _not_empty(s: Optional[str]) -> bool:

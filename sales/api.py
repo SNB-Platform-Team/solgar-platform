@@ -1512,71 +1512,117 @@ def storage_options_api(request):
 # Yeni parametrik parser (DepoStorageParser + config) tabanli distributor
 # upload. Java StorageSalesStockUpload'in Python karsiligi.
 
-def _open_sheet(excel_file):
-    """
-    Yuklenen Excel'i oku, ilk sayfayi 0-indexli okunabilir bir wrapper olarak
-    dondur (DepoStorageParser sheet.cell(row+1, col+1) bekliyor - openpyxl).
-    Hem .xlsx (openpyxl) hem .xls (xlrd) destekler.
-    """
-    import io
-    name = (getattr(excel_file, "name", "") or "").lower()
-    data = excel_file.read()
+# ==================== Depo (parametrik parser) upload API - batch/taslak ====================
+# Preview: parse -> DistributorRecord'a batch_id + is_confirmed=False (taslak) yaz.
+# Page: batch'ten sayfa sayfa oku (DB pagination). Save: batch'i onayla.
 
-    # Once openpyxl (xlsx) dene, olmazsa xlrd (xls).
+import uuid as _uuid
+
+
+def _open_sheet(excel_file):
+    """Yuklenen Excel'i oku (xlsx: openpyxl, xls: xlrd). (sheet, err) doner."""
+    import io
+    data = excel_file.read()
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
         return wb.active, None
     except Exception:
         pass
-
     try:
         import xlrd
         book = xlrd.open_workbook(file_contents=data)
-        sheet = book.sheet_by_index(0)
+        s = book.sheet_by_index(0)
 
-        # xlrd sheet'i openpyxl-benzeri cell(row=, column=) arayuze sar.
-        class _XlrdCell:
-            def __init__(self, value):
-                self.value = value
+        class _C:
+            def __init__(self, v): self.value = v
 
-        class _XlrdSheetWrapper:
-            def __init__(self, s):
-                self._s = s
-                self.max_row = s.nrows
-                self.max_column = s.ncols
+        class _W:
+            def __init__(self, sh):
+                self._s = sh
+                self.max_row = sh.nrows
+                self.max_column = sh.ncols
             def cell(self, row, column):
-                # openpyxl 1-indexli; xlrd 0-indexli
                 r, c = row - 1, column - 1
                 if 0 <= r < self._s.nrows and 0 <= c < self._s.ncols:
-                    return _XlrdCell(self._s.cell_value(r, c))
-                return _XlrdCell(None)
+                    return _C(self._s.cell_value(r, c))
+                return _C(None)
 
-        return _XlrdSheetWrapper(sheet), None
+        return _W(s), None
     except Exception as exc:
         return None, f"Excel okunamadi: {exc}"
+
+
+def _depo_row_to_record(r, batch_id, distributor, country, op_code, begin_date, end_date, user):
+    """Parse satirini (dict) DistributorRecord taslagina cevir."""
+    from .models import DistributorRecord
+    from decimal import Decimal as _Dec
+
+    pt = (r.get("product_type") or "").upper()
+    brand = "BOUNTY" if pt == "BN" else ("OS" if pt == "OS" else "SOLGAR")
+    return DistributorRecord(
+        distributor=distributor,
+        operation_type=op_code,
+        country=country,
+        begin_date=begin_date,
+        end_date=end_date,
+        product_name=(r.get("product") or "")[:300],
+        product_type=(r.get("product_type") or "")[:120],
+        brand=brand,
+        count=int(r.get("count") or 0),
+        amount=_Dec(str(r.get("amount") or "0")),
+        city=(r.get("city") or "")[:150],
+        client=(r.get("client") or "")[:300],
+        legal_address=(r.get("legal_address") or "")[:400],
+        actual_address=(r.get("actual_address") or "")[:400],
+        inn=(r.get("inn") or "")[:30],
+        segment=(r.get("segment") or "")[:120],
+        uploaded_by=user,
+        batch_id=batch_id,
+        is_confirmed=False,
+    )
+
+
+def _record_to_row(rec, idx):
+    """DistributorRecord -> onizleme satiri (dict), React icin."""
+    return {
+        "index": idx,
+        "distributor": rec.distributor,
+        "type": rec.operation_type,
+        "city": rec.city,
+        "product": rec.product_name,
+        "product_type": rec.product_type,
+        "count": rec.count,
+        "amount": float(rec.amount or 0),
+        "client": rec.client,
+        "legal_address": rec.legal_address,
+        "actual_address": rec.actual_address,
+        "inn": rec.inn,
+        "segment": rec.segment,
+    }
+
+
+_DEPO_PAGE_SIZE = 200
+#200 de backed kaydet ve yenisini getir
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def depo_upload_preview_api(request):
     """
-    Parametrik parser ile distributor Excel onizleme (stateless).
-
-    multipart/form-data:
-      excel_file, distributor, country, begin_date, end_date
-
-    Config ve SALES/STOCK tipi dosya adindan belirlenir (Java mantigi).
+    Excel'i parse et, satirlari DistributorRecord'a batch_id + is_confirmed=False
+    (taslak) olarak yaz. Ozet + ilk sayfa + batch_id + toplam dondur.
     """
     from .depo_upload_service import DepoUploadService
+    from .models import DistributorRecord
+    from datetime import datetime as _dt
 
     distributor = (request.POST.get("distributor") or "").strip()
     country = (request.POST.get("country") or "").strip()
-    begin_date = (request.POST.get("begin_date") or "").strip()
-    end_date = (request.POST.get("end_date") or "").strip()
+    begin_date_str = (request.POST.get("begin_date") or "").strip()
+    end_date_str = (request.POST.get("end_date") or "").strip()
     excel_file = request.FILES.get("excel_file")
 
-    # Ulke kisitli kullanici -> ulkeyi kendi ulkesine zorla (guvenlik).
     if not request.user.is_staff:
         uc = (getattr(request.user, "country", "") or "").strip()
         if uc:
@@ -1587,73 +1633,6 @@ def depo_upload_preview_api(request):
     if not distributor or not country:
         return Response({"error": "Заполните дистрибьютора и страну."}, status=400)
 
-    sheet, err = _open_sheet(excel_file)
-    if err:
-        return Response({"error": err}, status=400)
-
-    file_name = getattr(excel_file, "name", "") or ""
-    main_group = ""  # istenirse ileride urun ana grubu secimi eklenir
-
-    service = DepoUploadService()
-    result = service.preview(
-        sheet, file_name, distributor, main_group,
-        sheet.max_row, sheet.max_column,
-    )
-
-    if result.error:
-        return Response({"error": result.error}, status=400)
-    if not result.rows:
-        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
-
-    return Response({
-        "rows": result.rows,
-        "total_rows": len(result.rows),
-        "type": result.stock_sales_type,
-        "summary": {
-            "solgar_count": result.total_count_solgar,
-            "solgar_amount": round(result.total_amount_solgar, 2),
-            "bounty_count": result.total_count_bounty,
-            "bounty_amount": round(result.total_amount_bounty, 2),
-        },
-        "meta": {"distributor": distributor, "country": country,
-                 "begin_date": begin_date, "end_date": end_date},
-        "error": "",
-    })
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def depo_upload_save_api(request):
-    """
-    Parametrik parser onizlemesinden gelen satirlari DistributorRecord'a
-    kaydeder. Frontend, preview'dan aldigi rows + meta'yi geri gonderir.
-
-    JSON body:
-      {rows: [...], distributor, country, begin_date, end_date, type}
-    """
-    from .models import DistributorRecord
-    from decimal import Decimal as _Dec
-    from datetime import datetime as _dt
-
-    data = request.data or {}
-    rows_in = data.get("rows") or []
-    distributor = (data.get("distributor") or "").strip()
-    country = (data.get("country") or "").strip()
-    begin_date_str = (data.get("begin_date") or "").strip()
-    end_date_str = (data.get("end_date") or "").strip()
-    op_type = (data.get("type") or "SALES").strip()
-
-    # Ulke kisitli kullanici -> kendi ulkesi
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
-
-    if not rows_in:
-        return Response({"error": "Нет строк для сохранения."}, status=400)
-    if not distributor or not country:
-        return Response({"error": "Отсутствуют дистрибьютор или страна."}, status=400)
-
     begin_date = end_date = None
     try:
         if begin_date_str:
@@ -1663,46 +1642,351 @@ def depo_upload_save_api(request):
     except ValueError:
         return Response({"error": "Неверный формат даты."}, status=400)
 
-    # product_type (SL/BN/OS) -> Brand kodu eslesmesi
-    def _brand(pt: str) -> str:
-        pt = (pt or "").upper()
-        if pt == "BN":
+    sheet, err = _open_sheet(excel_file)
+    if err:
+        return Response({"error": err}, status=400)
+
+    file_name = getattr(excel_file, "name", "") or ""
+    service = DepoUploadService()
+    result = service.preview(sheet, file_name, distributor, "",
+                             sheet.max_row, sheet.max_column)
+    if result.error:
+        return Response({"error": result.error}, status=400)
+    if not result.rows:
+        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+    
+    DistributorRecord.objects.filter(
+        uploaded_by=request.user, is_confirmed=False
+    ).delete()
+
+    #yeni
+    batch_id = _uuid.uuid4().hex
+    op_code = "SALE" if (result.stock_sales_type or "").upper().startswith("SAL") else "STOCK"
+
+    objs = [
+        _depo_row_to_record(r, batch_id, distributor, country, op_code,
+                            begin_date, end_date, request.user)
+        for r in result.rows
+    ]
+    DistributorRecord.objects.bulk_create(objs, batch_size=1000)
+
+    total = len(objs)
+    
+    first = DistributorRecord.objects.filter(batch_id=batch_id).order_by("id")[:_DEPO_PAGE_SIZE]
+    rows = [_record_to_row(rec, i + 1) for i, rec in enumerate(first)]
+
+    return Response({
+        "batch_id": batch_id,
+        "rows": rows,
+        "page": 1,
+        "page_size": _DEPO_PAGE_SIZE,
+        "total_rows": total,
+        "num_pages": (total + _DEPO_PAGE_SIZE - 1) // _DEPO_PAGE_SIZE,
+        "type": result.stock_sales_type,
+        "summary": {
+            "solgar_count": result.total_count_solgar,
+            "solgar_amount": round(result.total_amount_solgar, 2),
+            "bounty_count": result.total_count_bounty,
+            "bounty_amount": round(result.total_amount_bounty, 2),
+        },
+        "meta": {"distributor": distributor, "country": country,
+                 "begin_date": begin_date_str, "end_date": end_date_str},
+        "error": "",
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def depo_upload_page_api(request):
+    """Bir batch'in belirli sayfasini dondur (DB pagination)."""
+    from .models import DistributorRecord
+
+    batch_id = (request.GET.get("batch_id") or "").strip()
+    try:
+        page = max(1, int(request.GET.get("page", "1")))
+    except (TypeError, ValueError):
+        page = 1
+
+    if not batch_id:
+        return Response({"error": "batch_id gerekli."}, status=400)
+
+    qs = DistributorRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).order_by("id")
+    total = qs.count()
+    offset = (page - 1) * _DEPO_PAGE_SIZE
+    page_recs = qs[offset:offset + _DEPO_PAGE_SIZE]
+    rows = [_record_to_row(rec, offset + i + 1) for i, rec in enumerate(page_recs)]
+
+    return Response({
+        "batch_id": batch_id,
+        "rows": rows,
+        "page": page,
+        "page_size": _DEPO_PAGE_SIZE,
+        "total_rows": total,
+        "num_pages": (total + _DEPO_PAGE_SIZE - 1) // _DEPO_PAGE_SIZE,
+        "error": "",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def depo_upload_save_api(request):
+    """Batch'i onayla (is_confirmed=True). Kayit zaten yapildi, sadece onay."""
+    from .models import DistributorRecord
+
+    data = request.data or {}
+    batch_id = (data.get("batch_id") or "").strip()
+    if not batch_id:
+        return Response({"error": "batch_id gerekli."}, status=400)
+
+    updated = DistributorRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).update(is_confirmed=True)
+
+    if updated == 0:
+        return Response({"error": "Onaylanacak taslak bulunamadi (suresi dolmus olabilir)."}, status=400)
+
+    return Response({"created": updated, "error": ""})
+
+
+# ==================== Eczane (parametrik parser) upload API - batch/taslak ====================
+# Distributor depo-upload akisinin eczane versiyonu. pharmacy_parser +
+# SIMPLE_CONFIGS kullanir, SalesRecord'a batch_id + is_confirmed=False yazar.
+
+import uuid as _ph_uuid
+from datetime import datetime as _ph_dt
+
+_PHARM_PAGE_SIZE = 200
+
+
+def _ph_open_sheet(excel_file):
+    """xlsx (openpyxl 2D liste - hizli) / xls (xlrd) oku. (sheet, err)."""
+    import io
+    data = excel_file.read()
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        ws = wb.active
+        grid = [list(r) for r in ws.iter_rows(values_only=True)]
+        wb.close()
+        return _GridSheet(grid), None
+    except Exception:
+        pass
+    try:
+        import xlrd
+        book = xlrd.open_workbook(file_contents=data)
+        s = book.sheet_by_index(0)
+        grid = [[s.cell_value(r, c) for c in range(s.ncols)] for r in range(s.nrows)]
+        return _GridSheet(grid), None
+    except Exception as exc:
+        return None, f"Excel okunamadi: {exc}"
+
+
+def _ph_config_for(chain_name, file_name):
+    """Zincir adi / dosya adindan SimpleVertical config bul."""
+    from .pharmacy_simple_configs import SIMPLE_CONFIGS
+    keys = (chain_name or "").upper(), (file_name or "").upper()
+    for cfg_key, cfg in SIMPLE_CONFIGS.items():
+        if cfg_key in keys[0] or cfg_key in keys[1]:
+            return cfg
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_upload_preview_api(request):
+    """
+    Eczane Excel onizleme: parse -> SalesRecord'a batch_id + is_confirmed=False.
+    multipart: excel_file, chain_name, country, report_date, main_group
+    """
+    from .pharmacy_parser import PharmacyParser
+    from .models import SalesRecord
+    from decimal import Decimal as _Dec
+    from django.db import transaction as _txn
+
+    chain_name = (request.POST.get("chain_name") or "").strip()
+    country = (request.POST.get("country") or "").strip()
+    report_date_str = (request.POST.get("report_date") or "").strip()
+    main_group = (request.POST.get("main_group") or "").strip()
+    excel_file = request.FILES.get("excel_file")
+
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    if not excel_file:
+        return Response({"error": "Выберите файл Excel."}, status=400)
+    if not chain_name or not country or not report_date_str:
+        return Response({"error": "Заполните сеть, страну и дату отчёта."}, status=400)
+
+    try:
+        report_date = _ph_dt.strptime(report_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response({"error": "Неверный формат даты."}, status=400)
+
+    file_name = getattr(excel_file, "name", "") or ""
+
+    sheet, err = _ph_open_sheet(excel_file)
+    if err:
+        return Response({"error": err}, status=400)
+
+    from .pharmacy_all_configs import parse_chain
+    parsed = parse_chain(sheet, chain_name or file_name, main_group, sheet.max_row, sheet.max_column)
+    if parsed is None:
+        return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
+    if not parsed:
+        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+    def _brand(product):
+        p = (product or "").upper()
+        if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
             return "BOUNTY"
-        if pt == "OS":
-            return "OS"
         return "SOLGAR"
 
-    # operation_type: SALES/STOCK -> model kodu (SALE/STOCK). Model choices'a gore.
-    op_code = "SALE" if op_type.upper().startswith("SAL") else "STOCK"
+    def _int(v):
+        try:
+            return int(str(v).split(".")[0].replace(" ", "")) if v else 0
+        except (ValueError, TypeError):
+            return 0
 
+    def _dec(v):
+        try:
+            return _Dec(str(v).replace(" ", "").replace(",", ".")) if v else _Dec("0")
+        except Exception:
+            return _Dec("0")
+
+    batch_id = _ph_uuid.uuid4().hex
+    total_solgar_c = total_bounty_c = 0
     objs = []
-    try:
-        for r in rows_in:
-            objs.append(DistributorRecord(
-                distributor=distributor,
-                operation_type=op_code,
-                country=country,
-                begin_date=begin_date,
-                end_date=end_date,
-                product_name=(r.get("product") or "")[:300],
-                product_type=(r.get("product_type") or "")[:120],
-                brand=_brand(r.get("product_type")),
-                count=int(r.get("count") or 0),
-                amount=_Dec(str(r.get("amount") or "0")),
-                city=(r.get("city") or "")[:150],
-                client=(r.get("client") or "")[:300],
-                legal_address=(r.get("legal_address") or "")[:400],
-                actual_address=(r.get("actual_address") or "")[:400],
-                inn=(r.get("inn") or "")[:30],
-                segment=(r.get("segment") or "")[:120],
-                uploaded_by=request.user,
-            ))
-    except (KeyError, ValueError, TypeError) as exc:
-        return Response({"error": f"Некорректные данные строк: {exc}"}, status=400)
+    for r in parsed:
+        brand = _brand(r.get("PRODUCT"))
+        cnt = _int(r.get("COUNT"))
+        if brand == "BOUNTY":
+            total_bounty_c += cnt
+        else:
+            total_solgar_c += cnt
+        objs.append(SalesRecord(
+            report_date=report_date, chain_name=chain_name, country=country,
+            product_name=(r.get("PRODUCT") or "")[:300], brand=brand,
+            pharmacy=(r.get("PHARMACY") or "")[:400], city=(r.get("CITY") or "")[:150],
+            count=cnt, amount=_dec(r.get("AMOUNT")),
+            remaining_count=_int(r.get("REMAINING_COUNT")),
+            remaining_amount=_dec(r.get("REMAINING_AMOUNT")),
+            aptekno=(r.get("APTEKNO") or "")[:120],
+            salesreader=(r.get("SALESREADER") or "")[:400],
+            subgroup=(r.get("SUBGROUP") or "")[:150],
+            main_group=(r.get("MAINGROUP") or "")[:150],
+            uploaded_by=request.user, batch_id=batch_id, is_confirmed=False,
+        ))
 
     try:
-        DistributorRecord.objects.bulk_create(objs, batch_size=500)
+        with _txn.atomic():
+            SalesRecord.objects.filter(uploaded_by=request.user, is_confirmed=False).delete()
+            SalesRecord.objects.bulk_create(objs, batch_size=5000)
     except Exception as exc:
-        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+        return Response({"error": f"Ошибка при подготовке: {exc}"}, status=500)
 
-    return Response({"created": len(objs), "error": ""})
+    total = len(objs)
+    first = SalesRecord.objects.filter(batch_id=batch_id).order_by("id")[:_PHARM_PAGE_SIZE]
+    rows = [_ph_row(rec, i + 1) for i, rec in enumerate(first)]
+
+    return Response({
+        "batch_id": batch_id, "rows": rows, "page": 1, "page_size": _PHARM_PAGE_SIZE,
+        "total_rows": total, "num_pages": (total + _PHARM_PAGE_SIZE - 1) // _PHARM_PAGE_SIZE,
+        "summary": {"solgar_count": total_solgar_c, "bounty_count": total_bounty_c},
+        "meta": {"chain_name": chain_name, "country": country, "report_date": report_date_str},
+        "error": "",
+    })
+
+
+def _ph_row(rec, idx):
+    return {
+        "index": idx, "product": rec.product_name, "brand": rec.brand,
+        "pharmacy": rec.pharmacy, "aptekno": rec.aptekno, "city": rec.city,
+        "count": rec.count, "amount": float(rec.amount or 0),
+        "subgroup": rec.subgroup, "main_group": rec.main_group,
+        "remaining_count": rec.remaining_count,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharmacy_upload_page_api(request):
+    """Batch'in bir sayfasi (DB pagination)."""
+    from .models import SalesRecord
+    batch_id = (request.GET.get("batch_id") or "").strip()
+    try:
+        page = max(1, int(request.GET.get("page", "1")))
+    except (TypeError, ValueError):
+        page = 1
+    if not batch_id:
+        return Response({"error": "batch_id gerekli."}, status=400)
+    qs = SalesRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).order_by("id")
+    total = qs.count()
+    offset = (page - 1) * _PHARM_PAGE_SIZE
+    recs = qs[offset:offset + _PHARM_PAGE_SIZE]
+    rows = [_ph_row(rec, offset + i + 1) for i, rec in enumerate(recs)]
+    return Response({
+        "batch_id": batch_id, "rows": rows, "page": page, "page_size": _PHARM_PAGE_SIZE,
+        "total_rows": total, "num_pages": (total + _PHARM_PAGE_SIZE - 1) // _PHARM_PAGE_SIZE,
+        "error": "",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_upload_save_api(request):
+    """Batch'i onayla (is_confirmed=True)."""
+    from .models import SalesRecord
+    data = request.data or {}
+    batch_id = (data.get("batch_id") or "").strip()
+    if not batch_id:
+        return Response({"error": "batch_id gerekli."}, status=400)
+    updated = SalesRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).update(is_confirmed=True)
+    if updated == 0:
+        return Response({"error": "Onaylanacak taslak bulunamadi."}, status=400)
+    return Response({"created": updated, "error": ""})
+
+
+
+
+class _GridCell:
+    __slots__ = ("value",)
+    def __init__(self, value):
+        self.value = value
+
+
+class _GridSheet:
+    """2D listeyi openpyxl-benzeri (cell(row=, column=)) arayuze sarar.
+    Tum veri bellekte; cell() erisimi cok hizli (openpyxl cell() degil)."""
+    def __init__(self, grid):
+        self._g = grid
+        self.max_row = len(grid)
+        self.max_column = max((len(r) for r in grid), default=0)
+    def cell(self, row, column):
+        r, c = row - 1, column - 1
+        if 0 <= r < len(self._g) and 0 <= c < len(self._g[r]):
+            return _GridCell(self._g[r][c])
+        return _GridCell(None)
+
+#counrty e gore aliyoruz
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharmacy_chains_api(request):
+    from .pharmacy_country_chains import country_chains_for
+
+    country = (request.GET.get("country") or "").strip()
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    chains = country_chains_for(country)
+    return Response({"chains": chains, "country": country})

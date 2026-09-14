@@ -1,0 +1,1 @@
+import{a as e,t}from"./api-D-2PYbvO.js";function n(){let{data:n,isLoading:r}=e({queryKey:[`country-options`],queryFn:async()=>(await t.get(`/sales/api/country-options/`)).data});return{countries:n?.countries??[],locked:n?.locked??!1,userCountry:n?.user_country??``,isStaff:n?.is_staff??!1,isLoading:r}}export{n as t};

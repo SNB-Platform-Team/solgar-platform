@@ -62,7 +62,11 @@ def acquire_user_claims(code: str) -> dict[str, Any] | None:
         scopes=_SCOPES,
         redirect_uri=settings.AZURE_AD["REDIRECT_URI"],
     )
+
+    print("=== MSAL RESULT ===")
+    print(result)
     if "id_token_claims" not in result:
+        print("HATA:", result.get("error"), "-", result.get("error_description"))
         return None
     return result["id_token_claims"]
 

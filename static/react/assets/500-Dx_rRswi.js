@@ -1,0 +1,1 @@
+import{w as e}from"./index-Ds7pCBCP.js";var t=e;export{t as component};

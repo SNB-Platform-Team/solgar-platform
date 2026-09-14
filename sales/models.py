@@ -62,6 +62,22 @@ class DistributorRecord(models.Model):
         related_name="distributor_uploads",
         verbose_name="Uploaded by",
     )
+
+    #tablo yukleme hatasi cache
+    batch_id = models.CharField(
+        "Batch ID",
+        max_length=40,
+        blank=True,
+        db_index=True,
+        help_text="Yukleme oturumu kimligi (onizleme -> onay gruplama).",
+    )
+    is_confirmed = models.BooleanField(
+        "Is confirmed",
+        default=True,
+        db_index=True,
+        help_text="False = onizleme taslagi (kaydedilmedi). True = onaylanmis.",
+    )
+
     created_at = models.DateTimeField("Created at", auto_now_add=True)
 
     class Meta:
@@ -183,6 +199,16 @@ class SalesRecord(models.Model):
     remaining_amount = models.DecimalField(
         "Remaining stock amount", max_digits=14, decimal_places=2, default=0
     )
+
+    # Eczane upload parse alanlari (Companies.java ciktisi)
+    aptekno = models.CharField("Aptek no", max_length=120, blank=True)
+    salesreader = models.CharField("Sales reader", max_length=400, blank=True)
+    subgroup = models.CharField("Subgroup", max_length=150, blank=True)
+    main_group = models.CharField("Main group", max_length=150, blank=True)
+    # Batch/taslak (buyuk dosya sayfalama - distributor gibi)
+    batch_id = models.CharField("Batch ID", max_length=40, blank=True, db_index=True)
+    is_confirmed = models.BooleanField("Is confirmed", default=True, db_index=True)
+
 
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
