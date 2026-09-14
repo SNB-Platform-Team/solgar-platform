@@ -62,6 +62,7 @@ urlpatterns = [
     path("api/pharmacy-upload/page/", api.pharmacy_upload_page_api, name="pharmacy_upload_page_api"),
     path("api/pharmacy-upload/save/", api.pharmacy_upload_save_api, name="pharmacy_upload_save_api"),
     path("api/pharmacy-upload/chains/", api.pharmacy_chains_api, name="pharmacy_chains_api"),    
+    path("api/version/", api.version_api, name="version_api"),
 ]      
 
 

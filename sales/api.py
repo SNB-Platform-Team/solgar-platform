@@ -1,6 +1,6 @@
 #1c api
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .views import OneCService
 
@@ -1990,3 +1990,41 @@ def pharmacy_chains_api(request):
 
     chains = country_chains_for(country)
     return Response({"chains": chains, "country": country})
+
+
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def version_api(request):
+    """Uygulama versiyonu (git commit hash)."""
+    import os
+    import subprocess
+
+    version = os.environ.get("APP_VERSION", "").strip()
+
+    if not version:
+        try:
+            from django.conf import settings
+            vpath = os.path.join(settings.BASE_DIR, "version.txt")
+            if os.path.exists(vpath):
+                with open(vpath, encoding="utf-8") as f:
+                    version = f.read().strip()
+        except Exception:
+            pass
+
+    date = ""
+    if not version:
+        try:
+            version = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+            date = subprocess.check_output(
+                ["git", "log", "-1", "--format=%cd", "--date=short"],
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except Exception:
+            version = "dev"
+
+    return Response({"version": version or "dev", "date": date})
