@@ -1,0 +1,1 @@
+import{w as e}from"./index-DWdl32XB.js";var t=e;export{t as component};
