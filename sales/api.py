@@ -344,14 +344,40 @@ def pharmacy_api(request):
 
 # Tabloda gosterilecek kolonlar (doctor entry ana alanlari).
 _DOCTOR_API_COLUMNS = [
-    ("doctor_name", "ФИО врача"),
-    ("country", "Страна"),
-    ("region", "Регион"),
-    ("city", "Город"),
+    ("id", "ID"),
+    ("brand", "Brand"),
+    ("country", "Country"),
+    ("area", "Area"),
+    ("region", "Region"),
+    ("district", "District"),
+    ("city", "City"),
+    ("activeness", "Activeness"),
+    ("medrep", "Medrep"),
+    ("doctor_date", "Activation Date"),
+    ("doctor_name", "Doctor Name"),
+    ("unified_specialty", "Унифицированная спец."),
     ("specialty", "Специальность"),
-    ("clinic_name", "Клиника"),
-    ("medrep", "Мед. представитель"),
-    ("category", "Категория"),
+    ("position_regalia", "Должность"),
+    ("category", "Category"),
+    ("clinic_name", "Clinic Name"),
+    ("clinic_status", "Clinic Category"),
+    ("clinic_address", "Clinic Address"),
+    ("clinic_count", "Clinic Count"),
+    ("key_person", "Key Person"),
+    ("doctor_tel", "Doctor Tel"),
+    ("doctor_email", "Doctor Email"),
+    ("full_address", "Full Address"),
+    ("building_type", "Building Type"),
+    ("country_code", "Country Code"),
+    ("administrative_area_name", "Administrative Area Name"),
+    ("sub_administrative_area_name", "Sub Administrative Area Name"),
+    ("street", "Street"),
+    ("homenumber", "Home Number"),
+    ("point_y", "point_y"),
+    ("point_x", "point_x"),
+    ("entry_user", "Entry User"),
+    ("entry_date", "Entry Date"),
+    ("clinic_name1", "Clinic Name 1"),
 ]
 
 # doctor_data'da brand tam isim olarak saklanir (SOLGAR / NATURES BOUNTY).
@@ -2028,3 +2054,419 @@ def version_api(request):
             version = "dev"
 
     return Response({"version": version or "dev", "date": date})
+
+
+# ==================== Doctor CRUD (ekle / guncelle / sil) ====================
+# Java DoctorEntryUpdate'in is mantigi. doctor_data tablosuna (managed=False)
+# yazar. Listeleme (doctor_api) + filtreler (doctor_filter_options_api) zaten var.
+
+# Formdan gelip modele yazilabilecek alanlar (Java formu <-> model).
+_DOCTOR_WRITABLE = [
+    "brand", "country", "area", "region", "district", "city",
+    "activeness", "medrep", "doctor_date", "doctor_name",
+    "unified_specialty", "specialty", "position_regalia", "category",
+    "clinic_name", "clinic_name1", "clinic_status", "clinic_address",
+    "clinic_count", "key_person", "doctor_tel", "doctor_email",
+    "full_address", "requested", "building_type", "country_code",
+    "administrative_area_name", "sub_administrative_area_name",
+    "street", "homenumber", "point_y", "point_x",
+]
+
+
+def _doctor_apply_fields(doc, data):
+    """Form verisini Doctor nesnesine uygula (sadece izinli alanlar)."""
+    for f in _DOCTOR_WRITABLE:
+        if f in data:
+            val = data.get(f)
+            if f == "clinic_count":
+                try:
+                    val = int(val) if val not in (None, "") else None
+                except (ValueError, TypeError):
+                    val = None
+            doc.__setattr__(f, val)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_create_api(request):
+    """Yeni doktor ekle (doctor_data'ya INSERT)."""
+    from .models import Doctor
+    from django.utils import timezone
+
+    data = request.data or {}
+    name = (data.get("doctor_name") or "").strip()
+    if not name:
+        return Response({"error": "Имя доктора обязательно."}, status=400)
+
+    doc = Doctor(status=1)
+    _doctor_apply_fields(doc, data)
+    doc.entry_user = request.user.get_full_name() or request.user.username
+    doc.entry_date = timezone.now()
+
+    try:
+        doc.save(using="refdb")
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"id": doc.id, "error": ""})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_update_api(request):
+    """Mevcut doktoru guncelle (id ile, UPDATE)."""
+    from .models import Doctor
+
+    data = request.data or {}
+    doc_id = data.get("id")
+    if not doc_id:
+        return Response({"error": "id gerekli."}, status=400)
+
+    try:
+        doc = Doctor.objects.using("refdb").get(id=doc_id)
+    except Doctor.DoesNotExist:
+        return Response({"error": "Доктор не найден."}, status=404)
+
+    _doctor_apply_fields(doc, data)
+    doc.entry_user = request.user.get_full_name() or request.user.username
+
+    try:
+        doc.save(using="refdb")
+    except Exception as exc:
+        return Response({"error": f"Ошибка обновления: {exc}"}, status=500)
+
+    return Response({"id": doc.id, "error": ""})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_delete_api(request):
+    """Doktoru sil. Soft delete (status=0) - guvenli, geri alinabilir."""
+    from .models import Doctor
+
+    data = request.data or {}
+    doc_id = data.get("id")
+    if not doc_id:
+        return Response({"error": "id gerekli."}, status=400)
+
+    try:
+        doc = Doctor.objects.using("refdb").get(id=doc_id)
+    except Doctor.DoesNotExist:
+        return Response({"error": "Доктор не найден."}, status=404)
+
+    # Soft delete: status=0 (kalici silme yerine - guvenli)
+    doc.status = 0
+    try:
+        doc.save(using="refdb", update_fields=["status"])
+    except Exception as exc:
+        return Response({"error": f"Ошибка удаления: {exc}"}, status=500)
+
+    return Response({"deleted": doc_id, "error": ""})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def doctor_detail_api(request):
+    """Tek doktorun tum alanlari (duzenleme formu icin). ?id=X"""
+    from .models import Doctor
+
+    doc_id = request.GET.get("id")
+    if not doc_id:
+        return Response({"error": "id gerekli."}, status=400)
+    try:
+        doc = Doctor.objects.using("refdb").get(id=doc_id)
+    except Doctor.DoesNotExist:
+        return Response({"error": "Доктор не найден."}, status=404)
+
+    out = {"id": doc.id}
+    for f in _DOCTOR_WRITABLE:
+        out[f] = getattr(doc, f, "") or ""
+    return Response(out)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_geocode_api(request):
+    """
+    Adres -> koordinat (point_x/y) + adres bilesenleri.
+    Java Geocoding'in Python portu: DaData (birincil) + Yandex (yedek).
+    settings.GEOCODE_PROVIDER ile secilir ("dadata" | "yandex").
+    "Найти адрес" butonu bunu cagirir.
+
+    JSON body: {address: "Москва, Широкая улица, 12A"}
+    """
+    import os
+    import requests
+    from django.conf import settings
+
+    data = request.data or {}
+    address = (data.get("address") or "").strip()
+    if not address:
+        return Response({"error": "Адрес пустой."}, status=400)
+
+    from .models import GeocodeSettings
+    cfg = GeocodeSettings.current()
+    provider = (cfg.provider if cfg else "dadata").lower()
+
+    out = {
+        "point_x": "", "point_y": "", "full_address": "", "street": "",
+        "home_number": "", "city": "", "administrative_area_name": "",
+        "sub_administrative_area_name": "", "country_code": "",
+        "building_type": "", "error": "",
+    }
+
+    try:
+        if provider == "yandex":
+            out = _geocode_yandex(address, out)
+        else:
+            out = _geocode_dadata(address, out)
+    except Exception as exc:
+        return Response({**out, "error": f"Ошибка геокодирования: {exc}"}, status=500)
+
+    return Response(out)
+
+
+def _geocode_dadata(address, out):
+    """DaData clean/address - koordinat + ayristrilmis adres."""
+    import os
+    import requests
+    from django.conf import settings
+
+    from .models import GeocodeSettings
+    cfg = GeocodeSettings.current()
+    key = (cfg.dadata_key if cfg else "") or os.environ.get("DADATA_KEY", "")
+    secret = (cfg.dadata_secret if cfg else "") or os.environ.get("DADATA_SECRET", "")
+    if not key or not secret:
+        out["error"] = "DaData ключ не настроен."
+        return out
+
+    resp = requests.post(
+        "https://cleaner.dadata.ru/api/v1/clean/address",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Token {key}",
+            "X-Secret": secret,
+        },
+        json=[address],
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        out["error"] = f"DaData error {resp.status_code}"
+        return out
+
+    arr = resp.json()
+    if not arr:
+        out["error"] = "Адрес не найден."
+        return out
+    a = arr[0]
+
+    def g(k):
+        v = a.get(k)
+        return "" if v is None else str(v)
+
+    out["full_address"] = g("result")
+    out["building_type"] = g("house_type_full")
+    out["country_code"] = g("country_iso_code")
+    out["point_y"] = g("geo_lat")
+    out["point_x"] = g("geo_lon")
+
+    # ADMINISTRATIVEAREANAME (region, "город" ise sadece region)
+    region = g("region")
+    region_type = g("region_type_full")
+    if region_type.lower() == "город":
+        out["administrative_area_name"] = region
+    else:
+        out["administrative_area_name"] = (region + " " + region_type).strip()
+
+    # SUBADMINISTRATIVEAREANAME + CITY
+    city = g("city")
+    if not city:
+        out["sub_administrative_area_name"] = region
+        out["city"] = region
+    else:
+        out["sub_administrative_area_name"] = city
+        out["city"] = city
+
+    # STREET, HOMENUMBER
+    street_type = g("street_type_full")
+    street = g("street")
+    out["street"] = (street_type + " " + street).strip()
+    out["home_number"] = g("house")
+
+    return out
+
+
+def _geocode_yandex(address, out):
+    """Yandex Geocoder - yedek."""
+    import os
+    import requests
+    from django.conf import settings
+
+    from .models import GeocodeSettings
+    cfg = GeocodeSettings.current()
+    key = (cfg.yandex_key if cfg else "") or os.environ.get("YANDEX_GEOCODE_KEY", "")
+    if not key:
+        out["error"] = "Yandex ключ не настроен."
+        return out
+
+    resp = requests.get(
+        "https://geocode-maps.yandex.ru/1.x/",
+        params={"apikey": key, "format": "json", "geocode": address, "lang": "ru_RU"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        out["error"] = f"Yandex error {resp.status_code}"
+        return out
+
+    j = resp.json()
+    try:
+        members = j["response"]["GeoObjectCollection"]["featureMember"]
+        if not members:
+            out["error"] = "Адрес не найден."
+            return out
+        geo = members[0]["GeoObject"]
+        # pos: "lng lat"
+        pos = geo["Point"]["pos"].split()
+        out["point_x"] = pos[0]  # lng
+        out["point_y"] = pos[1]  # lat
+        out["full_address"] = geo.get("metaDataProperty", {}).get(
+            "GeocoderMetaData", {}).get("text", "")
+    except (KeyError, IndexError):
+        out["error"] = "Не удалось разобрать ответ Yandex."
+    return out
+
+
+# ==================== Pharmacy CRUD (ekle / guncelle / sil) ====================
+# Java PharmacyEntryUpdate is mantigi. brand'e gore PharmacySolgar/Bounty
+# tablosuna yazar (pharmacy_data_solgar / pharmacy_data_bounty, managed=False).
+
+_PHARMACY_WRITABLE = [
+    "country", "area", "region", "city", "city_region", "district", "metro",
+    "group_company", "subgroup_company", "pharmacy_no", "pharmacy_address",
+    "pharmacy_category", "assortiment", "pharmacy_type", "promo",
+    "marketing_staff", "marketing_staff_no", "pharmacy_response_person",
+    "pharmacy_tel", "pharmacy_email", "pharmacy_activeness",
+    "pharmacy_activation_date", "comments", "pharmacy_number_sale",
+    "full_address", "requested", "building_type", "country_code",
+    "administrative_area_name", "sub_administrative_area_name",
+    "street", "homenumber", "point_y", "point_x",
+    "assortiment1", "pharmacy_group", "sku", "cornerNo",
+    "pharmacist_name_1", "pharmacy_home_tel", "pharmacist_name_2", "pharmacy_work_tel",
+]
+
+_PHARMACY_INT_FIELDS = {"marketing_staff_no", "sku", "cornerNo"}
+
+
+def _pharmacy_model(brand):
+    """brand -> PharmacySolgar / PharmacyBounty."""
+    from .models import PharmacySolgar, PharmacyBounty
+    b = (brand or "SOLGAR").upper()
+    return PharmacyBounty if "BOUNTY" in b or b == "BN" else PharmacySolgar
+
+
+def _pharmacy_apply_fields(obj, data):
+    for f in _PHARMACY_WRITABLE:
+        if f in data:
+            val = data.get(f)
+            if f in _PHARMACY_INT_FIELDS:
+                try:
+                    val = int(val) if val not in (None, "") else None
+                except (ValueError, TypeError):
+                    val = None
+            obj.__setattr__(f, val)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_create_api(request):
+    """Yeni eczane ekle (brand'e gore tabloya INSERT)."""
+    from django.utils import timezone
+
+    data = request.data or {}
+    brand = (data.get("brand") or "SOLGAR").strip()
+    Model = _pharmacy_model(brand)
+
+    no = (data.get("pharmacy_no") or "").strip()
+    if not no:
+        return Response({"error": "Номер аптеки обязателен."}, status=400)
+
+    obj = Model(status=1)
+    _pharmacy_apply_fields(obj, data)
+    obj.entry_user = request.user.get_full_name() or request.user.username
+    obj.entry_date = timezone.now()
+
+    try:
+        obj.save(using="refdb")
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+    return Response({"id": obj.id, "error": ""})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_update_api(request):
+    """Eczaneyi guncelle (brand + id)."""
+    data = request.data or {}
+    brand = (data.get("brand") or "SOLGAR").strip()
+    obj_id = data.get("id")
+    if not obj_id:
+        return Response({"error": "id gerekli."}, status=400)
+
+    Model = _pharmacy_model(brand)
+    try:
+        obj = Model.objects.using("refdb").get(id=obj_id)
+    except Model.DoesNotExist:
+        return Response({"error": "Аптека не найдена."}, status=404)
+
+    _pharmacy_apply_fields(obj, data)
+    obj.entry_user = request.user.get_full_name() or request.user.username
+    try:
+        obj.save(using="refdb")
+    except Exception as exc:
+        return Response({"error": f"Ошибка обновления: {exc}"}, status=500)
+    return Response({"id": obj.id, "error": ""})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_delete_api(request):
+    """Eczaneyi sil (soft delete status=0)."""
+    data = request.data or {}
+    brand = (data.get("brand") or "SOLGAR").strip()
+    obj_id = data.get("id")
+    if not obj_id:
+        return Response({"error": "id gerekli."}, status=400)
+
+    Model = _pharmacy_model(brand)
+    try:
+        obj = Model.objects.using("refdb").get(id=obj_id)
+    except Model.DoesNotExist:
+        return Response({"error": "Аптека не найдена."}, status=404)
+
+    obj.status = 0
+    try:
+        obj.save(using="refdb", update_fields=["status"])
+    except Exception as exc:
+        return Response({"error": f"Ошибка удаления: {exc}"}, status=500)
+    return Response({"deleted": obj_id, "error": ""})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pharmacy_detail_api(request):
+    """Tek eczanenin tum alanlari (duzenleme formu). ?brand=&id="""
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    obj_id = request.GET.get("id")
+    if not obj_id:
+        return Response({"error": "id gerekli."}, status=400)
+
+    Model = _pharmacy_model(brand)
+    try:
+        obj = Model.objects.using("refdb").get(id=obj_id)
+    except Model.DoesNotExist:
+        return Response({"error": "Аптека не найдена."}, status=404)
+
+    out = {"id": obj.id, "brand": brand}
+    for f in _PHARMACY_WRITABLE:
+        out[f] = getattr(obj, f, "") or ""
+    return Response(out)

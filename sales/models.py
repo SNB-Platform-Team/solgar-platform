@@ -551,3 +551,34 @@ class DadQuery(models.Model):
     def __str__(self) -> str:
         """Readable representation."""
         return self.query_name
+
+
+
+
+
+class GeocodeSettings(models.Model):
+    """Geocoding servis ayarlari - admin panelden yonetilir."""
+    PROVIDER_CHOICES = [
+        ("dadata", "DaData"),
+        ("yandex", "Yandex"),
+    ]
+
+    provider = models.CharField(
+        "Провайдер", max_length=20, choices=PROVIDER_CHOICES, default="dadata",
+    )
+    dadata_key = models.CharField("DaData Key", max_length=255, blank=True)
+    dadata_secret = models.CharField("DaData Secret", max_length=255, blank=True)
+    yandex_key = models.CharField("Yandex Key", max_length=255, blank=True)
+    is_active = models.BooleanField("Активен", default=True)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+
+    class Meta:
+        verbose_name = "Geocode ayari"
+        verbose_name_plural = "Geocode ayarlari"
+
+    def __str__(self):
+        return f"Geocode ({self.provider})"
+
+    @classmethod
+    def current(cls):
+        return cls.objects.filter(is_active=True).first()

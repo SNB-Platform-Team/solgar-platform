@@ -280,3 +280,9 @@ if DEBUG:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+
+GEOCODE_PROVIDER = get_secret("GEOCODE_PROVIDER", "dadata")
+DADATA_KEY = get_secret("DADATA_KEY", "")
+DADATA_SECRET = get_secret("DADATA_SECRET", "")
+YANDEX_GEOCODE_KEY = get_secret("YANDEX_GEOCODE_KEY", "")
