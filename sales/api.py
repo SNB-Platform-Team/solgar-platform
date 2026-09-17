@@ -36,7 +36,7 @@ def onec_api(request):
     valid = {t["key"] for t in ONEC_API_TABS}
     tab = (request.GET.get("tab") or "orders").strip().lower()
     if tab not in valid:
-        tab = "orders"
+        tab = "orders" 
 
     search = (request.GET.get("search") or "").strip()
     try:
@@ -263,15 +263,48 @@ def pharm_managerial_api(request):
 # Tabloda gosterilecek kolonlar (entry ekranindaki ana alanlar).
 # match_key bir @property (DB kolonu degil), o yuzden liste disinda.
 _PHARMACY_API_COLUMNS = [
-    ("pharmacy_no", "Номер аптеки"),
-    ("group_company", "Сеть"),
-    ("country", "Страна"),
-    ("region", "Регион"),
-    ("city", "Город"),
-    ("pharmacy_address", "Адрес"),
-    ("pharmacy_response_person", "Ответственный"),
-    ("pharmacy_category", "Категория"),
-    ("pharmacy_type", "Тип"),
+    ("id", "Id"),
+    ("brand", "BRAND"),
+    ("country", "Country"),
+    ("area", "Area"),
+    ("region", "Region"),
+    ("city", "City"),
+    ("district", "District"),
+    ("metro", "METRO"),
+    ("group_company", "GROUP COMPANY"),
+    ("subgroup_company", "SUBGROUP COMPANY"),
+    ("marketing_staff", "Marketing Staff"),
+    ("pharmacy_address", "PHARMACY ADDRESS"),
+    ("assortiment", "ASSORTMENT"),
+    ("pharmacy_category", "PHARMACY CATEGORY"),
+    ("pharmacy_type", "PHARMACY_TYPE"),
+    ("promo", "PROMO"),
+    ("pharmacy_activeness", "Pharmacy Activeness"),
+    ("pharmacy_activation_date", "Pharmacy Activation Date"),
+    ("pharmacy_response_person", "PHARM HEAD NAME"),
+    ("pharmacy_tel", "Pharmacy Tel"),
+    ("pharmacy_email", "Pharmacy Email"),
+    ("comments", "Comments"),
+    ("full_address", "Full Address"),
+    ("building_type", "Building Type"),
+    ("country_code", "Country Code"),
+    ("administrative_area_name", "Administrative Area Name"),
+    ("sub_administrative_area_name", "Sub Administrative Area Name"),
+    ("street", "Street"),
+    ("homenumber", "Home Number"),
+    ("point_y", "point_y"),
+    ("point_x", "point_x"),
+    ("assortiment1", "OBF"),
+    ("pharmacy_group", "Pharm Group"),
+    ("sku", "SKU"),
+    ("cornerNo", "Corner No"),
+    ("pharmacy_id", "PHARMACY_ID"),
+    ("entry_user", "Entry User"),
+    ("entry_date", "Entry Date"),
+    ("pharmacist_name_1", "Pharmacist Name 1"),
+    ("pharmacy_home_tel", "Pharmacist1 Tel"),
+    ("pharmacist_name_2", "Pharmacist Name 2"),
+    ("pharmacy_work_tel", "Pharmacist2 Tel"),
 ]
 
 PHARMACY_API_BRANDS = [
@@ -1134,7 +1167,7 @@ def pharmacy_filter_options_api(request):
 
     Two modes:
       1) No `level` param: returns ALL top-level lists at once (initial load) --
-         countries, chains, categories, types, promos, marketing_staff.
+         countries, chains, categories, types, promos, marketing_staff. Cached.
       2) With `level` param: returns ONE cascading list based on parent values
          (level=area/region/city/metro/subchain), mirroring the Java AJAX
          cascade. Used when the user picks a parent value.
@@ -1143,6 +1176,7 @@ def pharmacy_filter_options_api(request):
       brand (SOLGAR/BOUNTY), level, country, area, region, city, group_company
     """
     from .repositories import PharmacyRepository
+    from django.core.cache import cache
 
     repo = PharmacyRepository()
     brand = (request.GET.get("brand") or "SOLGAR").strip()
@@ -1168,21 +1202,28 @@ def pharmacy_filter_options_api(request):
             options = []
         return Response({"level": level, "options": list(options)})
 
+    # Level'siz tam liste: en agir kisim (6 distinct), cache'le (15 dk).
+    cache_key = f"pharm_filter_opts_{brand}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+
     def _safe(fn, *a, **kw):
         try:
             return list(fn(*a, **kw))
         except Exception:
             return []
 
-    return Response({
+    result = {
         "countries": _safe(repo.countries, brand),
         "chains": _safe(repo.chains, brand),
         "categories": _safe(repo.pharmacy_categories, brand),
         "types": _safe(repo.pharmacy_types, brand),
         "promos": _safe(repo.promos, brand),
         "marketing_staff": _safe(repo.marketing_staff, brand),
-    })
-
+    }
+    cache.set(cache_key, result, 900)
+    return Response(result)
 
 
 
@@ -1197,13 +1238,14 @@ def doctor_filter_options_api(request):
 
     Two modes:
       1) No `level`: all top-level lists (countries, specialties,
-         unified_specialties, medreps).
+         unified_specialties, medreps). Cached.
       2) With `level` (area/region/city): one cascading list narrowed by
          parent selections (country -> area -> region -> city).
 
     Query params: level, country, area, region
     """
     from .repositories import DoctorRepository
+    from django.core.cache import cache
 
     repo = DoctorRepository()
     level = (request.GET.get("level") or "").strip()
@@ -1222,19 +1264,25 @@ def doctor_filter_options_api(request):
             options = []
         return Response({"level": level, "options": list(options)})
 
+    # Level'siz tam liste: cache'le (15 dk).
+    cached = cache.get("doctor_filter_opts")
+    if cached is not None:
+        return Response(cached)
+
     def _safe(fn, *a, **kw):
         try:
             return list(fn(*a, **kw))
         except Exception:
             return []
 
-    return Response({
+    result = {
         "countries": _safe(repo.countries),
         "specialties": _safe(repo.specialties),
         "unified_specialties": _safe(repo.unified_specialties),
         "medreps": _safe(repo.medreps),
-    })
-
+    }
+    cache.set("doctor_filter_opts", result, 900)
+    return Response(result)
 
 # ==================== Current user (auth check) API ====================
 
@@ -2188,14 +2236,15 @@ def doctor_detail_api(request):
 @permission_classes([IsAuthenticated])
 def doctor_geocode_api(request):
     """
-    Adres -> koordinat (point_x/y) + adres bilesenleri.
-    Java Geocoding'in Python portu: DaData (birincil) + Yandex (yedek).
-    settings.GEOCODE_PROVIDER ile secilir ("dadata" | "yandex").
+    Adres -> koordinat (point_x/point_y) + adres bilesenleri.
+    Java GeocodeGoogle'in Python karsiligi - Google Geocoding API.
     "Найти адрес" butonu bunu cagirir.
 
     JSON body: {address: "Москва, Широкая улица, 12A"}
+    Response: {point_x, point_y, full_address, street, home_number,
+               city, administrative_area_name, sub_administrative_area_name,
+               country_code, building_type}
     """
-    import os
     import requests
     from django.conf import settings
 
@@ -2204,141 +2253,70 @@ def doctor_geocode_api(request):
     if not address:
         return Response({"error": "Адрес пустой."}, status=400)
 
-    from .models import GeocodeSettings
-    cfg = GeocodeSettings.current()
-    provider = (cfg.provider if cfg else "dadata").lower()
+    api_key = getattr(settings, "GOOGLE_GEOCODE_API_KEY", "") or \
+        __import__("os").environ.get("GOOGLE_GEOCODE_API_KEY", "")
+    if not api_key:
+        return Response({"error": "Google API ключ не настроен."}, status=500)
+
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"address": address, "language": "ru", "key": api_key},
+            timeout=10,
+        )
+        result = resp.json()
+    except Exception as exc:
+        return Response({"error": f"Ошибка геокодирования: {exc}"}, status=500)
 
     out = {
         "point_x": "", "point_y": "", "full_address": "", "street": "",
         "home_number": "", "city": "", "administrative_area_name": "",
         "sub_administrative_area_name": "", "country_code": "",
-        "building_type": "", "error": "",
+        "building_type": "",
     }
 
-    try:
-        if provider == "yandex":
-            out = _geocode_yandex(address, out)
-        else:
-            out = _geocode_dadata(address, out)
-    except Exception as exc:
-        return Response({**out, "error": f"Ошибка геокодирования: {exc}"}, status=500)
+    if result.get("status") != "OK" or not result.get("results"):
+        return Response({**out, "error": f"Адрес не найден ({result.get('status')})."})
 
-    return Response(out)
+    r0 = result["results"][0]
+    out["full_address"] = r0.get("formatted_address", "")
 
+    # Koordinat (lat=point_y, lng=point_x) - Java ile ayni
+    loc = r0.get("geometry", {}).get("location", {})
+    out["point_y"] = str(loc.get("lat", ""))
+    out["point_x"] = str(loc.get("lng", ""))
+    out["building_type"] = r0.get("geometry", {}).get("location_type", "")
 
-def _geocode_dadata(address, out):
-    """DaData clean/address - koordinat + ayristrilmis adres."""
-    import os
-    import requests
-    from django.conf import settings
+    # Adres bilesenleri
+    for comp in r0.get("address_components", []):
+        types = comp.get("types", [])
+        long_name = comp.get("long_name", "")
+        short_name = comp.get("short_name", "")
+        if "street_number" in types:
+            out["home_number"] = long_name
+        elif "route" in types:
+            out["street"] = long_name
+        elif "locality" in types:
+            out["city"] = long_name
+        elif "administrative_area_level_2" in types or "administrative_area_level_3" in types:
+            out["sub_administrative_area_name"] = long_name
+        elif "administrative_area_level_1" in types:
+            out["administrative_area_name"] = long_name
+        elif "country" in types:
+            out["country_code"] = short_name
 
-    from .models import GeocodeSettings
-    cfg = GeocodeSettings.current()
-    key = (cfg.dadata_key if cfg else "") or os.environ.get("DADATA_KEY", "")
-    secret = (cfg.dadata_secret if cfg else "") or os.environ.get("DADATA_SECRET", "")
-    if not key or not secret:
-        out["error"] = "DaData ключ не настроен."
-        return out
+    # Java: ADMINISTRATIVE_AREA_NAME bossa CITY ile doldur
+    if not out["administrative_area_name"]:
+        out["administrative_area_name"] = out["city"]
 
-    resp = requests.post(
-        "https://cleaner.dadata.ru/api/v1/clean/address",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Token {key}",
-            "X-Secret": secret,
-        },
-        json=[address],
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        out["error"] = f"DaData error {resp.status_code}"
-        return out
-
-    arr = resp.json()
-    if not arr:
-        out["error"] = "Адрес не найден."
-        return out
-    a = arr[0]
-
-    def g(k):
-        v = a.get(k)
-        return "" if v is None else str(v)
-
-    out["full_address"] = g("result")
-    out["building_type"] = g("house_type_full")
-    out["country_code"] = g("country_iso_code")
-    out["point_y"] = g("geo_lat")
-    out["point_x"] = g("geo_lon")
-
-    # ADMINISTRATIVEAREANAME (region, "город" ise sadece region)
-    region = g("region")
-    region_type = g("region_type_full")
-    if region_type.lower() == "город":
-        out["administrative_area_name"] = region
-    else:
-        out["administrative_area_name"] = (region + " " + region_type).strip()
-
-    # SUBADMINISTRATIVEAREANAME + CITY
-    city = g("city")
-    if not city:
-        out["sub_administrative_area_name"] = region
-        out["city"] = region
-    else:
-        out["sub_administrative_area_name"] = city
-        out["city"] = city
-
-    # STREET, HOMENUMBER
-    street_type = g("street_type_full")
-    street = g("street")
-    out["street"] = (street_type + " " + street).strip()
-    out["home_number"] = g("house")
-
-    return out
+    return Response({**out, "error": ""})
 
 
-def _geocode_yandex(address, out):
-    """Yandex Geocoder - yedek."""
-    import os
-    import requests
-    from django.conf import settings
 
-    from .models import GeocodeSettings
-    cfg = GeocodeSettings.current()
-    key = (cfg.yandex_key if cfg else "") or os.environ.get("YANDEX_GEOCODE_KEY", "")
-    if not key:
-        out["error"] = "Yandex ключ не настроен."
-        return out
-
-    resp = requests.get(
-        "https://geocode-maps.yandex.ru/1.x/",
-        params={"apikey": key, "format": "json", "geocode": address, "lang": "ru_RU"},
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        out["error"] = f"Yandex error {resp.status_code}"
-        return out
-
-    j = resp.json()
-    try:
-        members = j["response"]["GeoObjectCollection"]["featureMember"]
-        if not members:
-            out["error"] = "Адрес не найден."
-            return out
-        geo = members[0]["GeoObject"]
-        # pos: "lng lat"
-        pos = geo["Point"]["pos"].split()
-        out["point_x"] = pos[0]  # lng
-        out["point_y"] = pos[1]  # lat
-        out["full_address"] = geo.get("metaDataProperty", {}).get(
-            "GeocoderMetaData", {}).get("text", "")
-    except (KeyError, IndexError):
-        out["error"] = "Не удалось разобрать ответ Yandex."
-    return out
 
 
 # ==================== Pharmacy CRUD (ekle / guncelle / sil) ====================
-# Java PharmacyEntryUpdate is mantigi. brand'e gore PharmacySolgar/Bounty
-# tablosuna yazar (pharmacy_data_solgar / pharmacy_data_bounty, managed=False).
+# brand'e gore PharmacySolgar/Bounty tablosuna yazar (managed=False).
 
 _PHARMACY_WRITABLE = [
     "country", "area", "region", "city", "city_region", "district", "metro",
@@ -2472,60 +2450,7 @@ def pharmacy_detail_api(request):
     return Response(out)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def doctor_bulk_save_api(request):
-    """
-    Toplu doktor kaydetme (СОХРАНИТЬ) - React'te ДОБАВИТЬ ile hazirlanan
-    gecici satirlari tek seferde doctor_data'ya yazar.
 
-    JSON body: {rows: [{...doktor1}, {...doktor2}, ...]}
-    Her satir _DOCTOR_WRITABLE alanlarini icerir.
-    Yeni kayit (id yok) -> INSERT. id varsa -> UPDATE.
-    """
-    from .models import Doctor
-    from django.utils import timezone
-    from django.db import transaction
-
-    data = request.data or {}
-    rows = data.get("rows") or []
-    if not rows:
-        return Response({"error": "Нет строк для сохранения."}, status=400)
-
-    entry_user = request.user.get_full_name() or request.user.username
-    now = timezone.now()
-
-    created, updated = 0, 0
-    try:
-        with transaction.atomic(using="refdb"):
-            for r in rows:
-                name = (r.get("doctor_name") or "").strip()
-                if not name:
-                    continue  # isimsiz satiri atla
-
-                rid = r.get("id")
-                if rid:
-                    # Guncelleme
-                    try:
-                        doc = Doctor.objects.using("refdb").get(id=rid)
-                    except Doctor.DoesNotExist:
-                        continue
-                    _doctor_apply_fields(doc, r)
-                    doc.entry_user = entry_user
-                    doc.save(using="refdb")
-                    updated += 1
-                else:
-                    # Yeni kayit
-                    doc = Doctor(status=1)
-                    _doctor_apply_fields(doc, r)
-                    doc.entry_user = entry_user
-                    doc.entry_date = now
-                    doc.save(using="refdb")
-                    created += 1
-    except Exception as exc:
-        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
-
-    return Response({"created": created, "updated": updated, "error": ""})
 
 
 @api_view(["POST"])
@@ -2555,7 +2480,7 @@ def pharmacy_bulk_save_api(request):
             for r in rows:
                 no = (r.get("pharmacy_no") or "").strip()
                 if not no:
-                    continue  # numarasiz satiri atla
+                    continue
 
                 brand = (r.get("brand") or "SOLGAR").strip()
                 Model = _pharmacy_model(brand)
@@ -2581,3 +2506,58 @@ def pharmacy_bulk_save_api(request):
         return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
 
     return Response({"created": created, "updated": updated, "error": ""})
+
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_bulk_save_api(request):
+    """
+    Toplu doktor kaydetme (СОХРАНИТЬ) - React'te ДОБАВИТЬ ile hazirlanan
+    gecici satirlari tek seferde doctor_data'ya yazar.
+
+    JSON body: {rows: [{...doktor1}, {...doktor2}, ...]}
+    Yeni kayit (id yok) -> INSERT, id varsa -> UPDATE.
+    """
+    from .models import Doctor
+    from django.utils import timezone
+    from django.db import transaction
+
+    data = request.data or {}
+    rows = data.get("rows") or []
+    if not rows:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+
+    entry_user = request.user.get_full_name() or request.user.username
+    now = timezone.now()
+
+    created, updated = 0, 0
+    try:
+        with transaction.atomic(using="refdb"):
+            for r in rows:
+                name = (r.get("doctor_name") or "").strip()
+                if not name:
+                    continue
+
+                rid = r.get("id")
+                if rid:
+                    try:
+                        doc = Doctor.objects.using("refdb").get(id=rid)
+                    except Doctor.DoesNotExist:
+                        continue
+                    _doctor_apply_fields(doc, r)
+                    doc.entry_user = entry_user
+                    doc.save(using="refdb")
+                    updated += 1
+                else:
+                    doc = Doctor(status=1)
+                    _doctor_apply_fields(doc, r)
+                    doc.entry_user = entry_user
+                    doc.entry_date = now
+                    doc.save(using="refdb")
+                    created += 1
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": created, "updated": updated, "error": ""})    

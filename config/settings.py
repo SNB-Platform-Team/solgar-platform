@@ -182,6 +182,16 @@ DATABASE_ROUTERS = ["config.routers.ReferenceRouter"]
 #  Custom user model
 AUTH_USER_MODEL: str = "accounts.User"
 
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "sono-cache",
+        "OPTIONS": {"MAX_ENTRIES": 500},
+    }
+}
+
+
 #  Password validation
 AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

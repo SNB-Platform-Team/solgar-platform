@@ -1,1 +1,0 @@
-import{C as e}from"./index-BN8rmiLe.js";var t=e;export{t as component};
