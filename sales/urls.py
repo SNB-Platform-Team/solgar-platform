@@ -72,7 +72,9 @@ urlpatterns = [
     path("api/pharmacy/create/", api.pharmacy_create_api, name="pharmacy_create_api"),
     path("api/pharmacy/update/", api.pharmacy_update_api, name="pharmacy_update_api"),
     path("api/pharmacy/delete/", api.pharmacy_delete_api, name="pharmacy_delete_api"),
-    path("api/pharmacy/detail/", api.pharmacy_detail_api, name="pharmacy_detail_api"),           
+    path("api/pharmacy/detail/", api.pharmacy_detail_api, name="pharmacy_detail_api"),      
+    path("api/doctor/bulk-save/", api.doctor_bulk_save_api, name="doctor_bulk_save_api"),      
+    path("api/pharmacy/bulk-save/", api.pharmacy_bulk_save_api, name="pharmacy_bulk_save_api"),       
 ]      
 
 

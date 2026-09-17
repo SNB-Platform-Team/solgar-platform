@@ -2470,3 +2470,114 @@ def pharmacy_detail_api(request):
     for f in _PHARMACY_WRITABLE:
         out[f] = getattr(obj, f, "") or ""
     return Response(out)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def doctor_bulk_save_api(request):
+    """
+    Toplu doktor kaydetme (СОХРАНИТЬ) - React'te ДОБАВИТЬ ile hazirlanan
+    gecici satirlari tek seferde doctor_data'ya yazar.
+
+    JSON body: {rows: [{...doktor1}, {...doktor2}, ...]}
+    Her satir _DOCTOR_WRITABLE alanlarini icerir.
+    Yeni kayit (id yok) -> INSERT. id varsa -> UPDATE.
+    """
+    from .models import Doctor
+    from django.utils import timezone
+    from django.db import transaction
+
+    data = request.data or {}
+    rows = data.get("rows") or []
+    if not rows:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+
+    entry_user = request.user.get_full_name() or request.user.username
+    now = timezone.now()
+
+    created, updated = 0, 0
+    try:
+        with transaction.atomic(using="refdb"):
+            for r in rows:
+                name = (r.get("doctor_name") or "").strip()
+                if not name:
+                    continue  # isimsiz satiri atla
+
+                rid = r.get("id")
+                if rid:
+                    # Guncelleme
+                    try:
+                        doc = Doctor.objects.using("refdb").get(id=rid)
+                    except Doctor.DoesNotExist:
+                        continue
+                    _doctor_apply_fields(doc, r)
+                    doc.entry_user = entry_user
+                    doc.save(using="refdb")
+                    updated += 1
+                else:
+                    # Yeni kayit
+                    doc = Doctor(status=1)
+                    _doctor_apply_fields(doc, r)
+                    doc.entry_user = entry_user
+                    doc.entry_date = now
+                    doc.save(using="refdb")
+                    created += 1
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": created, "updated": updated, "error": ""})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_bulk_save_api(request):
+    """
+    Toplu eczane kaydetme (СОХРАНИТЬ). React'te ДОБАВИТЬ ile hazirlanan
+    gecici satirlari tek seferde kaydeder. brand'e gore Solgar/Bounty tablosu.
+
+    JSON body: {rows: [{brand, ...eczane1}, {brand, ...eczane2}, ...]}
+    Yeni (id yok) -> INSERT, id varsa -> UPDATE.
+    """
+    from django.utils import timezone
+    from django.db import transaction
+
+    data = request.data or {}
+    rows = data.get("rows") or []
+    if not rows:
+        return Response({"error": "Нет строк для сохранения."}, status=400)
+
+    entry_user = request.user.get_full_name() or request.user.username
+    now = timezone.now()
+
+    created, updated = 0, 0
+    try:
+        with transaction.atomic(using="refdb"):
+            for r in rows:
+                no = (r.get("pharmacy_no") or "").strip()
+                if not no:
+                    continue  # numarasiz satiri atla
+
+                brand = (r.get("brand") or "SOLGAR").strip()
+                Model = _pharmacy_model(brand)
+
+                rid = r.get("id")
+                if rid:
+                    try:
+                        obj = Model.objects.using("refdb").get(id=rid)
+                    except Model.DoesNotExist:
+                        continue
+                    _pharmacy_apply_fields(obj, r)
+                    obj.entry_user = entry_user
+                    obj.save(using="refdb")
+                    updated += 1
+                else:
+                    obj = Model(status=1)
+                    _pharmacy_apply_fields(obj, r)
+                    obj.entry_user = entry_user
+                    obj.entry_date = now
+                    obj.save(using="refdb")
+                    created += 1
+    except Exception as exc:
+        return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    return Response({"created": created, "updated": updated, "error": ""})
