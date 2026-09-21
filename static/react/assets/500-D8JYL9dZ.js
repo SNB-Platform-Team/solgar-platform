@@ -1,1 +1,0 @@
-import{w as e}from"./index-sW8TtGLd.js";var t=e;export{t as component};

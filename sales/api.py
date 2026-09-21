@@ -137,6 +137,11 @@ def doctor_managerial_api(request):
     activeness = (request.GET.get("activeness") or "").strip()
     begin = (request.GET.get("begin") or "").strip()
     end = (request.GET.get("end") or "").strip()
+    district = (request.GET.get("district") or "").strip()
+    subchain = (request.GET.get("subchain") or "").strip()
+    assortiment = (request.GET.get("assortiment") or "").strip()
+    pharmacy_type = (request.GET.get("pharmacy_type") or "").strip()
+    promo = (request.GET.get("promo") or "").strip()
 
     report = None
     error = ""
@@ -144,9 +149,10 @@ def doctor_managerial_api(request):
         try:
             result = service.run(
                 brand=brand, rep_type=rep_type, parameter=parameter,
-                country=country, region=region, city=city,
-                speciality=speciality, sub_speciality=sub_speciality,
-                clinic=clinic, medrep=medrep, activeness=activeness,
+                country=country, region=region, city=city, chain=chain,
+                medrep=medrep, activeness=activeness,
+                district=district, subchain=subchain, assortiment=assortiment,
+                pharmacy_type=pharmacy_type, promo=promo,
                 begin=begin.replace("-", ""), end=end.replace("-", ""),
             )
             rows = [[_json_safe(v) for v in r] for r in result["rows"]]
