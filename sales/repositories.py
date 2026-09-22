@@ -344,13 +344,12 @@ class PharmacyRepository:
 
     # --- other dropdowns derived from the pharmacy table ---
 
-    def chains(self, brand: str = "") -> list:
-        """Distinct group companies (chains)."""
-        return self._distinct(brand, "group_company")
+    def chains(self, brand: str = "", country: str = "") -> list:
+        """Distinct group companies (chains), optionally country-scoped."""
+        return self._distinct(brand, "group_company", country=country)
 
-    def subchains(self, brand: str = "", group_company: str = "") -> list:
-        """Distinct sub-chains, optionally within a chain."""
-        return self._distinct(brand, "subgroup_company", group_company=group_company)
+    def subchains(self, brand: str = "", group_company: str = "", country: str = "") -> list:
+        return self._distinct(brand, "subgroup_company", group_company=group_company, country=country)
 
     def pharmacy_categories(self, brand: str = "") -> list:
         """Distinct pharmacy categories."""

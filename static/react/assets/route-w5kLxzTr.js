@@ -1,0 +1,1 @@
+import{t as e}from"./authenticated-layout-Bt89_ZBE.js";var t=e;export{t as component};

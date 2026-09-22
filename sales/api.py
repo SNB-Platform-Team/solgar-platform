@@ -109,8 +109,8 @@ def doctor_managerial_api(request):
     Query params (all optional):
       run        - "1" to actually run the report (otherwise only options)
       brand, rep_type, parameter
-      country, region, city, speciality, sub_speciality, clinic, medrep,
-      activeness, begin, end
+      country, district, region, city, speciality, sub_speciality, clinic,
+      medrep, activeness, begin, end
 
     Response:
       {
@@ -128,6 +128,7 @@ def doctor_managerial_api(request):
     rep_type = (request.GET.get("rep_type") or "REGIONS").strip()
     parameter = (request.GET.get("parameter") or "TOTAL_QUANTITY").strip()
     country = (request.GET.get("country") or "").strip()
+    district = (request.GET.get("district") or "").strip()
     region = (request.GET.get("region") or "").strip()
     city = (request.GET.get("city") or "").strip()
     speciality = (request.GET.get("speciality") or "").strip()
@@ -137,11 +138,6 @@ def doctor_managerial_api(request):
     activeness = (request.GET.get("activeness") or "").strip()
     begin = (request.GET.get("begin") or "").strip()
     end = (request.GET.get("end") or "").strip()
-    district = (request.GET.get("district") or "").strip()
-    subchain = (request.GET.get("subchain") or "").strip()
-    assortiment = (request.GET.get("assortiment") or "").strip()
-    pharmacy_type = (request.GET.get("pharmacy_type") or "").strip()
-    promo = (request.GET.get("promo") or "").strip()
 
     report = None
     error = ""
@@ -149,10 +145,9 @@ def doctor_managerial_api(request):
         try:
             result = service.run(
                 brand=brand, rep_type=rep_type, parameter=parameter,
-                country=country, region=region, city=city, chain=chain,
-                medrep=medrep, activeness=activeness,
-                district=district, subchain=subchain, assortiment=assortiment,
-                pharmacy_type=pharmacy_type, promo=promo,
+                country=country, district=district, region=region, city=city,
+                speciality=speciality, sub_speciality=sub_speciality,
+                clinic=clinic, medrep=medrep, activeness=activeness,
                 begin=begin.replace("-", ""), end=end.replace("-", ""),
             )
             rows = [[_json_safe(v) for v in r] for r in result["rows"]]
@@ -174,7 +169,7 @@ def doctor_managerial_api(request):
         "error": error,
         "f": {
             "brand": brand, "rep_type": rep_type, "parameter": parameter,
-            "country": country, "region": region, "city": city,
+            "country": country, "district": district, "region": region, "city": city,
             "speciality": speciality, "sub_speciality": sub_speciality,
             "clinic": clinic, "medrep": medrep, "activeness": activeness,
             "begin": begin, "end": end,
@@ -191,7 +186,6 @@ PHARM_MGR_COMP_TYPES_API = [
 PHARM_MGR_REP_TYPES_API = ["REGIONS", "MAIN_DISTRICT", "CITY", "MED_REPS",
                            "CHAINS", "ACTIVATION_DATE"]
 PHARM_MGR_PARAMETERS_API = ["TOTAL_QUANTITY", "TOTAL_CATEGORY", "TOTAL_ACTIVENESS"]
-
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1203,13 +1197,13 @@ def pharmacy_filter_options_api(request):
         elif level == "metro":
             options = repo.metros(brand, city=city)
         elif level == "subchain":
-            options = repo.subchains(brand, group_company=group_company)
+            options = repo.subchains(brand, group_company=group_company, country=country)
         else:
             options = []
         return Response({"level": level, "options": list(options)})
 
     # Level'siz tam liste: en agir kisim (6 distinct), cache'le (15 dk).
-    cache_key = f"pharm_filter_opts_{brand}"
+    cache_key = f"pharm_filter_opts_{brand}_{country}"
     cached = cache.get(cache_key)
     if cached is not None:
         return Response(cached)
@@ -1222,7 +1216,7 @@ def pharmacy_filter_options_api(request):
 
     result = {
         "countries": _safe(repo.countries, brand),
-        "chains": _safe(repo.chains, brand),
+        "chains": _safe(repo.chains, brand, country=country),
         "categories": _safe(repo.pharmacy_categories, brand),
         "types": _safe(repo.pharmacy_types, brand),
         "promos": _safe(repo.promos, brand),
