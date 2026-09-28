@@ -153,6 +153,13 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
         },
     )
 
+    if created and user.access_level is None:
+        from authorization.models import AccessLevel
+        default_level = AccessLevel.objects.filter(rank=1).order_by("rank").first()
+        if default_level:
+            user.access_level = default_level
+            user.save(update_fields=["access_level"])
+
     if not user.is_enabled:
         messages.error(request, "This account is disabled.")
         return redirect("accounts:login")
