@@ -192,6 +192,10 @@ class ChainParser:
         if not rows:
             return ParseResult()
 
+                # VitaLain ozel format (pivot/toplam kolon) - ayri parser
+        if self.definition.name == "ВИТАЛАЙНСАМАРА":
+            return self._parse_vitalain(rows)    
+
         header_row, cols = self._find_header(rows)
 
         result = ParseResult()

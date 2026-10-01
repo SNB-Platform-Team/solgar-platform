@@ -95,13 +95,12 @@ def dijibi_stock() -> DepoParserConfig:
 # ==================== VITALAIN (SPLIT) ====================
 def vitalain_sale() -> DepoParserConfig:
     c = DepoParserConfig("VITALAIN", "SALES", layout=ParserLayout.SPLIT)
-    c.split_product_keyword = "Номенклатура, Базовая единица измерения"
-    c.split_count_keyword = "Количество (в базовых единицах)"
-    c.split_row_offset = 2
+    c.split_product_keyword = "Наименование"
+    c.split_count_keyword = "Итог"
+    c.split_row_offset = 1
     c.split_targets.append(SplitTarget("САМАРА", 90))
     c.split_targets.append(SplitTarget("КАЗАНЬ", 10))
     return c
-
 
 # ==================== PULSE ====================
 def pulse_sale() -> DepoParserConfig:

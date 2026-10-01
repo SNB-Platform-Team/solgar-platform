@@ -65,7 +65,7 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
         return depo_configs.pulse_sale()
     if "БАДМ" in fn:
         return depo_configs.badm_sale() if is_sales else depo_configs.badm_stock()
-    if "ВИТАЛАЙНСАМАРА" in fn and is_sales:
+    if ("ВИТАЛАЙНСАМАРА" in fn or "VITALAINSAMARA" in fn) and is_sales:
         return depo_configs.vitalain_sale()
     if "РИГЛА" in fn:
         return depo_configs.rigla_sale() if is_sales else depo_configs.rigla_stock()
@@ -77,6 +77,8 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
         return depo_configs.medservis_sale() if is_sales else depo_configs.medservis_stock()
     if "VTIME" in fn and is_sales:
         return depo_configs.vtime_sale()
+    if "ЭМИТИ" in fn and is_sales:
+        return depo_configs.emiti_sale()
     return None
 
 
@@ -121,9 +123,17 @@ class DepoUploadService:
         fn = (file_name or "").upper()
 
         # Dosya adi secilen distributor'u icermeli (Java kontrolu)
-        if distributor and distributor.upper() not in fn:
-            result.error = "Dosya adi secilen distributor ile eslesmiyor."
-            return result
+        # Dosya adi secilen distributor'u icermeli (Java kontrolu)
+        # Bazi distributor'lerin dosya adi Latin, secim Kiril (alias):
+        _CYRILLIC_LATIN_ALIASES = {
+            "ВИТАЛАЙНСАМАРА": "VITALAINSAMARA",
+        }
+        if distributor:
+            dist_upper = distributor.upper()
+            latin_alias = _CYRILLIC_LATIN_ALIASES.get(dist_upper, "")
+            if dist_upper not in fn and (not latin_alias or latin_alias not in fn):
+                result.error = "Dosya adi secilen distributor ile eslesmiyor."
+                return result
 
         # SALES / STOCK: dosya adinda "ПРОДАЖИ" varsa satis
         stock_sales_type = "SALES" if "ПРОДАЖИ" in fn else "STOCK"
