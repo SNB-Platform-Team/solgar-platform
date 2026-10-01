@@ -1,0 +1,1 @@
+import{C as e}from"./index-Bm-Q-vAg.js";var t=e;export{t as component};

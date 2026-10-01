@@ -146,10 +146,10 @@ def rigla_sale() -> DepoParserConfig:
 
 def rigla_stock() -> DepoParserConfig:
     c = DepoParserConfig("RIGLA", "STOCK", layout=ParserLayout.VERTICAL)
-    c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Полное название", 0, 1))
-    c.columns.append(DepoColumnSpec.of("CLIENT", "Поставщик"))
+    c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Наименование", 0, 1))
+    c.columns.append(DepoColumnSpec.of("CITY", "Адрес ЦФО"))
     c.columns.append(DepoColumnSpec.of("INN", "Код АП"))
-    spec = DepoColumnSpec.of("COUNT", "Остатки на")
+    spec = DepoColumnSpec.of("COUNT", "Остаток на конец, уп")
     spec.strip_separators = True
     c.columns.append(spec)
     return c
@@ -233,6 +233,33 @@ def vtime_sale() -> DepoParserConfig:
     spec.strip_separators = True
     c.columns.append(spec)
     c.columns.append(DepoColumnSpec.of("CLIENT", "Наименование"))
+    return c
+
+def emiti_stock() -> DepoParserConfig:
+    c = DepoParserConfig("EMITI", "STOCK", layout=ParserLayout.PIVOT)
+    c.pivot_product_keyword = "Поставщик- *СОЛГАР Витамин ООО*"
+    c.pivot_first_data_column_offset = 1
+    c.pivot_first_data_row_offset = 4
+    c.pivot_city_row_offset = 3
+    return c
+
+
+def optima_sale() -> DepoParserConfig:
+    c = DepoParserConfig("OPTIMA", "SALES", layout=ParserLayout.VERTICAL)
+    c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Товар", 0, 1))
+    c.columns.append(DepoColumnSpec.of("CITY", "Город"))
+    spec = DepoColumnSpec.of("COUNT", "Продажи шт")
+    spec.strip_separators = True
+    c.columns.append(spec)
+    return c
+
+
+def optima_stock() -> DepoParserConfig:
+    c = DepoParserConfig("OPTIMA", "STOCK", layout=ParserLayout.PIVOT)
+    c.pivot_product_keyword = "Товар"
+    c.pivot_first_data_column_offset = 2
+    c.pivot_first_data_row_offset = 2
+    c.pivot_city_row_offset = 0
     return c
 
 

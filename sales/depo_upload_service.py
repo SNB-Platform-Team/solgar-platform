@@ -77,8 +77,10 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
         return depo_configs.medservis_sale() if is_sales else depo_configs.medservis_stock()
     if "VTIME" in fn and is_sales:
         return depo_configs.vtime_sale()
-    if "ЭМИТИ" in fn and is_sales:
-        return depo_configs.emiti_sale()
+    if "ЭМИТИ" in fn:
+        return depo_configs.emiti_sale() if is_sales else depo_configs.emiti_stock()
+    if "ОПТИМА" in fn:
+        return depo_configs.optima_sale() if is_sales else depo_configs.optima_stock()
     return None
 
 

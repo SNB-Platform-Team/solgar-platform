@@ -1594,15 +1594,17 @@ import uuid as _uuid
 
 
 def _open_sheet(excel_file):
-    """Yuklenen Excel'i oku (xlsx: openpyxl, xls: xlrd). (sheet, err) doner."""
+    """Yuklenen Excel'i oku (xlsx: openpyxl, xls: xlrd, xlsb: pyxlsb). (sheet, err) doner."""
     import io
     data = excel_file.read()
+    # 1) openpyxl (xlsx)
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
         return wb.active, None
     except Exception:
         pass
+    # 2) xlrd (eski xls)
     try:
         import xlrd
         book = xlrd.open_workbook(file_contents=data)
@@ -1623,8 +1625,46 @@ def _open_sheet(excel_file):
                 return _C(None)
 
         return _W(s), None
+    except Exception:
+        pass
+    # 3) pyxlsb (xlsb - binary; uzanti .xls olsa da icerik xlsb olabilir)
+    try:
+        import pyxlsb
+        wb = pyxlsb.open_workbook(io.BytesIO(data))
+        sheet_name = wb.sheets[0]
+        ws = wb.get_sheet(sheet_name)
+        # Tum satirlari 2D listeye oku (pyxlsb satir satir iterator)
+        grid = []
+        for row in ws.rows():
+            # row: list[Cell(r,c,v)]; max kolona kadar doldur
+            cells = {}
+            maxc = 0
+            for cell in row:
+                cells[cell.c] = cell.v
+                if cell.c > maxc:
+                    maxc = cell.c
+            grid.append([cells.get(i) for i in range(maxc + 1)])
+
+        max_col = max((len(r) for r in grid), default=0)
+
+        class _C:
+            def __init__(self, v): self.value = v
+
+        class _WX:
+            def __init__(self, g, mc):
+                self._g = g
+                self.max_row = len(g)
+                self.max_column = mc
+            def cell(self, row, column):
+                r, c = row - 1, column - 1
+                if 0 <= r < len(self._g) and 0 <= c < len(self._g[r]):
+                    return _C(self._g[r][c])
+                return _C(None)
+
+        return _WX(grid, max_col), None
     except Exception as exc:
         return None, f"Excel okunamadi: {exc}"
+
 
 
 def _depo_row_to_record(r, batch_id, distributor, country, op_code, begin_date, end_date, user):
