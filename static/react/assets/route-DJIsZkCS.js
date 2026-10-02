@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-CVm140LR.js";var t=e;export{t as component};

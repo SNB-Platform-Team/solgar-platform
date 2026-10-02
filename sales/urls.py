@@ -67,7 +67,6 @@ urlpatterns = [
     path("api/doctor/update/", api.doctor_update_api, name="doctor_update_api"),
     path("api/doctor/delete/", api.doctor_delete_api, name="doctor_delete_api"),
     path("api/doctor/detail/", api.doctor_detail_api, name="doctor_detail_api"), 
-    path("api/doctor/geocode/", api.doctor_geocode_api, name="doctor_geocode_api"),
     path("api/doctor/geocode/", api.doctor_geocode_api, name="doctor_geocode_api"),    
     path("api/pharmacy/create/", api.pharmacy_create_api, name="pharmacy_create_api"),
     path("api/pharmacy/update/", api.pharmacy_update_api, name="pharmacy_update_api"),
