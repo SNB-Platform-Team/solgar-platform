@@ -1,0 +1,1 @@
+import{C as e}from"./index-D6g4ZOCA.js";var t=e;export{t as component};
