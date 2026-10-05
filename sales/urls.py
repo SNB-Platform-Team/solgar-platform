@@ -73,7 +73,9 @@ urlpatterns = [
     path("api/pharmacy/delete/", api.pharmacy_delete_api, name="pharmacy_delete_api"),
     path("api/pharmacy/detail/", api.pharmacy_detail_api, name="pharmacy_detail_api"),      
     path("api/doctor/bulk-save/", api.doctor_bulk_save_api, name="doctor_bulk_save_api"),      
-    path("api/pharmacy/bulk-save/", api.pharmacy_bulk_save_api, name="pharmacy_bulk_save_api"),       
+    path("api/pharmacy/bulk-save/", api.pharmacy_bulk_save_api, name="pharmacy_bulk_save_api"),    
+    path("api/distributor-report/", api.distributor_report_api, name="distributor_report_api"),   
+    path("api/chain-sales-report/", api.chain_sales_report_api, name="chain_sales_report_api"),
 ]      
 
 

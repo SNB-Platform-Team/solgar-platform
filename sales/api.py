@@ -2639,3 +2639,259 @@ def doctor_bulk_save_api(request):
         return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
 
     return Response({"created": created, "updated": updated, "error": ""})    
+
+
+
+
+
+# ==================== Distributor Report (Storage Stock Observation) ====================
+# Java StorageStockObservation + ReportQueries.repStorageStockMonthly'nin
+# optimize Python karsiligi. Veri kaynagi: DistributorRecord (depo upload).
+# Java 7 report turu istiyor ama DistributorRecord'da region/category/main_group
+# yok; mevcut alanlarla 4 anlamli report: DISTRIBUTOR, CITY, ALL_PRODUCTS, BRAND.
+
+# repType -> gruplama alan(lari). operation_type her zaman ilk (STOCK/SALE ayrimi).
+_DIST_REPORT_GROUPS = {
+    "DISTRIBUTOR_REPORT": ["operation_type", "distributor"],
+    "CITY_REPORT": ["operation_type", "city"],
+    "ALL_PRODUCTS_REPORT": ["operation_type", "product_name"],
+    "BRAND_REPORT": ["operation_type", "brand"],
+}
+
+_DIST_REPORT_LABELS = {
+    "operation_type": "Тип операции",
+    "distributor": "Дистрибьютор",
+    "city": "Город",
+    "product_name": "Товар",
+    "brand": "Бренд",
+}
+
+_DIST_REPORT_TYPES = [
+    {"value": "DISTRIBUTOR_REPORT", "label": "DISTRIBUTOR_REPORT"},
+    {"value": "CITY_REPORT", "label": "CITY_REPORT"},
+    {"value": "ALL_PRODUCTS_REPORT", "label": "ALL_PRODUCTS_REPORT"},
+    {"value": "BRAND_REPORT", "label": "BRAND_REPORT"},
+]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def distributor_report_api(request):
+    """
+    Distributor gorumtuleme raporu (Storage Stock Observation).
+    run=1 ile DistributorRecord'u filtreleyip gruplar, count+amount toplar.
+
+    Query params:
+      run=1, rep_type, operation_type (STOCK/SALE), distributor, city,
+      brand (SOLGAR/BOUNTY/OTHER), country, product (product_name),
+      begin, end (YYYY-MM-DD)
+
+    Response:
+      {options: {rep_types, operations}, report: {columns, rows, total_rows}, error}
+    """
+    from django.db.models import Sum
+    from .models import DistributorRecord
+
+    rep_type = (request.GET.get("rep_type") or "DISTRIBUTOR_REPORT").strip()
+    operation_type = (request.GET.get("operation_type") or "").strip().upper()
+    distributor = (request.GET.get("distributor") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    brand = (request.GET.get("brand") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+    product = (request.GET.get("product") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    # Kullaniciya gore ulke kilidi (staff disinda kendi ulkesi)
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    report = None
+    error = ""
+
+    if request.GET.get("run"):
+        try:
+            group = _DIST_REPORT_GROUPS.get(rep_type)
+            if not group:
+                raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
+
+            qs = DistributorRecord.objects.filter(is_confirmed=True)
+
+            # Operation (SALE->SALES uyumu: SALE ya da STOCK)
+            if operation_type:
+                op = "SALE" if operation_type.startswith("SAL") else "STOCK"
+                qs = qs.filter(operation_type=op)
+            if distributor:
+                qs = qs.filter(distributor=distributor)
+            if city:
+                qs = qs.filter(city=city)
+            if brand:
+                qs = qs.filter(brand=brand)
+            if country:
+                qs = qs.filter(country=country)
+            if product:
+                qs = qs.filter(product_name=product)
+            if begin:
+                qs = qs.filter(begin_date__gte=begin)
+            if end:
+                qs = qs.filter(end_date__lte=end)
+
+            agg = (
+                qs.values(*group)
+                .annotate(total_count=Sum("count"), total_amount=Sum("amount"))
+                .order_by(*group)
+            )
+
+            # Kolonlar: gruplama alanlari + Kол-во + Сумма
+            columns = [_DIST_REPORT_LABELS.get(g, g) for g in group] + ["Кол-во", "Сумма"]
+            rows = []
+            for r in agg:
+                row = [r.get(g, "") for g in group]
+                row.append(_json_safe(r.get("total_count") or 0))
+                row.append(_json_safe(r.get("total_amount") or 0))
+                rows.append(row)
+
+            report = {"columns": columns, "rows": rows, "total_rows": len(rows)}
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    return Response({
+        "options": {
+            "rep_types": _DIST_REPORT_TYPES,
+            "operations": [
+                {"value": "STOCK", "label": "STOCK"},
+                {"value": "SALE", "label": "SALES"},
+            ],
+        },
+        "report": report,
+        "error": error,
+    })
+
+
+# ==================== Chain Sales Report (eczane gorumtuleme - report turleri) ====================
+# Java repChainSalesNew'in optimize karsiligi. Veri: SalesRecord (eczane upload).
+# Report turleri SalesRecord alanlarina gore (region yok, city var).
+
+_CHAIN_REPORT_GROUPS = {
+    "CHAIN_SALES": ["chain_name"],
+    "CITY_SALES": ["city"],
+    "PRODUCT_SALES": ["product_name"],
+    "MEDREP_SALES": ["salesreader"],
+    "BRAND_SALES": ["brand"],
+    "SUBGROUP_SALES": ["subgroup"],
+    "MAINGROUP_SALES": ["main_group"],
+}
+
+_CHAIN_REPORT_LABELS = {
+    "chain_name": "Аптечная сеть",
+    "city": "Город",
+    "product_name": "Товар",
+    "salesreader": "Мед. представитель",
+    "brand": "Бренд",
+    "subgroup": "Подгруппа",
+    "main_group": "Основная группа",
+}
+
+_CHAIN_REPORT_TYPES = [
+    {"value": "CHAIN_SALES", "label": "CHAIN_SALES"},
+    {"value": "CITY_SALES", "label": "CITY_SALES"},
+    {"value": "PRODUCT_SALES", "label": "PRODUCT_SALES"},
+    {"value": "MEDREP_SALES", "label": "MEDREP_SALES"},
+    {"value": "BRAND_SALES", "label": "BRAND_SALES"},
+    {"value": "SUBGROUP_SALES", "label": "SUBGROUP_SALES"},
+    {"value": "MAINGROUP_SALES", "label": "MAINGROUP_SALES"},
+]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def chain_sales_report_api(request):
+    """
+    Eczane (aptechnoy seti) gorumtuleme raporu - report turleri.
+    run=1 ile SalesRecord'u filtreleyip gruplar, count+amount toplar.
+
+    Query params:
+      run=1, rep_type, brand (SOLGAR/BOUNTY/OTHER), country, chain (chain_name),
+      city, product (product_name), medrep (salesreader), begin, end (YYYY-MM-DD)
+
+    Response:
+      {options: {rep_types, brands}, report: {columns, rows, total_rows}, error}
+    """
+    from django.db.models import Sum
+    from .models import SalesRecord
+
+    rep_type = (request.GET.get("rep_type") or "CHAIN_SALES").strip()
+    brand = (request.GET.get("brand") or "").strip()
+    country = (request.GET.get("country") or "").strip()
+    chain = (request.GET.get("chain") or "").strip()
+    city = (request.GET.get("city") or "").strip()
+    product = (request.GET.get("product") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    begin = (request.GET.get("begin") or "").strip()
+    end = (request.GET.get("end") or "").strip()
+
+    if not request.user.is_staff:
+        uc = (getattr(request.user, "country", "") or "").strip()
+        if uc:
+            country = uc
+
+    report = None
+    error = ""
+
+    if request.GET.get("run"):
+        try:
+            group = _CHAIN_REPORT_GROUPS.get(rep_type)
+            if not group:
+                raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
+
+            qs = SalesRecord.objects.filter(is_confirmed=True)
+
+            if brand:
+                qs = qs.filter(brand=brand)
+            if country:
+                qs = qs.filter(country=country)
+            if chain:
+                qs = qs.filter(chain_name=chain)
+            if city:
+                qs = qs.filter(city=city)
+            if product:
+                qs = qs.filter(product_name=product)
+            if medrep:
+                qs = qs.filter(salesreader=medrep)
+            if begin:
+                qs = qs.filter(report_date__gte=begin)
+            if end:
+                qs = qs.filter(report_date__lte=end)
+
+            agg = (
+                qs.values(*group)
+                .annotate(total_count=Sum("count"), total_amount=Sum("amount"))
+                .order_by(*group)
+            )
+
+            columns = [_CHAIN_REPORT_LABELS.get(g, g) for g in group] + ["Кол-во", "Сумма"]
+            rows = []
+            for r in agg:
+                row = [r.get(g, "") for g in group]
+                row.append(_json_safe(r.get("total_count") or 0))
+                row.append(_json_safe(r.get("total_amount") or 0))
+                rows.append(row)
+
+            report = {"columns": columns, "rows": rows, "total_rows": len(rows)}
+        except Exception as exc:
+            error = f"Ошибка отчета: {exc}"
+
+    return Response({
+        "options": {
+            "rep_types": _CHAIN_REPORT_TYPES,
+            "brands": [
+                {"value": "SOLGAR", "label": "SOLGAR"},
+                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                {"value": "OTHER", "label": "OTHER"},
+            ],
+        },
+        "report": report,
+        "error": error,
+    })
