@@ -2413,6 +2413,23 @@ def _geocode_yandex(address, out):
     return out
 
 
+# PharmacyBase'in yazilabilir alanlari (id haric). pharmacy_detail + bulk_save kullanir.
+_PHARMACY_WRITABLE = [
+    "country", "area", "region", "city", "city_region", "district", "metro",
+    "group_company", "subgroup_company", "pharmacy_no", "pharmacy_address",
+    "pharmacy_category", "assortiment", "pharmacy_type", "promo",
+    "marketing_staff", "pharmacy_response_person", "pharmacy_tel",
+    "pharmacy_email", "pharmacy_activeness", "pharmacy_activation_date",
+    "comments", "marketing_staff_no", "pharmacy_number_sale", "found_no",
+    "full_address", "requested", "building_type", "country_code",
+    "administrative_area_name", "sub_administrative_area_name", "street",
+    "homenumber", "point_y", "point_x", "processed", "status", "pharmacy_id",
+    "assortiment1", "pharmacy_group", "sku", "cornerNo", "entry_user",
+    "pharmacist_name_1", "pharmacy_home_tel", "pharmacist_name_2",
+    "pharmacy_work_tel",
+]
+
+
 def _pharmacy_model(brand):
     """brand -> PharmacySolgar / PharmacyBounty."""
     from .models import PharmacySolgar, PharmacyBounty
