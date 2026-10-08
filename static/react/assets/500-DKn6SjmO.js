@@ -1,1 +1,0 @@
-import{S as e}from"./index-CJKgc-Uo.js";var t=e;export{t as component};
