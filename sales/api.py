@@ -909,7 +909,7 @@ def sales_upload_options_api(request):
     except Exception:
         COUNTRIES = []
     chains = list(
-        ChainDefinition.objects.filter(is_active=True).values_list("name", flat=True)
+        ChainDefinition.objects.filter(is_active=True, source_type=ChainDefinition.SourceType.PHARMACY).values_list("name", flat=True)
     )
     return Response({"chains": sorted(chains), "countries": list(COUNTRIES)})
 

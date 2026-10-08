@@ -18,7 +18,7 @@ def _g(name, c):
         rem_count=c.get("remCount",""), rem_amount=c.get("remAmount",""),
         last_column=c.get("lastColumn",""))
 
-_g('AVE', {'product': 'товар', 'pharmacy': 'Аптека', 'count': 'Продажи', 'amount': 'Сумма', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма'})
+_g('AVE', {'product': 'Наименование товара', 'pharmacy': 'Наименование аптеки', 'count': 'Количество уп/Расход', 'amount': 'Сумма закуп без НДС/Расход', 'pharmacyNo': 'Код аптеки', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма закуп без НДС/Расход'})
 _g('AVESTOCK', {'product': 'Наименование товара', 'pharmacy': 'Наименование аптеки', 'count': '', 'amount': '', 'pharmacyNo': 'Код аптеки', 'city': '', 'remCount': 'Количество уп/Расход', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество уп/Расход'})
 _g('RADUGAKARISIK', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('URAZMANOV', {'product': 'Наименование', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Наименование'})
@@ -89,7 +89,7 @@ _g('UNIFARMASTOCK', {'product': 'Товар', 'pharmacy': 'Аптека', 'count
 _g('ZDOROVOE', {'product': 'Наименование', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Наименование'})
 _g('KZTSETNAYA', {'product': 'Товар', 'pharmacy': 'Названия строк', 'count': 'Товар', 'amount': '', 'pharmacyNo': '', 'city': 'Город', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Товар'})
 _g('KZFARMAKOM', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': 'Продажи (шт', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Продажи (шт'})
-_g('NEOPHARM', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': 'Количество', 'amount': 'Сумма закупки', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма закупки'})
+_g('NEOPHARM', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': 'Количество', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество'})
 _g('NEOPHARMSTOCK', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': 'Количество', 'remAmount': 'Сумма закупки', 'subgroup': '', 'lastColumn': 'Сумма закупки'})
 _g('SOLNYSHKO', {'product': 'Название товара', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Название товара'})
 _g('VEKFARMA', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': 'Кол-во', 'amount': 'Сумма закупки с НДС', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма закупки с НДС'})
@@ -172,7 +172,7 @@ HORIZONTAL = {
 
 # ---- SPECIAL (extract rules) ----
 def _ave():
-    c = GenericConfig("AVE", product="товар", pharmacy="Аптека", count="Продажи", amount="Сумма", last_column="Сумма")
+    c = GenericConfig("AVE", product="Наименование товара", pharmacy="Наименование аптеки", count="Количество уп/Расход", amount="Сумма закуп без НДС/Расход", last_column="Сумма закуп без НДС/Расход")
     c.extract_rules = [
         ExtractRule2("PHARMACY","SUBGROUP",ExtractMode2.CONTAINS_FIXED,"36,6",fixed_result="36.6",remove=False),
         ExtractRule2("PHARMACY","SUBGROUP",ExtractMode2.BEFORE_MARKER,",",fallback="$MAINGROUP"),
