@@ -59,6 +59,7 @@ urlpatterns = [
     path("api/depo-upload/save/", api.depo_upload_save_api, name="depo_upload_save_api"),
     path("api/depo-upload/page/", api.depo_upload_page_api, name="depo_upload_page_api"),    
     path("api/pharmacy-upload/preview/", api.pharmacy_upload_preview_api, name="pharmacy_upload_preview_api"),
+    path("api/pharmacy-upload/sheets/", api.pharmacy_sheet_names_api, name="pharmacy_sheet_names_api"),
     path("api/pharmacy-upload/page/", api.pharmacy_upload_page_api, name="pharmacy_upload_page_api"),
     path("api/pharmacy-upload/save/", api.pharmacy_upload_save_api, name="pharmacy_upload_save_api"),
     path("api/pharmacy-upload/chains/", api.pharmacy_chains_api, name="pharmacy_chains_api"),    

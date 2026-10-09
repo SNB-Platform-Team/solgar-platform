@@ -163,6 +163,16 @@ NESTED = {
 }
 
 # ---- HORIZONTAL (pivot) ----
+KG_CONFIGS = {
+    "NEMAN": {"mode": "product_header", "aptek_marker": "Неман", "data_start": 2, "count_col": 1, "name_col": 0},
+    "PHARMAMIR": {"mode": "pharmacy_header", "aptek_marker": "Аптека", "data_start": 2, "count_col": 1, "name_col": 0},
+}
+
+AVROMED_CONFIGS = {
+    "AVROMED": True,
+    "BUTA": True,
+}
+
 HORIZONTAL = {
     "SIRIUS95": HorizontalConfig("SIRIUS95", product_keyword="Товар", start_column=7),
     "VITA_SAMARA": HorizontalConfig("VITA_SAMARA", product_keyword="Наименование"),
@@ -191,22 +201,40 @@ def _nevis():
 SPECIAL = {"AVE": _ave(), "NEVIS": _nevis()}
 
 
+import re as _re_getcfg
+
+def _norm_key(s):
+    """Ayiricilari (_ - boslik . vb.) at, buyuk harfe cevir."""
+    return _re_getcfg.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+
 def get_config(chain_or_file):
-    """Zincir/dosya adindan (config, motor_tipi) dondur."""
+    """Zincir/dosya adindan (config, motor_tipi) dondur.
+    Eslesme ayirici-duyarsiz (NEMAN == KG_NEMAN degil ama VITA_SAMARA == VITASAMARA).
+    Her motor icinde EN UZUN anahtar once denenir (VITASAMARA, VITA'dan once)."""
     if not chain_or_file:
         return None, None
-    up = chain_or_file.upper()
-    # Sirasiyla: Simple (dogrulanmis) > Special > Nested > Horizontal > Generic
-    for key, cfg in SIMPLE_CONFIGS.items():
-        if key in up: return cfg, "simple"
-    for key, cfg in SPECIAL.items():
-        if key in up: return cfg, "special"
-    for key, cfg in NESTED.items():
-        if key in up: return cfg, "nested"
-    for key, cfg in HORIZONTAL.items():
-        if key in up: return cfg, "horizontal"
-    for key, cfg in GENERIC.items():
-        if key in up: return cfg, "generic"
+    nhay = _norm_key(chain_or_file)
+
+    for key in KG_CONFIGS:
+        if _norm_key(key) in nhay:
+            return KG_CONFIGS[key], "kg"
+    for key in AVROMED_CONFIGS:
+        if _norm_key(key) in nhay:
+            return key, "avromed"
+    engines = [
+        (SIMPLE_CONFIGS, "simple"),
+        (SPECIAL, "special"),
+        (NESTED, "nested"),
+        (HORIZONTAL, "horizontal"),
+        (GENERIC, "generic"),
+    ]
+    for table, kind in engines:
+        # En uzun normalize anahtar once (yanlis kisa eslesmeyi onler)
+        for key, cfg in sorted(table.items(), key=lambda kv: len(_norm_key(kv[0])), reverse=True):
+            nk = _norm_key(key)
+            if nk and nk in nhay:
+                return cfg, kind
     return None, None
 
 
@@ -232,4 +260,10 @@ def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit):
         return NestedParser().parse(sheet, cfg, main_group, v_limit, h_limit)
     if typ == "horizontal":
         return HorizontalParser().parse(sheet, cfg, main_group, v_limit, h_limit)
+    if typ == "avromed":
+        from .pharmacy_parser import AvromedParser
+        return AvromedParser().parse(sheet, None, main_group, v_limit, h_limit)
+    if typ == "kg":
+        from .pharmacy_parser import NestedKgParser
+        return NestedKgParser().parse(sheet, cfg, main_group, v_limit, h_limit)
     return None

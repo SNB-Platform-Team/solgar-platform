@@ -1875,14 +1875,18 @@ from datetime import datetime as _ph_dt
 _PHARM_PAGE_SIZE = 200
 
 
-def _ph_open_sheet(excel_file):
-    """xlsx (openpyxl 2D liste - hizli) / xls (xlrd) oku. (sheet, err)."""
+def _ph_open_sheet(excel_file, sheet_name=None):
+    """xlsx (openpyxl) / xls (xlrd) oku. sheet_name verilirse o sayfa, yoksa ilk sayfa.
+    (sheet, err) doner."""
     import io
     data = excel_file.read()
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-        ws = wb.active
+        if sheet_name and sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
         grid = [list(r) for r in ws.iter_rows(values_only=True)]
         wb.close()
         return _GridSheet(grid), None
@@ -1891,9 +1895,32 @@ def _ph_open_sheet(excel_file):
     try:
         import xlrd
         book = xlrd.open_workbook(file_contents=data)
-        s = book.sheet_by_index(0)
+        if sheet_name and sheet_name in book.sheet_names():
+            s = book.sheet_by_name(sheet_name)
+        else:
+            s = book.sheet_by_index(0)
         grid = [[s.cell_value(r, c) for c in range(s.ncols)] for r in range(s.nrows)]
         return _GridSheet(grid), None
+    except Exception as exc:
+        return None, f"Excel okunamadi: {exc}"
+
+
+def _ph_sheet_names(excel_file):
+    """Yuklenen Excel'deki sayfa (sheet) isimlerini dondurur. (names, err)."""
+    import io
+    data = excel_file.read()
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        names = list(wb.sheetnames)
+        wb.close()
+        return names, None
+    except Exception:
+        pass
+    try:
+        import xlrd
+        book = xlrd.open_workbook(file_contents=data)
+        return list(book.sheet_names()), None
     except Exception as exc:
         return None, f"Excel okunamadi: {exc}"
 
@@ -1924,6 +1951,7 @@ def pharmacy_upload_preview_api(request):
     country = (request.POST.get("country") or "").strip()
     report_date_str = (request.POST.get("report_date") or "").strip()
     main_group = (request.POST.get("main_group") or "").strip()
+    sheet_name = (request.POST.get("sheet_name") or "").strip()
     excel_file = request.FILES.get("excel_file")
 
     if not request.user.is_staff:
@@ -1943,7 +1971,7 @@ def pharmacy_upload_preview_api(request):
 
     file_name = getattr(excel_file, "name", "") or ""
 
-    sheet, err = _ph_open_sheet(excel_file)
+    sheet, err = _ph_open_sheet(excel_file, sheet_name or None)
     if err:
         return Response({"error": err}, status=400)
 
@@ -2089,6 +2117,20 @@ class _GridSheet:
         if 0 <= r < len(self._g) and 0 <= c < len(self._g[r]):
             return _GridCell(self._g[r][c])
         return _GridCell(None)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pharmacy_sheet_names_api(request):
+    """Yuklenen Excel dosyasindaki sayfa (sheet) isimlerini dondurur.
+    multipart: excel_file -> {"sheets": [...]}"""
+    excel_file = request.FILES.get("excel_file")
+    if not excel_file:
+        return Response({"error": "Выберите файл Excel."}, status=400)
+    names, err = _ph_sheet_names(excel_file)
+    if err:
+        return Response({"error": err}, status=400)
+    return Response({"sheets": names, "error": ""})
+
 
 #counrty e gore aliyoruz
 @api_view(["GET"])

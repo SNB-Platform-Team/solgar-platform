@@ -132,6 +132,14 @@ class PharmacyParser:
     def _ne(s) -> bool:
         return s is not None and len(s.strip()) > 0
 
+    @staticmethod
+    def _hmatch(cell, spec):
+        """Baslik eslesmesi: spec '|' ile ayrilmis alternatifler icerebilir."""
+        if not spec:
+            return False
+        c = cell.lower()
+        return any(c == alt.strip().lower() for alt in spec.split("|") if alt.strip())
+
     def parse(self, sheet, cfg: PharmacyConfig, main_group: str,
               v_limit: int, h_limit: int) -> list[dict]:
         """
@@ -153,25 +161,25 @@ class PharmacyParser:
             for col_no in range(h_limit):
                 cell = self._read(sheet, col_no, row_no).strip()
                 # Java: equalsIgnoreCase (tam esitlik)
-                if p.product and cell.lower() == p.product.lower():
+                if self._hmatch(cell, p.product):
                     col["product"] = col_no
                     start_row = row_no + 1
-                if p.pharmacy and cell.lower() == p.pharmacy.lower():
+                if self._hmatch(cell, p.pharmacy):
                     col["pharmacy"] = col_no
-                if p.count and cell.lower() == p.count.lower():
+                if self._hmatch(cell, p.count):
                     col["count"] = col_no
-                if p.amount and cell.lower() == p.amount.lower():
+                if self._hmatch(cell, p.amount):
                     col["amount"] = col_no
-                if p.pharmacy_no and cell.lower() == p.pharmacy_no.lower():
+                if self._hmatch(cell, p.pharmacy_no):
                     col["pharmacy_no"] = col_no
-                if p.city and cell.lower() == p.city.lower():
+                if self._hmatch(cell, p.city):
                     col["city"] = col_no
-                if p.remains_count and cell.lower() == p.remains_count.lower():
+                if self._hmatch(cell, p.remains_count):
                     col["remains_count"] = col_no
-                if p.remains_amount and cell.lower() == p.remains_amount.lower():
+                if self._hmatch(cell, p.remains_amount):
                     col["remains_amount"] = col_no
                 # last_column bulununca dur (Java breakFor)
-                if p.last_column and cell.lower() == p.last_column.lower():
+                if self._hmatch(cell, p.last_column):
                     break_for = True
                     break
 
@@ -446,6 +454,100 @@ class NestedParser:
                     "SUBGROUP": main_group, "MAINGROUP": main_group,
                 })
         return out
+
+
+class AvromedParser:
+    """Avromed/Buta transpoze pivot motoru.
+    - Satir 0: aptek adlari (her aptek 4 sutunluk blok, blok basi ilk sutunda)
+    - Satir 1: alt-basliklar (Sales QTY / Sales Amount / RRP / Depo stock)
+    - Satir 2+: A sutununda urun, her blokta +0=adet(QTY), +1=tutar(Amount)
+    Aptekler sutun 1'den baslar, 4'er 4'er. A sutunu (col 0) urun adi.
+    """
+    PRODUCT_COL = 0
+    FIRST_APTEK_COL = 1
+    BLOCK = 4
+    DATA_START_ROW = 2
+
+    def parse(self, sheet, p, main_group, v_limit, h_limit):
+        out = []
+        # Aptek bloklarini tespit et: satir 0'da ismi dolu olan sutunlar
+        aptek_cols = []  # (col, aptek_adi)
+        last_name = ""
+        col = self.FIRST_APTEK_COL
+        while col < h_limit:
+            name = _read2(sheet, col, 0).strip()
+            if _ne2(name):
+                last_name = name
+                aptek_cols.append((col, name))
+            col += self.BLOCK
+        # Her urun satiri icin her aptek bloguna bak
+        for i in range(self.DATA_START_ROW, v_limit):
+            product = _read2(sheet, self.PRODUCT_COL, i).strip()
+            if not _ne2(product):
+                continue
+            for acol, aname in aptek_cols:
+                qty = _read2(sheet, acol, i)          # +0 = adet
+                amount = _read2(sheet, acol + 1, i)   # +1 = tutar
+                # sadece satisi olan (adet dolu) kayitlari al
+                if not _ne2(qty):
+                    continue
+                out.append({
+                    "PRODUCT": product, "PHARMACY": aname, "SALESREADER": aname,
+                    "APTEKNO": "", "CITY": "",
+                    "COUNT": qty,
+                    "AMOUNT": amount if _ne2(amount) else "0.00",
+                    "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
+                    "SUBGROUP": main_group, "MAINGROUP": main_group,
+                })
+        return out
+
+
+class NestedKgParser:
+    """Tek sutun (A) baslik+alt satir hiyerarsisi, deger B sutununda (adet).
+    cfg beklenen alanlar (dict):
+      mode: 'pharmacy_header' | 'product_header'
+      aptek_marker: aptek satirini taniyan metin (orn 'Аптека' veya 'Неман')
+      data_start: ilk veri satiri (baslik satir sayisi)
+      count_col: adet sutunu index (varsayilan 1)
+      name_col: ad sutunu index (varsayilan 0)
+    """
+    def parse(self, sheet, cfg, main_group, v_limit, h_limit):
+        mode = cfg.get("mode", "pharmacy_header")
+        marker = cfg.get("aptek_marker", "Аптека")
+        start = cfg.get("data_start", 2)
+        ccol = cfg.get("count_col", 1)
+        ncol = cfg.get("name_col", 0)
+        out = []
+        cur_aptek = ""
+        cur_product = ""
+        for i in range(start, v_limit):
+            name = _read2(sheet, ncol, i).strip()
+            if not _ne2(name):
+                continue
+            is_aptek = marker.lower() in name.lower()
+            val = _read2(sheet, ccol, i)
+            if mode == "pharmacy_header":
+                # aptek satiri -> aktif aptek; diger -> urun kaydi
+                if is_aptek:
+                    cur_aptek = name
+                else:
+                    out.append(self._rec(name, cur_aptek, val, main_group))
+            else:  # product_header: urun satiri -> aktif urun; aptek satiri -> kayit
+                if is_aptek:
+                    out.append(self._rec(cur_product, name, val, main_group))
+                else:
+                    cur_product = name
+        return out
+
+    @staticmethod
+    def _rec(product, pharmacy, cnt, mg):
+        return {
+            "PRODUCT": product, "PHARMACY": pharmacy, "SALESREADER": pharmacy,
+            "APTEKNO": "", "CITY": "",
+            "COUNT": cnt if _ne2(cnt) else "0",
+            "AMOUNT": "0.00", "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
+            "SUBGROUP": mg, "MAINGROUP": mg,
+        }
 
 
 class HorizontalParser:
