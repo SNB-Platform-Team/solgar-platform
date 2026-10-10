@@ -550,6 +550,66 @@ class NestedKgParser:
         }
 
 
+class MatrixParser:
+    """Pivot/matris motoru. cfg (dict):
+      product_axis: 'col' (urun sol sutunda) | 'row' (urun ust satirda)
+      product_index: urun ekseninin sabit index'i (col veya row no)
+      aptek_index: aptek ekseninin sabit index'i
+      data_start_row, data_start_col: deger matrisinin basladigi yer
+      skip_last_col / skip_last_row: True ise son (Itog/toplam) atlanir
+    """
+    def parse(self, sheet, cfg, main_group, v_limit, h_limit):
+        pax = cfg.get("product_axis", "col")
+        pidx = cfg.get("product_index", 0)
+        aidx = cfg.get("aptek_index", 0)
+        dsr = cfg.get("data_start_row", 2)
+        dsc = cfg.get("data_start_col", 1)
+        skip_last_col = cfg.get("skip_last_col", False)
+        skip_last_row = cfg.get("skip_last_row", False)
+        out = []
+        rmax = v_limit - (1 if skip_last_row else 0)
+        cmax = h_limit - (1 if skip_last_col else 0)
+        if pax == "col":
+            # urun = sol sutun (pidx) boyunca satirlar; aptek = ust satir (aidx) boyunca sutunlar
+            for i in range(dsr, rmax):
+                product = _read2(sheet, pidx, i).strip()
+                if not _ne2(product):
+                    continue
+                for j in range(dsc, cmax):
+                    aptek = _read2(sheet, j, aidx).strip()
+                    if not _ne2(aptek):
+                        continue
+                    val = _read2(sheet, j, i)
+                    if not _ne2(val):
+                        continue
+                    out.append(self._rec(product, aptek, val, main_group))
+        else:
+            # urun = ust satir (pidx) boyunca sutunlar; aptek = sol sutun (aidx) boyunca satirlar
+            for j in range(dsc, cmax):
+                product = _read2(sheet, j, pidx).strip()
+                if not _ne2(product):
+                    continue
+                for i in range(dsr, rmax):
+                    aptek = _read2(sheet, aidx, i).strip()
+                    if not _ne2(aptek):
+                        continue
+                    val = _read2(sheet, j, i)
+                    if not _ne2(val):
+                        continue
+                    out.append(self._rec(product, aptek, val, main_group))
+        return out
+
+    @staticmethod
+    def _rec(product, pharmacy, cnt, mg):
+        return {
+            "PRODUCT": product, "PHARMACY": pharmacy, "SALESREADER": pharmacy,
+            "APTEKNO": "", "CITY": "",
+            "COUNT": cnt if _ne2(cnt) else "0",
+            "AMOUNT": "0.00", "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
+            "SUBGROUP": mg, "MAINGROUP": mg,
+        }
+
+
 class HorizontalParser:
     """Pivot motor (ürün satırda, eczane kolonda)."""
     def parse(self, sheet, p, main_group, v_limit, h_limit):

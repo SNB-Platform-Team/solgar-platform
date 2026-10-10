@@ -163,6 +163,12 @@ NESTED = {
 }
 
 # ---- HORIZONTAL (pivot) ----
+MATRIX_CONFIGS = {
+    "SALAMAT": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 2, "data_start_col": 1},
+    "ASNA": {"product_axis": "col", "product_index": 0, "aptek_index": 1, "data_start_row": 2, "data_start_col": 4},
+    "IMPLOSIA": {"product_axis": "row", "product_index": 3, "aptek_index": 1, "data_start_row": 4, "data_start_col": 7, "skip_last_col": True},
+}
+
 KG_CONFIGS = {
     "NEMAN": {"mode": "product_header", "aptek_marker": "Неман", "data_start": 2, "count_col": 1, "name_col": 0},
     "PHARMAMIR": {"mode": "pharmacy_header", "aptek_marker": "Аптека", "data_start": 2, "count_col": 1, "name_col": 0},
@@ -216,6 +222,9 @@ def get_config(chain_or_file):
         return None, None
     nhay = _norm_key(chain_or_file)
 
+    for key in MATRIX_CONFIGS:
+        if _norm_key(key) in nhay:
+            return MATRIX_CONFIGS[key], "matrix"
     for key in KG_CONFIGS:
         if _norm_key(key) in nhay:
             return KG_CONFIGS[key], "kg"
@@ -266,4 +275,7 @@ def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit):
     if typ == "kg":
         from .pharmacy_parser import NestedKgParser
         return NestedKgParser().parse(sheet, cfg, main_group, v_limit, h_limit)
+    if typ == "matrix":
+        from .pharmacy_parser import MatrixParser
+        return MatrixParser().parse(sheet, cfg, main_group, v_limit, h_limit)
     return None
