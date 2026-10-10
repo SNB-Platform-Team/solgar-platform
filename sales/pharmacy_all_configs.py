@@ -163,6 +163,29 @@ NESTED = {
 }
 
 # ---- HORIZONTAL (pivot) ----
+C1_CONFIGS = {
+    "ALFA_PHARM": {"header_marker": "Адрес", "header_row_offset": 1, "min_len": 1,
+        "product_markers": [], "aptek_markers": ["А-ф  №","Онлайн"], "mode": "alfa"},
+    "GEDEON_RIHTER": {"header_marker": "Аналитика товара", "header_row_offset": 2, "min_len": 8,
+        "product_markers": [], "aptek_markers": ["Аптека"], "mode": "gedeon"},
+    "EUROPHARMA": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 8,
+        "product_markers": ["Солгар","СОЛГАР","Нэйчес","SOLGAR","Solgar","НБ "], "aptek_markers": ["Аптека"],
+        "count_offset": 3, "remaining_offset": 4, "mode": "product_header"},
+    "ZERDE": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 1,
+        "product_markers": ["Nature","Солгар"], "aptek_markers": ["Аптека"],
+        "count_offset": 1, "mode": "product_records"},
+    "VITA": {"header_marker": "Номенклатура, Базовая", "header_row_offset": 1, "min_len": 1,
+        "product_markers": ["Nature","Solgar"], "aptek_markers": ["Аптека"],
+        "count_offset": 1, "mode": "product_records"},
+    "SADYKHAN": {"header_marker": "Склад", "header_row_offset": 1, "min_len": 1,
+        "product_markers": ["Nature","Solgar"], "aptek_markers": ["Склад №"],
+        "count_offset": 2, "remaining_offset": 3, "mode": "product_header"},
+    "HIPPOKRAT": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 8,
+        "product_markers": ["Солгар","СОЛГАР","Нэйчес","SOLGAR","Solgar","Natures Bounty","НБ "],
+        "aptek_markers": ["Аптека","склад","Склад"],
+        "count_offset": 5, "remaining_offset": 6, "mode": "product_header"},
+}
+
 MATRIX_CONFIGS = {
     "SALAMAT": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 2, "data_start_col": 1},
     "ASNA": {"product_axis": "col", "product_index": 0, "aptek_index": 1, "data_start_row": 2, "data_start_col": 4},
@@ -222,6 +245,9 @@ def get_config(chain_or_file):
         return None, None
     nhay = _norm_key(chain_or_file)
 
+    for key in C1_CONFIGS:
+        if _norm_key(key) in nhay:
+            return C1_CONFIGS[key], "c1"
     for key in MATRIX_CONFIGS:
         if _norm_key(key) in nhay:
             return MATRIX_CONFIGS[key], "matrix"
@@ -278,4 +304,7 @@ def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit):
     if typ == "matrix":
         from .pharmacy_parser import MatrixParser
         return MatrixParser().parse(sheet, cfg, main_group, v_limit, h_limit)
+    if typ == "c1":
+        from .pharmacy_parser import Nested1CParser
+        return Nested1CParser().parse(sheet, cfg, main_group, v_limit, h_limit)
     return None

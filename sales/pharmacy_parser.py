@@ -610,6 +610,112 @@ class MatrixParser:
         }
 
 
+class Nested1CParser:
+    """1С ведомость: tek sutunda urun ve aptek satirlari ic ice, marker ile ayrim.
+    cfg (dict):
+      header_marker: baslik hucresini bulan metin (orn 'Номенклатура')
+      header_row_offset: baslik satirindan veri baslangicina ofset (1 veya 2)
+      product_markers: list[str] - urun satirini taniyan metinler
+      aptek_markers: list[str] - aptek satirini taniyan metinler
+      count_offset: adet sutunu ofseti (startCol + offset)
+      remaining_offset: (ops) kalan stok sutunu ofseti; yoksa None
+      product_col_offset: urun adinin alindigi sutun ofseti (0=ayni sutun)
+      mode: 'product_header' (ilk5: urun satiri set, aptek satiri kayit)
+            'aptek_header'   (ALFA/GEDEON: aptek satiri kayit, degilse urun=product_col_offset)
+    """
+    def parse(self, sheet, cfg, main_group, v_limit, h_limit):
+        hmark = cfg["header_marker"]
+        hoff = cfg.get("header_row_offset", 1)
+        pmarks = cfg.get("product_markers", [])
+        amarks = cfg.get("aptek_markers", [])
+        coff = cfg.get("count_offset", 1)
+        roff = cfg.get("remaining_offset", None)
+        pcoff = cfg.get("product_col_offset", 0)
+        mode = cfg.get("mode", "product_header")
+        minlen = cfg.get("min_len", 1)
+
+        # header bul
+        sc, sr, found = 0, 0, False
+        for r in range(v_limit):
+            for c in range(h_limit):
+                if hmark in _read2(sheet, c, r):
+                    sc, sr, found = c, r + hoff, True
+                    break
+            if found: break
+        if not found:
+            return []
+
+        def num(v):
+            v = (v or "").strip()
+            for sep in (".", ","):
+                if sep in v:
+                    return v.split(sep)[0].strip()
+            return v
+
+        out = []
+        product = ""
+        pharmacy = ""
+        for i in range(sr, v_limit):
+            cell = _read2(sheet, sc, i).strip()
+            if mode != "alfa" and len(cell) < minlen:
+                continue
+            is_prod = any(m in cell for m in pmarks) if pmarks else False
+            is_aptek = any(m in cell for m in amarks) if amarks else False
+
+            if mode == "product_header":
+                if is_prod:
+                    product = cell
+                elif is_aptek and product:
+                    pharmacy = cell
+                    cnt = num(_read2(sheet, sc + coff, i))
+                    rec = self._rec(product, pharmacy, cnt, main_group)
+                    if roff is not None:
+                        rec["REMAINING_COUNT"] = num(_read2(sheet, sc + roff, i)) or "0"
+                    out.append(rec)
+            elif mode == "product_records":
+                # aptek satiri -> pharmacy; urun satiri -> KAYIT
+                if is_aptek:
+                    pharmacy = cell
+                elif is_prod and pharmacy:
+                    product = cell
+                    cnt = num(_read2(sheet, sc + coff, i))
+                    rec = self._rec(product, pharmacy, cnt, main_group)
+                    if roff is not None:
+                        rec["REMAINING_COUNT"] = num(_read2(sheet, sc + roff, i)) or "0"
+                    out.append(rec)
+            elif mode == "alfa":
+                # ALFA_PHARM: aptek satiri -> pharmacy; diger -> urun(col+1) kaydet(count col+2)
+                if is_aptek:
+                    pharmacy = cell
+                else:
+                    prod = _read2(sheet, sc + 1, i).strip()
+                    if len(prod) >= 8:
+                        cnt = num(_read2(sheet, sc + 2, i))
+                        out.append(self._rec(prod, pharmacy, cnt, main_group))
+            elif mode == "gedeon":
+                # GEDEON: hucre uzunluk>=8; "Аптека" + product set -> kaydet(count col+6);
+                #          degilse product = col+4
+                if len(cell) < 8:
+                    continue
+                if is_aptek and product:
+                    pharmacy = cell
+                    cnt = num(_read2(sheet, sc + 6, i))
+                    out.append(self._rec(product, pharmacy, cnt, main_group))
+                elif not is_aptek:
+                    product = _read2(sheet, sc + 4, i).strip()
+        return out
+
+    @staticmethod
+    def _rec(product, pharmacy, cnt, mg):
+        return {
+            "PRODUCT": product, "PHARMACY": pharmacy, "SALESREADER": pharmacy,
+            "APTEKNO": pharmacy, "CITY": "",
+            "COUNT": cnt if (cnt and cnt.strip()) else "0",
+            "AMOUNT": "0.00", "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
+            "SUBGROUP": mg, "MAINGROUP": mg,
+        }
+
+
 class HorizontalParser:
     """Pivot motor (ürün satırda, eczane kolonda)."""
     def parse(self, sheet, p, main_group, v_limit, h_limit):
