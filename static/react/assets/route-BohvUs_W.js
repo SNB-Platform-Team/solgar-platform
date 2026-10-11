@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-CAIon97I.js";var t=e;export{t as component};
