@@ -184,12 +184,31 @@ C1_CONFIGS = {
         "product_markers": ["Солгар","СОЛГАР","Нэйчес","SOLGAR","Solgar","Natures Bounty","НБ "],
         "aptek_markers": ["Аптека","склад","Склад"],
         "count_offset": 5, "remaining_offset": 6, "mode": "product_header"},
+    # APTEKA 25: tek sutunda aptek ('Аптека ') + urun (Солгар/Нэйчес) ic ice; sayac 'Расход, шт.' sutunu
+    "APTEKA 25": {"header_marker": "Товар", "header_row_offset": 1, "min_len": 1,
+        "product_markers": ["Солгар","СОЛГАР","Нэйчес","Нэйчес Баунти","НЭЙЧЕС"],
+        "aptek_markers": ["Аптека "],
+        "count_offset": 5, "mode": "product_records"},
+    # LEK_OPT_TORG: 'Товар' sutunu (tam esitlik, 'КодТовара' ile karismasin); urun-prefix satiri urunu set eder, digerleri eczane (adres=+1, sayac=+4)
+    "LEK_OPT_TORG": {"header_marker": "Товар", "header_exact": True, "header_row_offset": 1,
+        "product_markers": ["Нэйчес","Солгар","НЭЙЧЕС","СОЛГАР"],
+        "pharmacy_col_offset": 1, "count_offset": 4, "mode": "lek_opt"},
 }
 
 MATRIX_CONFIGS = {
     "SALAMAT": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 2, "data_start_col": 1},
     "ASNA": {"product_axis": "col", "product_index": 0, "aptek_index": 1, "data_start_row": 2, "data_start_col": 4},
     "IMPLOSIA": {"product_axis": "row", "product_index": 3, "aptek_index": 1, "data_start_row": 4, "data_start_col": 7, "skip_last_col": True},
+    # --- RUSYA matrix/pivot zincirleri (gercek dosyalarla test edildi) ---
+    "ZDOROVOE": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 1, "data_start_col": 1},
+    "ZHIVIKA": {"product_axis": "col", "product_index": 0, "aptek_index": 6, "data_start_row": 7, "data_start_col": 1},
+    "OVITA": {"product_axis": "col", "product_index": 2, "aptek_index": 2, "data_start_row": 3, "data_start_col": 3},
+    "VITA_SAMARA": {"product_axis": "col", "product_index": 1, "aptek_index": 1, "data_start_row": 2, "data_start_col": 6},
+    "DOCTOR_STOLETOV": {"product_axis": "col", "product_index": 1, "aptek_index": 4, "data_start_row": 6, "data_start_col": 9},
+    "EDIFARM": {"product_axis": "col", "product_index": 0, "aptek_index": 4, "data_start_row": 7, "data_start_col": 2},
+    "FIALKA": {"product_axis": "col", "product_index": 0, "aptek_index": 5, "data_start_row": 7, "data_start_col": 1},
+    "MELODIJA_ZDOROVJA": {"product_axis": "row", "product_index": 6, "aptek_index": 0, "data_start_row": 7, "data_start_col": 2},
+    "SKANDINAVIYA": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 4, "data_start_col": 1},
 }
 
 KG_CONFIGS = {
@@ -237,13 +256,45 @@ def _norm_key(s):
     return _re_getcfg.sub(r"[^A-Z0-9]", "", (s or "").upper())
 
 
-def get_config(chain_or_file):
+def get_config(chain_or_file, country=""):
     """Zincir/dosya adindan (config, motor_tipi) dondur.
     Eslesme ayirici-duyarsiz (NEMAN == KG_NEMAN degil ama VITA_SAMARA == VITASAMARA).
     Her motor icinde EN UZUN anahtar once denenir (VITASAMARA, VITA'dan once)."""
     if not chain_or_file:
         return None, None
     nhay = _norm_key(chain_or_file)
+    # --- Ulke-bazli cakisma cozumu ---
+    _cu = (country or "").strip().lower()
+    _is_ru = _cu in ("russia", "россия", "rusya")
+    # Rusya'da bir MATRIX zinciri eslesirse (VITA_SAMARA, OVITA, ZDOROVOE, ...) matrix KAZANIR.
+    # Bu, asagidaki VITA->simple override'inin VITA_SAMARA/OVITA'yi yanlislikla kapmasini onler.
+    _matrix_hit = None
+    if _is_ru:
+        for _mk in MATRIX_CONFIGS:
+            if _mk == "ASNA":   # ASNA'nin kendi ulke mantigi var (asagida)
+                continue
+            if _norm_key(_mk) in nhay:
+                _matrix_hit = _mk
+                break
+    # VITA: Kazakistan'da c1 (Номенклатура ic ice), Rusya'da VITA+/VITA_TOMSK simple;
+    #       VITA_SAMARA/OVITA ise matrix (yukarida yakalandi, override'a girmez)
+    if "VITA" in nhay and _is_ru and _matrix_hit is None:
+        # Rusya ise KZ VITA (c1) ile eslesmeyi engelle: SIMPLE VITA key'ini EN UZUN once dene
+        for key, cfg in sorted(SIMPLE_CONFIGS.items(),
+                               key=lambda kv: len(_norm_key(kv[0])), reverse=True):
+            if _norm_key(key) in nhay and "VITA" in _norm_key(key):
+                return cfg, "simple"
+    if _matrix_hit is not None:
+        return MATRIX_CONFIGS[_matrix_hit], "matrix"
+    # ASNA: Kazakistan'da matrix, Rusya'da simple
+    if "ASNA" in nhay:
+        if _cu in ("russia","россия","rusya"):
+            for key, cfg in SIMPLE_CONFIGS.items():
+                if _norm_key(key) == "ASNA":
+                    return cfg, "simple"
+        else:
+            if "ASNA" in MATRIX_CONFIGS:
+                return MATRIX_CONFIGS["ASNA"], "matrix"
 
     for key in C1_CONFIGS:
         if _norm_key(key) in nhay:
@@ -282,9 +333,9 @@ def all_chains():
     return sorted(s)
 
 
-def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit):
+def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit, country=""):
     """Zinciri dogru motorla parse et. list[dict] doner (bulunamzsa None)."""
-    cfg, typ = get_config(chain_or_file)
+    cfg, typ = get_config(chain_or_file, country)
     if cfg is None:
         return None
     if typ == "simple":

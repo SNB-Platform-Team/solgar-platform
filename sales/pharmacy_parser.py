@@ -634,11 +634,14 @@ class Nested1CParser:
         mode = cfg.get("mode", "product_header")
         minlen = cfg.get("min_len", 1)
 
-        # header bul
+        # header bul (header_exact=True ise tam esitlik; aksi halde 'contains')
+        header_exact = cfg.get("header_exact", False)
         sc, sr, found = 0, 0, False
         for r in range(v_limit):
             for c in range(h_limit):
-                if hmark in _read2(sheet, c, r):
+                _cell = _read2(sheet, c, r).strip()
+                if (header_exact and _cell.lower() == hmark.lower()) or \
+                   (not header_exact and hmark in _cell):
                     sc, sr, found = c, r + hoff, True
                     break
             if found: break
@@ -703,6 +706,16 @@ class Nested1CParser:
                     out.append(self._rec(product, pharmacy, cnt, main_group))
                 elif not is_aptek:
                     product = _read2(sheet, sc + 4, i).strip()
+            elif mode == "lek_opt":
+                # LEK_OPT_TORG: urun-prefix iceren hucre urun adini set eder;
+                # digerleri eczane satiridir -> eczane adresi=sc+pcoff2, sayac=sc+coff
+                pcoff2 = cfg.get("pharmacy_col_offset", 1)
+                if is_prod:
+                    product = cell
+                elif product:
+                    pharmacy = _read2(sheet, sc + pcoff2, i).strip()
+                    cnt = num(_read2(sheet, sc + coff, i))
+                    out.append(self._rec(product, pharmacy, cnt, main_group))
         return out
 
     @staticmethod
