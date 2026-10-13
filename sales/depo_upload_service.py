@@ -61,10 +61,16 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
         return depo_configs.katren_sale() if is_sales else depo_configs.katren_stock()
     if "ПРОТЕК" in fn:
         return depo_configs.protek_sale() if is_sales else depo_configs.protek_stock()
-    if "ПУЛЬС" in fn and is_sales:
-        return depo_configs.pulse_sale()
-    if "БАДМ" in fn:
+    if "ПУЛЬС" in fn:
+        return depo_configs.pulse_sale() if is_sales else depo_configs.pulse_stock()
+    if "VTIME" in fn:
+        return depo_configs.vtime_sale() if is_sales else depo_configs.vtime_stock()
+    if "БФДМ" in fn or "BFDM" in fn:
+        return depo_configs.bfdm_sale() if is_sales else depo_configs.badm_stock()
+    if "БАДМ" in fn or "BADM" in fn:
         return depo_configs.badm_sale() if is_sales else depo_configs.badm_stock()
+    if "ВЕНТА" in fn or "VENTA" in fn:
+        return depo_configs.venta_sale() if is_sales else depo_configs.venta_stock()
     if ("ВИТАЛАЙНСАМАРА" in fn or "VITALAINSAMARA" in fn) and is_sales:
         return depo_configs.vitalain_sale()
     if "РИГЛА" in fn:
@@ -75,8 +81,6 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
         return depo_configs.grand_kapital_sale() if is_sales else depo_configs.grand_kapital_stock()
     if "MEDSERVIS" in fn:
         return depo_configs.medservis_sale() if is_sales else depo_configs.medservis_stock()
-    if "VTIME" in fn and is_sales:
-        return depo_configs.vtime_sale()
     if "ЭМИТИ" in fn:
         return depo_configs.emiti_sale() if is_sales else depo_configs.emiti_stock()
     if "ОПТИМА" in fn:

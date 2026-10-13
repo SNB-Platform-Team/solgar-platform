@@ -161,7 +161,8 @@ class DepoStorageParser:
             return out
 
         table_index = 0
-        for col in range(start_column, h_limit - 1):
+        stride = getattr(cfg, "pivot_col_stride", 1) or 1
+        for col in range(start_column, h_limit - 1, stride):
             for i in range(start_row, v_limit - 1):
                 city_raw = self._read(sheet, col, city_row)
                 if not self._not_empty(city_raw):

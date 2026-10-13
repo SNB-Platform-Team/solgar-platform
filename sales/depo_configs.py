@@ -113,20 +113,77 @@ def pulse_sale() -> DepoParserConfig:
     return c
 
 
+def pulse_stock() -> DepoParserConfig:
+    # PIVOT: urun 'Номенклатура' (col2, r4); sehirler ustteki r3; her sehir 2 sutun
+    # (Фактический Остаток / Товар в пути) -> stride=2, sayac ilk sutun (Остаток)
+    c = DepoParserConfig("PULSE", "STOCK", layout=ParserLayout.PIVOT)
+    c.pivot_product_keyword = "Номенклатура"
+    c.pivot_first_data_column_offset = 1
+    c.pivot_first_data_row_offset = 1
+    c.pivot_city_row_offset = -1
+    c.pivot_col_stride = 2
+    return c
+
+
+def vtime_stock() -> DepoParserConfig:
+    # PIVOT: urun 'Product' (col1, r1); depolar ustteki r0 (Склад Алматы/...); veri r2+
+    c = DepoParserConfig("VTIME", "STOCK", layout=ParserLayout.PIVOT)
+    c.pivot_product_keyword = "Product"
+    c.pivot_first_data_column_offset = 2
+    c.pivot_first_data_row_offset = 1
+    c.pivot_city_row_offset = -1
+    return c
+
+
 # ==================== BADM ====================
 def badm_sale() -> DepoParserConfig:
+    # Ukrayna: basliklar Ukraynaca (Товар / Область / Кількість)
     c = DepoParserConfig("BADM", "SALES", layout=ParserLayout.VERTICAL)
     c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Товар", 0, 1))
     c.columns.append(DepoColumnSpec.of("CITY", "Область"))
-    c.columns.append(DepoColumnSpec.of("COUNT", "Количество"))
+    c.columns.append(DepoColumnSpec.of("CLIENT", "Клієнт"))
+    spec = DepoColumnSpec.of("COUNT", "Кількість")
+    spec.strip_separators = True
+    c.columns.append(spec)
     return c
 
 
 def badm_stock() -> DepoParserConfig:
     c = DepoParserConfig("BADM", "STOCK", layout=ParserLayout.VERTICAL)
     c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Товар", 0, 1))
-    c.columns.append(DepoColumnSpec.of("CITY", "Филиал"))
-    c.columns.append(DepoColumnSpec.of("COUNT", "Количество доступное"))
+    c.columns.append(DepoColumnSpec.of("CITY", "Склад"))
+    spec = DepoColumnSpec.of("COUNT", "Кількість доступна")
+    spec.strip_separators = True
+    c.columns.append(spec)
+    return c
+
+
+def bfdm_sale() -> DepoParserConfig:
+    # BFDM Ukrayna satis = BADM ile ayni yapi, sirket adi farkli
+    c = badm_sale()
+    c.company = "BFDM"
+    return c
+
+
+def venta_sale() -> DepoParserConfig:
+    c = DepoParserConfig("VENTA", "SALES", layout=ParserLayout.VERTICAL)
+    c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Найменування Товару", 0, 1))
+    c.columns.append(DepoColumnSpec.of("CITY", "Місто"))
+    c.columns.append(DepoColumnSpec.of("CLIENT", "Клієнт"))
+    c.columns.append(DepoColumnSpec.of("ACTUALADDRESS", "Адреса дост."))
+    spec = DepoColumnSpec.of("COUNT", "Кіль-сть")
+    spec.strip_separators = True
+    c.columns.append(spec)
+    return c
+
+
+def venta_stock() -> DepoParserConfig:
+    # PIVOT: urun col0 'Найменування Товару', sehirler satir0 (col2+), 'Загальний залишок' son toplam
+    c = DepoParserConfig("VENTA", "STOCK", layout=ParserLayout.PIVOT)
+    c.pivot_product_keyword = "Найменування Товару"
+    c.pivot_first_data_column_offset = 2
+    c.pivot_first_data_row_offset = 1
+    c.pivot_city_row_offset = 0
     return c
 
 
@@ -207,7 +264,7 @@ def medservis_sale() -> DepoParserConfig:
     c = DepoParserConfig("MEDSERVIS", "SALES", layout=ParserLayout.VERTICAL)
     c.columns.append(DepoColumnSpec.anchor_spec("CITY", "Имя 1", 0, 1))
     c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Краткий текст материала", 0, 1))
-    spec = DepoColumnSpec.of("COUNT", "Колво в ЕИ ввода")
+    spec = DepoColumnSpec.of("COUNT", "в ЕИ ввода")  # 'Колво в ЕИ ввода' ve 'Кол-во в ЕИ ввода' ikisini de yakalar
     spec.strip_separators = True
     c.columns.append(spec)
     c.columns.append(DepoColumnSpec.of("CLIENT", "Имя Клиента"))

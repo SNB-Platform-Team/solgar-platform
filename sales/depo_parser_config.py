@@ -150,6 +150,7 @@ class DepoParserConfig:
     pivot_first_data_column_offset: int = 1
     pivot_first_data_row_offset: int = 1
     pivot_city_row_offset: int = 0
+    pivot_col_stride: int = 1   # her sehir blogunun sutun adedi (Puls stok=2: Остаток/Товар в пути)
 
     # --- SPLIT alanlari ---
     split_product_keyword: Optional[str] = None
