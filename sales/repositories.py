@@ -367,6 +367,10 @@ class PharmacyRepository:
         """Distinct assortiment values."""
         return self._distinct(brand, "assortiment")
 
+    def skus(self, brand: str = "") -> list:
+        """Distinct SKU values."""
+        return self._distinct(brand, "sku")
+
     def pharmacy_groups(self, brand: str = "") -> list:
         """Distinct pharmacy groups."""
         return self._distinct(brand, "pharmacy_group")

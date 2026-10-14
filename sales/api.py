@@ -1221,6 +1221,8 @@ def pharmacy_filter_options_api(request):
         "types": _safe(repo.pharmacy_types, brand),
         "promos": _safe(repo.promos, brand),
         "marketing_staff": _safe(repo.marketing_staff, brand),
+        "assortiments": _safe(repo.assortiments, brand),
+        "skus": _safe(repo.skus, brand),
     }
     cache.set(cache_key, result, 900)
     return Response(result)
@@ -1976,7 +1978,7 @@ def pharmacy_upload_preview_api(request):
         return Response({"error": err}, status=400)
 
     from .pharmacy_all_configs import parse_chain
-    parsed = parse_chain(sheet, chain_name or file_name, main_group, sheet.max_row, sheet.max_column)
+    parsed = parse_chain(sheet, chain_name or file_name, main_group, sheet.max_row, sheet.max_column, country)
     if parsed is None:
         return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
     if not parsed:
