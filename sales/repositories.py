@@ -368,8 +368,21 @@ class PharmacyRepository:
         return self._distinct(brand, "assortiment")
 
     def skus(self, brand: str = "") -> list:
-        """Distinct SKU values."""
-        return self._distinct(brand, "sku")
+        """Distinct SKU values.
+
+        NOT: sku modelde IntegerField; _distinct()'in CharField varsayimlari
+        (exclude field="" ve _clean string replace) integer'da patliyor/
+        yanlis filtreliyor. Bu yuzden sku'yu ayri ele aliyoruz: sadece
+        null'lari disla, degerleri string'e cevir, sayisal sirala.
+        """
+        model = self._model_for(brand)
+        raw = (
+            model.objects.exclude(sku__isnull=True)
+            .values_list("sku", flat=True)
+            .distinct()
+        )
+        vals = {int(v) for v in raw if v is not None}
+        return [str(v) for v in sorted(vals)]
 
     def pharmacy_groups(self, brand: str = "") -> list:
         """Distinct pharmacy groups."""
