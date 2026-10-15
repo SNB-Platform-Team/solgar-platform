@@ -678,7 +678,8 @@ class OneCRepository:
                                     "Item_Description", "Qty", "Date", "Customs_WH"]),
         "sales": ("Sales", ["Brand", "YearMonth", "Stock_UPC", "SAP",
                             "Item_Description", "Qty"]),
-        "residues": ("Stock_Free_Residues", ["UPS", "Item_Description_EN", "SAP",
+        # NOT: Yeni DB'de UPS kolonu UPC olarak degisti (sunucu tasinmasi sonrasi).
+        "residues": ("Stock_Free_Residues", ["UPC", "Item_Description_EN", "SAP",
                                              "Stock", "Shipment", "Ord"]),
     }
 
@@ -687,7 +688,7 @@ class OneCRepository:
         "orders": "[Date] DESC",
         "shipments": "[Date] DESC",
         "sales": "[YearMonth] DESC",
-        "residues": "[UPS]",
+        "residues": "[UPC]",
     }
 
     # Searchable columns per table (product description + SAP code). Whitelisted.
