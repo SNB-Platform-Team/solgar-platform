@@ -345,11 +345,48 @@ class PharmacyRepository:
     # --- other dropdowns derived from the pharmacy table ---
 
     def chains(self, brand: str = "", country: str = "") -> list:
-        """Distinct group companies (chains), optionally country-scoped."""
-        return self._distinct(brand, "group_company", country=country)
+        """Группа компаний — solgar_prm.prm_sales_chains'ten, ulkeye gore.
+
+        Olga: gruplar prm_sales_chains tablosunda (country, group_company).
+        Ulke secilmezse hepsini, secilirse o ulkenin gruplarini dondur.
+        Parametreli sorgu (SQL injection yok)."""
+        from django.db import connections
+        sql = ("SELECT DISTINCT group_company FROM solgar_prm.prm_sales_chains "
+               "WHERE group_company IS NOT NULL AND group_company <> '' ")
+        params = []
+        if country:
+            sql += "AND country = %s "
+            params.append(country)
+        sql += "ORDER BY group_company"
+        try:
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql, params)
+                return [str(r[0]).strip() for r in cur.fetchall() if r[0] and str(r[0]).strip()]
+        except Exception:
+            # prm tablosuna erisim yoksa eski davranisa don (pharmacy tablosu)
+            return self._distinct(brand, "group_company", country=country)
 
     def subchains(self, brand: str = "", group_company: str = "", country: str = "") -> list:
-        return self._distinct(brand, "subgroup_company", group_company=group_company, country=country)
+        """Подгруппа — solgar_prm.prm_sales_sub_chains'ten, ulkeye gore.
+
+        Tabloda parent-chain bagi yok (sadece country + group_company), bu yuzden
+        sub-chain'ler secilen ulkeye gore listelenir. group_company parametresi
+        geriye uyumluluk icin kabul edilir ama filtrede kullanilmaz."""
+        from django.db import connections
+        sql = ("SELECT DISTINCT group_company FROM solgar_prm.prm_sales_sub_chains "
+               "WHERE group_company IS NOT NULL AND group_company <> '' ")
+        params = []
+        if country:
+            sql += "AND country = %s "
+            params.append(country)
+        sql += "ORDER BY group_company"
+        try:
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql, params)
+                return [str(r[0]).strip() for r in cur.fetchall() if r[0] and str(r[0]).strip()]
+        except Exception:
+            return self._distinct(brand, "subgroup_company",
+                                  group_company=group_company, country=country)
 
     def pharmacy_categories(self, brand: str = "") -> list:
         """Distinct pharmacy categories."""
