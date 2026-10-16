@@ -396,9 +396,12 @@ class PharmacyRepository:
         buyuk/kucuk harf (LOWER/TRIM) eslesmesi denenir."""
         from django.db import connections
 
+        # Not: status (aktif/pasif) filtresi UYGULANMAZ — Olga tum metrolarin
+        # sehrine gore gelmesini istedi ( or. Kazan'in tek metrosu status=0 ama
+        # yine de gorunmeli). Sadece sehir filtresi uygulanir.
         base_sql = (
             "SELECT DISTINCT metro FROM solgar_prm.prm_sales_metro "
-            "WHERE status = 1 AND metro IS NOT NULL AND metro <> '' "
+            "WHERE metro IS NOT NULL AND metro <> '' "
         )
 
         def _run(where_extra, params):
