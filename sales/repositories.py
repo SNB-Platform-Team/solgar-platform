@@ -386,41 +386,38 @@ class PharmacyRepository:
     def metros(self, brand: str = "", city: str = "") -> list:
         """Метро — solgar_prm.prm_sales_metro'dan, sehre gore.
 
-        Olga combobox: metro ayri referans tablosunda (prm_sales_metro:
-        city, metro). Sehir secilince o sehrin metrolari gelir. PrmMetro
-        managed=False modeli uzerinden okunur; tabloya erisilemezse eski
-        davranisa (pharmacy tablosundan distinct) doner.
+        ONEMLI: bu tablo solgar_prm semasinda ve uygulama DB kullanicisinin
+        (solgar_app) oraya SELECT izni YOK. chains()/subchains() gibi
+        refdb baglantisi (external_user — solgar_prm'e erisimi var) uzerinden
+        ham SQL ile okunur. refdb'ye erisilemezse eski davranisa (pharmacy
+        tablosundan distinct) doner.
 
-        Sehir eslemesi toleransli: tam eslesme once denenir, hic sonuc
-        cikmazsa trim/case-insensitive eslesmeye dusulur (gorunmez karakter
-        veya bastaki/sondaki bosluk farklarina karsi)."""
+        Sehir eslemesi toleransli: once tam eslesme, bos cikarsa trim +
+        buyuk/kucuk harf (LOWER/TRIM) eslesmesi denenir."""
+        from django.db import connections
+
+        base_sql = (
+            "SELECT DISTINCT metro FROM solgar_prm.prm_sales_metro "
+            "WHERE status = 1 AND metro IS NOT NULL AND metro <> '' "
+        )
+
+        def _run(where_extra, params):
+            sql = base_sql + where_extra + "ORDER BY metro"
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql, params)
+                return [str(r[0]).strip() for r in cur.fetchall()
+                        if r[0] and str(r[0]).strip()]
+
         try:
-            from .models import PrmMetro
-
-            base = PrmMetro.objects.filter(status=1).exclude(
-                metro__isnull=True).exclude(metro="")
-
-            def _collect(qs):
-                vals = (qs.values_list("metro", flat=True)
-                        .distinct().order_by("metro"))
-                return [str(v).strip() for v in vals if v and str(v).strip()]
-
             if not city:
-                return _collect(base)
-
+                return _run("", [])
             city_clean = city.strip()
-            # 1) Once tam eslesme (en hizli, indeks dostu).
-            result = _collect(base.filter(city=city_clean))
+            # 1) Tam eslesme (indeks dostu).
+            result = _run("AND city = %s ", [city_clean])
             if result:
                 return result
-            # 2) Bos cikarsa: bastaki/sondaki bosluk ve buyuk/kucuk harf
-            #    farklarini tolere et (iexact + trim). SP ornegi gibi veriler
-            #    bu sayede yakalanir.
-            result = _collect(base.filter(city__iexact=city_clean))
-            if result:
-                return result
-            # 3) Hala bos: icinde-gecer (son care; "Saint Petersburg " vb.)
-            return _collect(base.filter(city__icontains=city_clean))
+            # 2) Bos cikarsa: bastaki/sondaki bosluk + buyuk/kucuk harf tolere.
+            return _run("AND LOWER(TRIM(city)) = LOWER(%s) ", [city_clean])
         except Exception:
             return self._distinct(brand, "metro", city=city)
 
