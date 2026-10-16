@@ -1,10 +1,64 @@
 """
-sales app — data access layer. ORM only, no raw SQL.
+sales app — data access layer.
 """
 
 from django.db.models import QuerySet
 
 from .models import SalesRecord
+
+
+# ======================================================================
+# Global Address referans tablolari (Olga) — solgar_prm semasinda.
+# Uygulama DB kullanicisi (solgar_app) solgar_prm'e erisemez, bu yuzden
+# bu tablolar refdb baglantisi (external_user) uzerinden ham SQL ile
+# okunur. Hem PharmacyRepository hem DoctorRepository ayni kaynagi
+# kullanir, bu yuzden helper'lar modul seviyesinde.
+#
+#   prm_address_group:  country(=Область) | region(=Регион) | city(=Город)
+#   prm_sales_district: id | status | district(=Метро/Округ)
+# ======================================================================
+
+def _addr_group_distinct(column: str, country: str = "", region: str = "") -> list:
+    """prm_address_group'tan bir kolonun distinct degerleri, ust seviyelere
+    gore filtreli. 'country'=Область kolonu, 'region'=Регион kolonu.
+
+    column/filtre kolon adlari kod-kontrollu sabitler (kullanici girdisi
+    degil), degerler parametreli (%s) — SQL injection yok."""
+    from django.db import connections
+
+    sql = (
+        f"SELECT DISTINCT {column} FROM solgar_prm.prm_address_group "
+        f"WHERE {column} IS NOT NULL AND {column} <> '' "
+    )
+    params = []
+    # Ust seviye filtreler: Область (country kolonu) ve Регион (region kolonu).
+    if country:
+        sql += "AND country = %s "
+        params.append(country)
+    if region:
+        sql += "AND region = %s "
+        params.append(region)
+    sql += f"ORDER BY {column}"
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql, params)
+        return [str(r[0]).strip() for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()]
+
+
+def _sales_district_all() -> list:
+    """prm_sales_district'teki tum district (Метро/Округ) degerleri.
+    Tabloda region/city bagi yok — filtresiz tam liste."""
+    from django.db import connections
+
+    sql = (
+        "SELECT DISTINCT district FROM solgar_prm.prm_sales_district "
+        "WHERE district IS NOT NULL AND district <> '' "
+        "ORDER BY district"
+    )
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql)
+        return [str(r[0]).strip() for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()]
 
 
 class SalesRepository:
@@ -233,16 +287,34 @@ class DoctorRepository:
         return self._distinct("country")
 
     def areas(self, country: str = "") -> list:
-        """Distinct areas, optionally within a country."""
-        return self._distinct("area", country=country)
+        """Область — solgar_prm.prm_address_group (country kolonu = Область).
+        Apteka ile ayni referans tablosu. refdb yoksa doctor_data'dan."""
+        try:
+            return _addr_group_distinct("country")
+        except Exception:
+            return self._distinct("area", country=country)
 
     def regions(self, country: str = "", area: str = "") -> list:
-        """Distinct regions, optionally within a country/area."""
-        return self._distinct("region", country=country, area=area)
+        """Регион — prm_address_group.region, secilen Область'a (area) gore."""
+        try:
+            return _addr_group_distinct("region", country=area)
+        except Exception:
+            return self._distinct("region", country=country, area=area)
 
     def cities(self, country: str = "", area: str = "", region: str = "") -> list:
-        """Distinct cities, optionally within country/area/region."""
-        return self._distinct("city", country=country, area=area, region=region)
+        """Город — prm_address_group.city, secilen Область+Регион'a gore."""
+        try:
+            return _addr_group_distinct("city", country=area, region=region)
+        except Exception:
+            return self._distinct("city", country=country, area=area, region=region)
+
+    def metros(self, country: str = "", area: str = "", region: str = "") -> list:
+        """Метро/Округ — solgar_prm.prm_sales_district (filtresiz tum liste).
+        Apteka ile ayni kaynak. refdb yoksa doctor_data.district'ten."""
+        try:
+            return _sales_district_all()
+        except Exception:
+            return self._distinct("district")
 
     def districts(self, country: str = "", area: str = "", region: str = "") -> list:
         """Distinct districts. Java's district combo is a flat list, but we
@@ -372,55 +444,35 @@ class PharmacyRepository:
         return self._distinct(brand, "country")
 
     def areas(self, brand: str = "", country: str = "") -> list:
-        """Distinct areas within a country."""
-        return self._distinct(brand, "area", country=country)
+        """Область — solgar_prm.prm_address_group'tan (Olga'nin referans
+        tablosu). Tablodaki 'country' kolonu = Область. Ulke bagi yok, hepsi
+        listelenir. refdb erisilemezse pharmacy tablosundan distinct."""
+        try:
+            return _addr_group_distinct("country")
+        except Exception:
+            return self._distinct(brand, "area", country=country)
 
     def regions(self, brand: str = "", country: str = "", area: str = "") -> list:
-        """Distinct regions within country/area."""
-        return self._distinct(brand, "region", country=country, area=area)
+        """Регион — prm_address_group.region, secilen Область'a (area) gore."""
+        try:
+            return _addr_group_distinct("region", country=area)
+        except Exception:
+            return self._distinct(brand, "region", country=country, area=area)
 
     def cities(self, brand: str = "", country: str = "", area: str = "", region: str = "") -> list:
-        """Distinct cities within country/area/region."""
-        return self._distinct(brand, "city", country=country, area=area, region=region)
+        """Город — prm_address_group.city, secilen Область+Регион'a gore."""
+        try:
+            return _addr_group_distinct("city", country=area, region=region)
+        except Exception:
+            return self._distinct(brand, "city", country=country, area=area, region=region)
 
     def metros(self, brand: str = "", city: str = "") -> list:
-        """Метро — solgar_prm.prm_sales_metro'dan, sehre gore.
-
-        ONEMLI: bu tablo solgar_prm semasinda ve uygulama DB kullanicisinin
-        (solgar_app) oraya SELECT izni YOK. chains()/subchains() gibi
-        refdb baglantisi (external_user — solgar_prm'e erisimi var) uzerinden
-        ham SQL ile okunur. refdb'ye erisilemezse eski davranisa (pharmacy
-        tablosundan distinct) doner.
-
-        Sehir eslemesi toleransli: once tam eslesme, bos cikarsa trim +
-        buyuk/kucuk harf (LOWER/TRIM) eslesmesi denenir."""
-        from django.db import connections
-
-        # Not: status (aktif/pasif) filtresi UYGULANMAZ — Olga tum metrolarin
-        # sehrine gore gelmesini istedi ( or. Kazan'in tek metrosu status=0 ama
-        # yine de gorunmeli). Sadece sehir filtresi uygulanir.
-        base_sql = (
-            "SELECT DISTINCT metro FROM solgar_prm.prm_sales_metro "
-            "WHERE metro IS NOT NULL AND metro <> '' "
-        )
-
-        def _run(where_extra, params):
-            sql = base_sql + where_extra + "ORDER BY metro"
-            with connections["refdb"].cursor() as cur:
-                cur.execute(sql, params)
-                return [str(r[0]).strip() for r in cur.fetchall()
-                        if r[0] and str(r[0]).strip()]
-
+        """Метро — solgar_prm.prm_sales_district'ten (Olga'nin referans
+        tablosu: id, status, district). Tabloda region/city bagi YOK, bu
+        yuzden tum district listesi filtresiz doner. refdb erisilemezse
+        pharmacy tablosundan distinct metro'ya doner."""
         try:
-            if not city:
-                return _run("", [])
-            city_clean = city.strip()
-            # 1) Tam eslesme (indeks dostu).
-            result = _run("AND city = %s ", [city_clean])
-            if result:
-                return result
-            # 2) Bos cikarsa: bastaki/sondaki bosluk + buyuk/kucuk harf tolere.
-            return _run("AND LOWER(TRIM(city)) = LOWER(%s) ", [city_clean])
+            return _sales_district_all()
         except Exception:
             return self._distinct(brand, "metro", city=city)
 

@@ -1263,6 +1263,9 @@ def doctor_filter_options_api(request):
             options = repo.regions(country=country, area=area)
         elif level == "city":
             options = repo.cities(country=country, area=area, region=region)
+        elif level == "metro":
+            # Метро/Округ — prm_sales_district (filtresiz tum liste).
+            options = repo.metros(country=country, area=area, region=region)
         else:
             options = []
         return Response({"level": level, "options": list(options)})
