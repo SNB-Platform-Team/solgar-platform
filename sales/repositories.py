@@ -389,18 +389,38 @@ class PharmacyRepository:
         Olga combobox: metro ayri referans tablosunda (prm_sales_metro:
         city, metro). Sehir secilince o sehrin metrolari gelir. PrmMetro
         managed=False modeli uzerinden okunur; tabloya erisilemezse eski
-        davranisa (pharmacy tablosundan distinct) doner."""
+        davranisa (pharmacy tablosundan distinct) doner.
+
+        Sehir eslemesi toleransli: tam eslesme once denenir, hic sonuc
+        cikmazsa trim/case-insensitive eslesmeye dusulur (gorunmez karakter
+        veya bastaki/sondaki bosluk farklarina karsi)."""
         try:
             from .models import PrmMetro
 
-            qs = PrmMetro.objects.all()
-            # Sadece aktif (status=1) kayitlar — pasifleri dropdown'a alma.
-            qs = qs.filter(status=1)
-            if city:
-                qs = qs.filter(city=city)
-            vals = (qs.exclude(metro__isnull=True).exclude(metro="")
-                    .values_list("metro", flat=True).distinct().order_by("metro"))
-            return [str(v).strip() for v in vals if v and str(v).strip()]
+            base = PrmMetro.objects.filter(status=1).exclude(
+                metro__isnull=True).exclude(metro="")
+
+            def _collect(qs):
+                vals = (qs.values_list("metro", flat=True)
+                        .distinct().order_by("metro"))
+                return [str(v).strip() for v in vals if v and str(v).strip()]
+
+            if not city:
+                return _collect(base)
+
+            city_clean = city.strip()
+            # 1) Once tam eslesme (en hizli, indeks dostu).
+            result = _collect(base.filter(city=city_clean))
+            if result:
+                return result
+            # 2) Bos cikarsa: bastaki/sondaki bosluk ve buyuk/kucuk harf
+            #    farklarini tolere et (iexact + trim). SP ornegi gibi veriler
+            #    bu sayede yakalanir.
+            result = _collect(base.filter(city__iexact=city_clean))
+            if result:
+                return result
+            # 3) Hala bos: icinde-gecer (son care; "Saint Petersburg " vb.)
+            return _collect(base.filter(city__icontains=city_clean))
         except Exception:
             return self._distinct(brand, "metro", city=city)
 
