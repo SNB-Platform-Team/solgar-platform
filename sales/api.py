@@ -1223,6 +1223,7 @@ def pharmacy_filter_options_api(request):
         "marketing_staff": _safe(repo.marketing_staff, brand),
         "assortiments": _safe(repo.assortiments, brand),
         "skus": _safe(repo.skus, brand),
+        "statuses": _safe(repo.pharmacy_statuses, brand, country=country),
     }
     cache.set(cache_key, result, 900)
     return Response(result)

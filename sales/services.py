@@ -836,13 +836,17 @@ class PharmacyViewService:
         if pharmacy_address:
             qs = qs.filter(pharmacy_address__icontains=pharmacy_address)
 
-        # Genis arama: isim + sehir + adres (tek kutu, cok-kullanici dostu)
+        # Genis arama (tek kutu, cok-kullanici dostu).
+        # Not: apteka tablosunda ayri 'pharmacy_name' kolonu YOK; apteka
+        # group_company (zincir) + adres + sehir + no + metro ile tanimlanir.
         if search:
             from django.db.models import Q
             qs = qs.filter(
-                Q(pharmacy_name__icontains=search)
-                | Q(city__icontains=search)
+                Q(group_company__icontains=search)
                 | Q(pharmacy_address__icontains=search)
+                | Q(city__icontains=search)
+                | Q(pharmacy_no__icontains=search)
+                | Q(metro__icontains=search)
             )
 
         qs = qs.order_by("country", "area", "region", "city", "group_company")
@@ -889,7 +893,12 @@ class PharmacyWriteService:
         self.repository = PharmacyRepository()
 
     def _clean(self, data: dict) -> dict:
-        """Keep known fields; coerce int fields."""
+        """Keep known fields; coerce int fields.
+
+        Статус eslemesi: formdaki 'status' alani (VIP/GOLD/STANDARD) DB'de
+        pharmacy_group kolonuna yazilir. Not: model'deki 'status' INTEGER bir
+        soft-delete bayragidir (1/0) — formun metin statusu oraya ASLA yazilmaz,
+        pharmacy_group'a gider."""
         cleaned = {}
         for f in self.EDITABLE_FIELDS:
             if f in data:
@@ -898,6 +907,11 @@ class PharmacyWriteService:
             if f in data:
                 raw = str(data.get(f, "")).strip()
                 cleaned[f] = int(raw) if raw.lstrip("-").isdigit() else 0
+        # Form 'status' (VIP/GOLD/STANDARD) -> pharmacy_group. Form explicit bir
+        # pharmacy_group gondermediyse status'u oraya yaz.
+        status_val = str(data.get("status", "")).strip()
+        if status_val and not cleaned.get("pharmacy_group"):
+            cleaned["pharmacy_group"] = status_val
         return cleaned
 
     def _check_corner(self, data: dict) -> None:

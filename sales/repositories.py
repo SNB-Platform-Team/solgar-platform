@@ -384,8 +384,25 @@ class PharmacyRepository:
         return self._distinct(brand, "city", country=country, area=area, region=region)
 
     def metros(self, brand: str = "", city: str = "") -> list:
-        """Distinct metros for a city (values cleaned of invisible chars)."""
-        return self._distinct(brand, "metro", city=city)
+        """Метро — solgar_prm.prm_sales_metro'dan, sehre gore.
+
+        Olga combobox: metro ayri referans tablosunda (prm_sales_metro:
+        city, metro). Sehir secilince o sehrin metrolari gelir. PrmMetro
+        managed=False modeli uzerinden okunur; tabloya erisilemezse eski
+        davranisa (pharmacy tablosundan distinct) doner."""
+        try:
+            from .models import PrmMetro
+
+            qs = PrmMetro.objects.all()
+            # Sadece aktif (status=1) kayitlar — pasifleri dropdown'a alma.
+            qs = qs.filter(status=1)
+            if city:
+                qs = qs.filter(city=city)
+            vals = (qs.exclude(metro__isnull=True).exclude(metro="")
+                    .values_list("metro", flat=True).distinct().order_by("metro"))
+            return [str(v).strip() for v in vals if v and str(v).strip()]
+        except Exception:
+            return self._distinct(brand, "metro", city=city)
 
     def districts(self, brand: str = "", country: str = "", area: str = "", region: str = "") -> list:
         """Distinct districts within country/area/region."""
@@ -436,6 +453,30 @@ class PharmacyRepository:
         except Exception:
             return self._distinct(brand, "subgroup_company",
                                   group_company=group_company, country=country)
+
+    def pharmacy_statuses(self, brand: str = "", country: str = "") -> list:
+        """Статус (pharmacy_group) secenekleri.
+
+        Olga: Rusya icin statuler prm_russia_chains.chain_groups_bn'de
+        (VIP / GOLD / INACTIVE ...). Diger ulkeler icin sadece STANDARD.
+        Her durumda STANDARD listede olur (default deger). DB'deki yazim
+        'STANDARD' (sonda D) — form da bu yazimi kullanir."""
+        if (country or "").strip().lower() != "russia":
+            return ["STANDARD"]
+        from django.db import connections
+        sql = ("SELECT DISTINCT chain_groups_bn FROM solgar_prm.prm_russia_chains "
+               "WHERE chain_groups_bn IS NOT NULL AND chain_groups_bn <> '' "
+               "ORDER BY chain_groups_bn")
+        try:
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql)
+                vals = [str(r[0]).strip() for r in cur.fetchall()
+                        if r[0] and str(r[0]).strip()]
+            if "STANDARD" not in vals:
+                vals.append("STANDARD")
+            return vals
+        except Exception:
+            return ["VIP", "GOLD", "INACTIVE", "STANDARD"]
 
     def pharmacy_categories(self, brand: str = "") -> list:
         """Distinct pharmacy categories."""

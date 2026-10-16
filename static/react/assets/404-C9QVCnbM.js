@@ -1,0 +1,1 @@
+import{x as e}from"./index-RG-okjw-.js";var t=e;export{t as component};
