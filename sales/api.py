@@ -1282,6 +1282,7 @@ def doctor_filter_options_api(request):
         "specialties": _safe(repo.specialties),
         "unified_specialties": _safe(repo.unified_specialties),
         "medreps": _safe(repo.medreps),
+        "clinics": _safe(repo.clinic_names),
     }
     cache.set("doctor_filter_opts", result, 900)
     return Response(result)
@@ -2473,6 +2474,13 @@ _PHARMACY_WRITABLE = [
     "pharmacy_work_tel",
 ]
 
+# Modeldeki IntegerField alanlar — bos string/None -> None, aksi halde int'e cevrilir.
+# (PharmacyBase: sku, cornerNo, marketing_staff_no, found_no, processed, status, pharmacy_id)
+_PHARMACY_INT_FIELDS = {
+    "sku", "cornerNo", "marketing_staff_no", "found_no",
+    "processed", "status", "pharmacy_id",
+}
+
 
 def _pharmacy_model(brand):
     """brand -> PharmacySolgar / PharmacyBounty."""
@@ -2503,10 +2511,7 @@ def pharmacy_create_api(request):
     brand = (data.get("brand") or "SOLGAR").strip()
     Model = _pharmacy_model(brand)
 
-    no = (data.get("pharmacy_no") or "").strip()
-    if not no:
-        return Response({"error": "Номер аптеки обязателен."}, status=400)
-
+    # Номер аптеки artik zorunlu degil (Olga: "не всегда есть").
     obj = Model(status=1)
     _pharmacy_apply_fields(obj, data)
     obj.entry_user = request.user.get_full_name() or request.user.username
@@ -2617,10 +2622,8 @@ def pharmacy_bulk_save_api(request):
     try:
         with transaction.atomic(using="refdb"):
             for r in rows:
-                no = (r.get("pharmacy_no") or "").strip()
-                if not no:
-                    continue
-
+                # Номер аптеки artik zorunlu degil (Olga: "не всегда есть") —
+                # номер olmayan satirlari da kaydet.
                 brand = (r.get("brand") or "SOLGAR").strip()
                 Model = _pharmacy_model(brand)
 

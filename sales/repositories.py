@@ -258,13 +258,62 @@ class DoctorRepository:
         from the values already present in doctor_data."""
         return self._distinct("medrep", brand=brand, country=country, area=area)
 
-    def specialties(self) -> list:
-        """Distinct specialties present in doctor_data."""
-        return self._distinct("specialty")
+    # --- reference dropdowns from solgar_prm (Olga's curated lists) ---
+
+    def _prm_distinct(self, table: str, column: str) -> list:
+        """
+        Distinct active (status=1) values of `column` from a solgar_prm
+        reference table, via raw SQL on the refdb connection (these tables
+        have no Django model). Table/column are code-controlled constants,
+        never user input, so string-interpolating them is safe here.
+        """
+        from django.db import connections
+
+        sql = (
+            f"SELECT DISTINCT {column} FROM solgar_prm.{table} "
+            f"WHERE status = 1 AND {column} IS NOT NULL AND {column} <> '' "
+            f"ORDER BY {column}"
+        )
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql)
+            return [
+                str(r[0]).strip()
+                for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()
+            ]
 
     def unified_specialties(self) -> list:
-        """Distinct unified specialties present in doctor_data."""
-        return self._distinct("unified_specialty")
+        """Основная специальность — from solgar_prm.sales_doctor_unspeciality.
+
+        Falls back to distinct doctor_data values if the reference table
+        is unreachable."""
+        try:
+            return self._prm_distinct(
+                "sales_doctor_unspeciality", "Unified_speciality"
+            )
+        except Exception:
+            return self._distinct("unified_specialty")
+
+    def specialties(self) -> list:
+        """Специальность (вторая спец) — from solgar_prm.sales_doctor_speciality.
+
+        Falls back to distinct doctor_data values if the reference table
+        is unreachable."""
+        try:
+            return self._prm_distinct("sales_doctor_speciality", "speciality")
+        except Exception:
+            return self._distinct("specialty")
+
+    def clinic_names(self) -> list:
+        """Название (клиника) — from solgar_prm.prm_sales_clinic_names.
+
+        Full list, not country-filtered (per request). Falls back to
+        distinct doctor_data clinic_name values if unreachable."""
+        try:
+            return self._prm_distinct("prm_sales_clinic_names", "clinic_name")
+        except Exception:
+            return self._distinct("clinic_name")
+
 
 class PharmacyRepository:
     """
