@@ -1,1 +1,0 @@
-import{x as e}from"./index-Bpso5-Pw.js";var t=e;export{t as component};

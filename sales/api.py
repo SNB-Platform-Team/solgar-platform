@@ -1306,12 +1306,23 @@ def me_api(request):
     while logged out (returns authenticated: false instead of 403).
     """
     if request.user and request.user.is_authenticated:
+        # React menuyu/route'u filtrelesin diye erisilebilir ekran kodlari.
+        # Superuser -> hepsi; access_level olan -> o seviyenin ekranlari;
+        # digeri -> bos. (authorization.permissions._user_screen_codes ile
+        # ayni kaynak, API korumasiyla tutarli.)
+        try:
+            from authorization.permissions import _user_screen_codes
+            screens = sorted(_user_screen_codes(request.user))
+        except Exception:
+            screens = []
         return Response({
             "authenticated": True,
             "username": request.user.username,
             "display_name": request.user.get_full_name() or request.user.username,
             "is_staff": request.user.is_staff,
+            "is_superuser": request.user.is_superuser,
             "country": getattr(request.user, "country", "") or "",
+            "screens": screens,
         })
     return Response({"authenticated": False})
 
