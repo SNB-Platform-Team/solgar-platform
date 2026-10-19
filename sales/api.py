@@ -2,6 +2,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from authorization.permissions import HasScreen
 from .views import OneCService
 
 
@@ -14,7 +15,7 @@ ONEC_API_TABS = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("ONEC_STOCK")])
 def onec_api(request):
     """
     1C stock data API (read-only). Returns a paginated, optionally filtered
@@ -100,7 +101,7 @@ DOC_MGR_PARAMETERS_API = ["TOTAL_QUANTITY", "TOTAL_CATEGORY"]
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR_MGR")])
 def doctor_managerial_api(request):
     """
     Doctor Managerial report API. Returns dropdown options plus, when run=1,
@@ -188,7 +189,7 @@ PHARM_MGR_REP_TYPES_API = ["REGIONS", "MAIN_DISTRICT", "CITY", "MED_REPS",
 PHARM_MGR_PARAMETERS_API = ["TOTAL_QUANTITY", "TOTAL_CATEGORY", "TOTAL_ACTIVENESS"]
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARM_MGR")])
 def pharm_managerial_api(request):
     """
     Pharmacy Managerial report API. Returns dropdown options plus, when run=1,
@@ -314,7 +315,7 @@ PHARMACY_API_BRANDS = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_api(request):
     """
     Pharmacy entry list API (read-only, paginated, searchable).
@@ -422,7 +423,7 @@ DOCTOR_API_BRANDS = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_api(request):
     """
     Doctor entry list API (read-only, paginated, searchable).
@@ -488,7 +489,7 @@ _CHAIN_REPORT_PAGE_SIZE = 200
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("CHAIN_REPORT")])
 def chain_report_api(request):
     """
     Chain sales report API (Аптечная сеть продаж). Date-range chain sales with
@@ -606,7 +607,7 @@ SALES_OBS_COMP_TYPES_API = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_OBS")])
 def sales_obs_api(request):
     """
     Sales Report Observation API (Просмотр Сток и Продажа). Monthly CHAIN_SALES
@@ -692,7 +693,7 @@ def sales_obs_api(request):
 # ==================== Sales Obs Filter Options API (cascading geo) ====================
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_OBS")])
 def sales_obs_filter_options_api(request):
     """
     Cascading geographic dropdown for the Sales Report Observation screen.
@@ -900,7 +901,7 @@ from datetime import datetime as _ul_datetime
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def sales_upload_options_api(request):
     """Dropdown options for the sales upload screen: active chains + countries."""
     from .models import ChainDefinition
@@ -915,7 +916,7 @@ def sales_upload_options_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def sales_upload_preview_api(request):
     """Parse an uploaded chain sales Excel file and return parsed rows (stateless)."""
     from .models import ChainDefinition
@@ -984,7 +985,7 @@ def sales_upload_preview_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def sales_upload_save_api(request):
     """Save previously previewed sales rows sent back by the frontend."""
     from .services import SalesUploadService, ParsedRow, ParseResult
@@ -1031,7 +1032,7 @@ def sales_upload_save_api(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def distributor_upload_options_api(request):
     """Dropdown options: active distributors, countries, operation types."""
     from .models import ChainDefinition, DistributorRecord
@@ -1053,7 +1054,7 @@ def distributor_upload_options_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def distributor_upload_preview_api(request):
     """Parse a distributor Excel file, return parsed rows as JSON (stateless)."""
     from .models import ChainDefinition
@@ -1104,7 +1105,7 @@ def distributor_upload_preview_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def distributor_upload_save_api(request):
     """Save previously previewed distributor rows."""
     from .services import DistributorUploadService, ParsedRow, ParseResult
@@ -1160,7 +1161,7 @@ def distributor_upload_save_api(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_filter_options_api(request):
     """
     Dropdown data for the Pharmacy screen filters. Brand-scoped.
@@ -1234,7 +1235,7 @@ def pharmacy_filter_options_api(request):
 # ==================== Doctor Filter Options API (cascading dropdowns) ====================
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_filter_options_api(request):
     """
     Dropdown data for the Doctor screen filters.
@@ -1318,7 +1319,7 @@ def me_api(request):
 # ==================== Chain Report Filter Options API (cascading) ====================
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("CHAIN_REPORT")])
 def chain_report_filter_options_api(request):
     """
     Dropdown data for the Chain Report (Аптечная сеть продаж) filters.
@@ -1407,7 +1408,7 @@ def profile_api(request):
 # ==================== Employees / Users list API ====================
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("EMPLOYEES")])
 def employees_api(request):
     """
     Staff (User) list for the Сотрудники screen. Paginated + searchable.
@@ -1544,7 +1545,7 @@ def country_options_api(request):
 # ==================== Storage options API (distributor, country-scoped) ====================
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("ONEC_STOCK")])
 def storage_options_api(request):
     """
     Distributor storage (склад) options from solgar_prm.prm_storages,
@@ -1728,7 +1729,7 @@ _DEPO_PAGE_SIZE = 200
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def depo_upload_preview_api(request):
     """
     Excel'i parse et, satirlari DistributorRecord'a batch_id + is_confirmed=False
@@ -1818,7 +1819,7 @@ def depo_upload_preview_api(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def depo_upload_page_api(request):
     """Bir batch'in belirli sayfasini dondur (DB pagination)."""
     from .models import DistributorRecord
@@ -1852,7 +1853,7 @@ def depo_upload_page_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DIST_UPLOAD")])
 def depo_upload_save_api(request):
     """Batch'i onayla (is_confirmed=True). Kayit zaten yapildi, sadece onay."""
     from .models import DistributorRecord
@@ -1943,7 +1944,7 @@ def _ph_config_for(chain_name, file_name):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_upload_preview_api(request):
     """
     Eczane Excel onizleme: parse -> SalesRecord'a batch_id + is_confirmed=False.
@@ -2062,7 +2063,7 @@ def _ph_row(rec, idx):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_upload_page_api(request):
     """Batch'in bir sayfasi (DB pagination)."""
     from .models import SalesRecord
@@ -2088,7 +2089,7 @@ def pharmacy_upload_page_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_upload_save_api(request):
     """Batch'i onayla (is_confirmed=True)."""
     from .models import SalesRecord
@@ -2126,7 +2127,7 @@ class _GridSheet:
         return _GridCell(None)
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_sheet_names_api(request):
     """Yuklenen Excel dosyasindaki sayfa (sheet) isimlerini dondurur.
     multipart: excel_file -> {"sheets": [...]}"""
@@ -2141,7 +2142,7 @@ def pharmacy_sheet_names_api(request):
 
 #counrty e gore aliyoruz
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_chains_api(request):
     from .pharmacy_country_chains import country_chains_for
 
@@ -2224,7 +2225,7 @@ def _doctor_apply_fields(doc, data):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_create_api(request):
     """Yeni doktor ekle (doctor_data'ya INSERT)."""
     from .models import Doctor
@@ -2249,7 +2250,7 @@ def doctor_create_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_update_api(request):
     """Mevcut doktoru guncelle (id ile, UPDATE)."""
     from .models import Doctor
@@ -2276,7 +2277,7 @@ def doctor_update_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_delete_api(request):
     """Doktoru sil. Soft delete (status=0) - guvenli, geri alinabilir."""
     from .models import Doctor
@@ -2302,7 +2303,7 @@ def doctor_delete_api(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_detail_api(request):
     """Tek doktorun tum alanlari (duzenleme formu icin). ?id=X"""
     from .models import Doctor
@@ -2322,7 +2323,7 @@ def doctor_detail_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_geocode_api(request):
     """
     Adres -> koordinat (point_x/y) + adres bilesenleri.
@@ -2506,7 +2507,7 @@ def _pharmacy_apply_fields(obj, data):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_create_api(request):
     """Yeni eczane ekle (brand'e gore tabloya INSERT)."""
     from django.utils import timezone
@@ -2529,7 +2530,7 @@ def pharmacy_create_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_update_api(request):
     """Eczaneyi guncelle (brand + id)."""
     data = request.data or {}
@@ -2554,7 +2555,7 @@ def pharmacy_update_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_delete_api(request):
     """Eczaneyi sil (soft delete status=0)."""
     data = request.data or {}
@@ -2578,7 +2579,7 @@ def pharmacy_delete_api(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_detail_api(request):
     """Tek eczanenin tum alanlari (duzenleme formu). ?brand=&id="""
     brand = (request.GET.get("brand") or "SOLGAR").strip()
@@ -2602,7 +2603,7 @@ def pharmacy_detail_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("PHARMACY")])
 def pharmacy_bulk_save_api(request):
     """
     Toplu eczane kaydetme (СОХРАНИТЬ). React'te ДОБАВИТЬ ile hazirlanan
@@ -2657,7 +2658,7 @@ def pharmacy_bulk_save_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("DOCTOR")])
 def doctor_bulk_save_api(request):
     """
     Toplu doktor kaydetme (СОХРАНИТЬ) - React'te ДОБАВИТЬ ile hazirlanan
@@ -2743,7 +2744,7 @@ _DIST_REPORT_TYPES = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("SALES_OBS")])
 def distributor_report_api(request):
     """
     Distributor gorumtuleme raporu (Storage Stock Observation).
@@ -2874,7 +2875,7 @@ _CHAIN_REPORT_TYPES = [
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("CHAIN_REPORT")])
 def chain_sales_report_api(request):
     """
     Eczane (aptechnoy seti) gorumtuleme raporu - report turleri.
