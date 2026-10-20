@@ -8,37 +8,74 @@ from .models import SalesRecord
 
 
 # ======================================================================
-# Global Address referans tablolari (Olga) — solgar_prm semasinda.
+# Global Address referans tablolari — solgar_prm semasinda.
 # Uygulama DB kullanicisi (solgar_app) solgar_prm'e erisemez, bu yuzden
 # bu tablolar refdb baglantisi (external_user) uzerinden ham SQL ile
 # okunur. Hem PharmacyRepository hem DoctorRepository ayni kaynagi
 # kullanir, bu yuzden helper'lar modul seviyesinde.
 #
-#   prm_address_group:  country(=Область) | region(=Регион) | city(=Город)
-#   prm_sales_district: id | status | district(=Метро/Округ)
+# Adres kaskadi — solgar_prm.prm_sales_addresses (eski Java programindaki
+# birebir mantik, PharmacyManagerialScreen/DoctorManagerialScreen):
+#   country | area | district | region | city | county
+#
+#   Страна  = country  (filtresiz)
+#   Область = area     WHERE country=<ulke>
+#   Регион  = region   WHERE area=<oblast> AND country=<ulke>   (iki kosul!)
+#   Город   = city     WHERE region=<regon>
+#
+#   prm_sales_district: id | status | district(=Метро/Округ) — filtresiz
 # ======================================================================
 
-def _addr_group_distinct(column: str, country: str = "", region: str = "") -> list:
-    """prm_address_group'tan bir kolonun distinct degerleri, ust seviyelere
-    gore filtreli. 'country'=Область kolonu, 'region'=Регион kolonu.
-
-    column/filtre kolon adlari kod-kontrollu sabitler (kullanici girdisi
-    degil), degerler parametreli (%s) — SQL injection yok."""
+def _prm_addr_areas(country: str = "") -> list:
+    """Область — prm_sales_addresses.area, ulkeye gore (country filtresi)."""
     from django.db import connections
-
-    sql = (
-        f"SELECT DISTINCT {column} FROM solgar_prm.prm_address_group "
-        f"WHERE {column} IS NOT NULL AND {column} <> '' "
-    )
+    sql = ("SELECT DISTINCT area FROM solgar_prm.prm_sales_addresses "
+           "WHERE area IS NOT NULL AND area <> '' ")
     params = []
-    # Ust seviye filtreler: Область (country kolonu) ve Регион (region kolonu).
     if country:
         sql += "AND country = %s "
         params.append(country)
+    sql += "ORDER BY area"
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql, params)
+        return [str(r[0]).strip() for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()]
+
+
+def _prm_addr_regions(country: str = "", area: str = "") -> list:
+    """Регион — prm_sales_addresses.region, Область (area) + ulkeye gore.
+
+    Java: getPRMDataTwoConditionsGroupBy(region, area=<oblast>, country=<ulke>)
+    — iki kosullu filtre, boylece farkli ulkelerin ayni area'si karismaz."""
+    from django.db import connections
+    sql = ("SELECT DISTINCT region FROM solgar_prm.prm_sales_addresses "
+           "WHERE region IS NOT NULL AND region <> '' ")
+    params = []
+    if area:
+        sql += "AND area = %s "
+        params.append(area)
+    if country:
+        sql += "AND country = %s "
+        params.append(country)
+    sql += "ORDER BY region"
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql, params)
+        return [str(r[0]).strip() for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()]
+
+
+def _prm_addr_cities(region: str = "") -> list:
+    """Город — prm_sales_addresses.city, secilen Регион (region) filtresine gore.
+
+    Java: getPRMDataGroupBy(city, region=<regon>) — tek kosul (region)."""
+    from django.db import connections
+    sql = ("SELECT DISTINCT city FROM solgar_prm.prm_sales_addresses "
+           "WHERE city IS NOT NULL AND city <> '' ")
+    params = []
     if region:
         sql += "AND region = %s "
         params.append(region)
-    sql += f"ORDER BY {column}"
+    sql += "ORDER BY city"
     with connections["refdb"].cursor() as cur:
         cur.execute(sql, params)
         return [str(r[0]).strip() for r in cur.fetchall()
@@ -287,24 +324,25 @@ class DoctorRepository:
         return self._distinct("country")
 
     def areas(self, country: str = "") -> list:
-        """Область — solgar_prm.prm_address_group (country kolonu = Область).
-        Apteka ile ayni referans tablosu. refdb yoksa doctor_data'dan."""
+        """Область — prm_sales_addresses.area, secilen ulkeye (country) gore.
+        refdb yoksa pharmacy tablosundan."""
         try:
-            return _addr_group_distinct("country")
+            return _prm_addr_areas(country=country)
         except Exception:
             return self._distinct("area", country=country)
 
     def regions(self, country: str = "", area: str = "") -> list:
-        """Регион — prm_address_group.region, secilen Область'a (area) gore."""
+        """Регион — prm_sales_addresses.region, Область (area) + ulkeye gore
+        (iki kosullu, Java mantigi)."""
         try:
-            return _addr_group_distinct("region", country=area)
+            return _prm_addr_regions(country=country, area=area)
         except Exception:
             return self._distinct("region", country=country, area=area)
 
     def cities(self, country: str = "", area: str = "", region: str = "") -> list:
-        """Город — prm_address_group.city, secilen Область+Регион'a gore."""
+        """Город — prm_sales_addresses.city, secilen Регион'a (region) gore."""
         try:
-            return _addr_group_distinct("city", country=area, region=region)
+            return _prm_addr_cities(region=region)
         except Exception:
             return self._distinct("city", country=country, area=area, region=region)
 
@@ -444,25 +482,25 @@ class PharmacyRepository:
         return self._distinct(brand, "country")
 
     def areas(self, brand: str = "", country: str = "") -> list:
-        """Область — solgar_prm.prm_address_group'tan (Olga'nin referans
-        tablosu). Tablodaki 'country' kolonu = Область. Ulke bagi yok, hepsi
-        listelenir. refdb erisilemezse pharmacy tablosundan distinct."""
+        """Область — prm_sales_addresses.area, secilen ulkeye (country) gore.
+        refdb yoksa pharmacy tablosundan."""
         try:
-            return _addr_group_distinct("country")
+            return _prm_addr_areas(country=country)
         except Exception:
             return self._distinct(brand, "area", country=country)
 
     def regions(self, brand: str = "", country: str = "", area: str = "") -> list:
-        """Регион — prm_address_group.region, secilen Область'a (area) gore."""
+        """Регион — prm_sales_addresses.region, Область (area) + ulkeye gore
+        (iki kosullu, Java mantigi)."""
         try:
-            return _addr_group_distinct("region", country=area)
+            return _prm_addr_regions(country=country, area=area)
         except Exception:
             return self._distinct(brand, "region", country=country, area=area)
 
     def cities(self, brand: str = "", country: str = "", area: str = "", region: str = "") -> list:
-        """Город — prm_address_group.city, secilen Область+Регион'a gore."""
+        """Город — prm_sales_addresses.city, secilen Регион'a (region) gore."""
         try:
-            return _addr_group_distinct("city", country=area, region=region)
+            return _prm_addr_cities(region=region)
         except Exception:
             return self._distinct(brand, "city", country=country, area=area, region=region)
 
