@@ -26,6 +26,23 @@ from .models import SalesRecord
 #   prm_sales_district: id | status | district(=Метро/Округ) — filtresiz
 # ======================================================================
 
+def _prm_countries() -> list:
+    """Страна — solgar_prm.prm_countries'teki tum aktif ulkeler.
+
+    Adres dropdown'larinin en ustu. country-options endpoint'i ile ayni
+    kaynak (9 ulke: Armenia..Kazakhistan..Uzbekistan), boylece doctor_data/
+    pharmacy_data'da henuz kaydi olmayan ulkeler de (or. Kazakhistan)
+    listelenir."""
+    from django.db import connections
+    sql = ("SELECT country FROM solgar_prm.prm_countries "
+           "WHERE status = 1 AND country IS NOT NULL AND country <> '' "
+           "ORDER BY country")
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql)
+        return [str(r[0]).strip() for r in cur.fetchall()
+                if r[0] is not None and str(r[0]).strip()]
+
+
 def _prm_addr_areas(country: str = "") -> list:
     """Область — prm_sales_addresses.area, ulkeye gore (country filtresi)."""
     from django.db import connections
@@ -320,8 +337,17 @@ class DoctorRepository:
     # --- address cascade: country -> area -> region -> city ---
 
     def countries(self) -> list:
-        """All distinct countries."""
-        return self._distinct("country")
+        """Страна — solgar_prm.prm_countries'teki tum ulkeler (9).
+
+        Eskiden doctor_data'dan distinct cekiyordu; bu yuzden henuz
+        doktor kaydi olmayan ulkeler (or. Kazakhistan) dropdown'da
+        gorunmuyordu. Artik adres kaskadinin kaynagi ile ayni:
+        country-options endpoint'i gibi prm_countries. refdb yoksa
+        eski davranisa duser."""
+        try:
+            return _prm_countries()
+        except Exception:
+            return self._distinct("country")
 
     def areas(self, country: str = "") -> list:
         """Область — prm_sales_addresses.area, secilen ulkeye (country) gore.
@@ -478,8 +504,17 @@ class PharmacyRepository:
     # --- address cascade: country -> area -> region -> city -> metro ---
 
     def countries(self, brand: str = "") -> list:
-        """Distinct countries for a brand."""
-        return self._distinct(brand, "country")
+        """Страна — solgar_prm.prm_countries'teki tum ulkeler (9).
+
+        Doctor sayfasi ile ayni: adres kaskadi (area/region/city)
+        prm_sales_addresses'ten geldigi icin Страna da prm_countries'ten
+        tam liste doner; boylece pharmacy kaydi olmayan ulkeler de
+        secilebilir. refdb yoksa eski (brand'e gore distinct) davranisa
+        duser."""
+        try:
+            return _prm_countries()
+        except Exception:
+            return self._distinct(brand, "country")
 
     def areas(self, brand: str = "", country: str = "") -> list:
         """Область — prm_sales_addresses.area, secilen ulkeye (country) gore.
