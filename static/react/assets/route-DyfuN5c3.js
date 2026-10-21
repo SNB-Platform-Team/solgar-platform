@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-X4uSX4-U.js";var t=e;export{t as component};

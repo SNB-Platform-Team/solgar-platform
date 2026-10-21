@@ -800,25 +800,63 @@ def _dashboard_my_cards(request):
     if not name:
         return {"medrep_name": "", "pharmacies": 0, "doctors": 0}
 
+    from django.db.models import Count
+
+    def _norm(v):
+        """Bos/None degerleri tek bir '—' etiketinde topla."""
+        s = (str(v).strip() if v is not None else "")
+        return s or "—"
+
+    # --- Apteka: toplam + region x category kirilimi (SOLGAR+BOUNTY birlesik) ---
+    # Yoneticinin SQL'i: union all (solgar+bounty) -> group by region, category.
     pharmacies = 0
-    doctors = 0
+    ph_breakdown = {}  # (region, category) -> count
     try:
         from .repositories import PharmacyRepository
         pr = PharmacyRepository()
         for brand in ("SOLGAR", "BOUNTY"):
             model = pr._model_for(brand)
-            pharmacies += model.objects.filter(
-                status=1, marketing_staff=name
-            ).count()
+            qs = (model.objects.filter(status=1, marketing_staff=name)
+                  .values("region", "pharmacy_category")
+                  .annotate(c=Count("*")))
+            for row in qs:
+                key = (_norm(row["region"]), _norm(row["pharmacy_category"]))
+                ph_breakdown[key] = ph_breakdown.get(key, 0) + row["c"]
+                pharmacies += row["c"]
     except Exception:
         pharmacies = 0
+        ph_breakdown = {}
+
+    # --- Doktor: toplam + region x category kirilimi ---
+    doctors = 0
+    dr_breakdown = {}
     try:
         from .models import Doctor
-        doctors = Doctor.objects.filter(status=1, medrep=name).count()
+        qs = (Doctor.objects.filter(status=1, medrep=name)
+              .values("region", "category")
+              .annotate(c=Count("*")))
+        for row in qs:
+            key = (_norm(row["region"]), _norm(row["category"]))
+            dr_breakdown[key] = dr_breakdown.get(key, 0) + row["c"]
+            doctors += row["c"]
     except Exception:
         doctors = 0
+        dr_breakdown = {}
 
-    return {"medrep_name": name, "pharmacies": pharmacies, "doctors": doctors}
+    def _rows(bd):
+        # category'ye gore sirala (SQL'deki 'order by category'), sonra region.
+        return [
+            {"region": r, "category": cat, "count": n}
+            for (r, cat), n in sorted(bd.items(), key=lambda kv: (kv[0][1], kv[0][0]))
+        ]
+
+    return {
+        "medrep_name": name,
+        "pharmacies": pharmacies,
+        "doctors": doctors,
+        "pharmacy_breakdown": _rows(ph_breakdown),
+        "doctor_breakdown": _rows(dr_breakdown),
+    }
 
 
 @api_view(["GET"])
