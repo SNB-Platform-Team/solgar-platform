@@ -780,18 +780,64 @@ def _dash_int(v):
         return 0
 
 
+def _dashboard_my_cards(request):
+    """Giris yapan medrep'in KENDI apteka + doktor kayit sayilari.
+
+    Sadece medrep (Сотрудник, is_staff=False) icin dondurulur; admin/menecer
+    icin None (frontend kartlari gostermez). Sayim medrep satir-filtresiyle
+    birebir ayni: apteka marketing_staff = kendi adi, doctor medrep = kendi
+    adi, status=1. Isim solgar_org.employees'ten (me_api ile ayni kaynak).
+    Kullaniciya ozel oldugu icin dashboard'in global cache'inden BAGIMSIZ,
+    her istekte hesaplanir. Eslesme yoksa (ad bos) 0."""
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated) or user.is_staff:
+        return None
+
+    try:
+        name = _medrep_name_from_email(getattr(user, "email", "") or "")
+    except Exception:
+        name = ""
+    if not name:
+        return {"medrep_name": "", "pharmacies": 0, "doctors": 0}
+
+    pharmacies = 0
+    doctors = 0
+    try:
+        from .repositories import PharmacyRepository
+        pr = PharmacyRepository()
+        for brand in ("SOLGAR", "BOUNTY"):
+            model = pr._model_for(brand)
+            pharmacies += model.objects.filter(
+                status=1, marketing_staff=name
+            ).count()
+    except Exception:
+        pharmacies = 0
+    try:
+        from .models import Doctor
+        doctors = Doctor.objects.filter(status=1, medrep=name).count()
+    except Exception:
+        doctors = 0
+
+    return {"medrep_name": name, "pharmacies": pharmacies, "doctors": doctors}
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def dashboard_api(request):
     """
     Dashboard summary API: headline counters, top chains, monthly sales trend.
     Cached 10 minutes.
+
+    `my_cards` (medrep'in kendi apteka/doktor sayisi) kullaniciya ozeldir ve
+    global cache disinda, her istekte hesaplanir; admin/menecer icin None.
     """
     from .services import ReportService, PharmacyViewService, DoctorViewService
 
     cached = _dash_cache.get("dashboard_summary_v1")
     if cached is not None:
-        return Response(cached)
+        payload = dict(cached)
+        payload["my_cards"] = _dashboard_my_cards(request)
+        return Response(payload)
 
     year = _dt_dash.date.today().year
     begin = f"{year}0101"
@@ -874,6 +920,8 @@ def dashboard_api(request):
     }
 
     _dash_cache.set("dashboard_summary_v1", payload, 600)
+    payload = dict(payload)
+    payload["my_cards"] = _dashboard_my_cards(request)
     return Response(payload)
 
 
