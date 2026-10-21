@@ -24,6 +24,29 @@ from authorization.decorators import require_screen
 from .forms import LoginForm
 
 
+# Email domain uzantisi -> ulke. SSO ile ilk kez olusan (сотрудник)
+# kullanicinin country'si buradan atanir; country-locked erisimi bu
+# degere gore calisir. Yeni ulke eklemek = buraya bir satir.
+_EMAIL_TLD_COUNTRY = {
+    "ru": "Russia",
+    "kz": "Kazakhistan",
+}
+
+
+def _country_from_email(email: str) -> str:
+    """Email adresinin domain uzantisindan ulke dondur.
+
+    'ccevik@solgarvitamin.ru' -> 'Russia', '...kz' -> 'Kazakhstan'.
+    Bilinmeyen uzanti ya da gecersiz email -> '' (kisit yok)."""
+    if not email or "@" not in email:
+        return ""
+    domain = email.rsplit("@", 1)[1].strip().lower()
+    if "." not in domain:
+        return ""
+    tld = domain.rsplit(".", 1)[1]
+    return _EMAIL_TLD_COUNTRY.get(tld, "")
+
+
 def verify_recaptcha(token: str, remote_ip: str | None = None) -> bool:
     """
     Verify a reCAPTCHA v3 token with Google's siteverify endpoint.
@@ -150,6 +173,11 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
             "first_name": name.split(" ")[0] if name else "",
             "last_name": " ".join(name.split(" ")[1:]) if " " in name else "",
             "user_type": UserType.EMPLOYEE,
+            # Ulke: email domain uzantisindan turet (sadece ILK olusturmada).
+            # .ru -> Russia, .kz -> Kazakhstan. Bilinmeyen uzanti -> bos
+            # (kisit yok). get_or_create defaults'unda oldugu icin sadece
+            # create aninda uygulanir; sonradan admin elle degistirirse ezilmez.
+            "country": _country_from_email(email),
         },
     )
 
@@ -210,3 +238,4 @@ def faq_view(request: HttpRequest) -> HttpResponse:
         "user_display": request.user.get_full_name() or request.user.username,
     }
     return render(request, "accounts/faq.html", context)
+ 
