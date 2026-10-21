@@ -450,8 +450,29 @@ def doctor_api(request):
     except (TypeError, ValueError):
         page = 1
 
+    # Satir-seviyesi guvenlik: medrep (Сотрудник, is_staff=False) SADECE kendi
+    # doktorlarini gorur (medrep = kendi adi). Bu kisit SERVER tarafinda zorunlu
+    # kilinir — frontend'de filtre panelini kaldirmak tek basina yeterli degil,
+    # cunku medrep API'yi dogrudan cagirip baskasinin doktorlarini cekebilir.
+    # Admin/Menecer (is_staff=True) icin kisit yok, hepsini gorur.
+    force_medrep = None
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and not user.is_staff:
+        name = ""
+        try:
+            name = _medrep_name_from_email(getattr(user, "email", "") or "")
+        except Exception:
+            name = ""
+        # Eslesme yoksa: eslesmeyecek bir sentinel -> bos liste (guvenli taraf).
+        force_medrep = name or "\x00__no_medrep_match__"
+
     try:
-        result = service.query(brand=brand, search=search, page=page)
+        if force_medrep is not None:
+            result = service.query(
+                brand=brand, search=search, page=page, medrep=force_medrep
+            )
+        else:
+            result = service.query(brand=brand, search=search, page=page)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 

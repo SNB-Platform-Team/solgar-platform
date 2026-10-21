@@ -1,0 +1,1 @@
+import{v as e}from"./index--61oLvPl.js";var t=e;export{t as component};

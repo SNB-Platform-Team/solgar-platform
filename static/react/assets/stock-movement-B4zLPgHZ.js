@@ -1,0 +1,1 @@
+import{r as e}from"./analytics-1c-fFgGuisz.js";var t=e;export{t as component};
