@@ -1294,11 +1294,33 @@ def doctor_filter_options_api(request):
 
 # ==================== Current user (auth check) API ====================
 
-from rest_framework.permissions import AllowAny as _AllowAny
+
+def _medrep_name_from_email(email: str) -> str:
+    """SSO mailinden medrep adini dondur (solgar_org.employees).
+
+    Eslesme: LOWER(TRIM(EMPLOYEE_EMAIL)) = LOWER(TRIM(email)), sadece
+    EMPLOYEE_ACTIVE='ACTIVE'. Birden fazla eslesirse ilk (id'ye gore).
+    Bulunamazsa ''. solgar_org'a solgar_app'in SELECT yetkisi olmayabilir,
+    bu yuzden solgar_prm gibi refdb baglantisindan okunur."""
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        return ""
+    from django.db import connections
+    sql = (
+        "SELECT EMPLOYEE_NAME FROM solgar_org.employees "
+        "WHERE LOWER(TRIM(EMPLOYEE_EMAIL)) = %s "
+        "AND UPPER(TRIM(EMPLOYEE_ACTIVE)) = 'ACTIVE' "
+        "AND EMPLOYEE_NAME IS NOT NULL AND EMPLOYEE_NAME <> '' "
+        "ORDER BY id LIMIT 1"
+    )
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql, [email])
+        row = cur.fetchone()
+    return str(row[0]).strip() if row and row[0] else ""
 
 
 @api_view(["GET"])
-@permission_classes([_AllowAny])
+@permission_classes([AllowAny])
 def me_api(request):
     """
     Returns the current user's auth state. React calls this on load to decide
@@ -1315,6 +1337,21 @@ def me_api(request):
             screens = sorted(_user_screen_codes(request.user))
         except Exception:
             screens = []
+
+        # Мед. представитель: medrep (Сотрудник, is_staff=False) kullanicinin
+        # SSO maili solgar_org.employees'teki ACTIVE bir medrep ile eslesirse
+        # EMPLOYEE_NAME doner. Frontend bu ismi doktor sayfasinda otomatik
+        # doldurup disable eder. Eslesme yoksa "" (bos ama yine disable).
+        # Admin/Menecer (is_staff=True) icin gonderilmez -> onlar serbest secer.
+        medrep_name = ""
+        if not request.user.is_staff:
+            try:
+                medrep_name = _medrep_name_from_email(
+                    getattr(request.user, "email", "") or ""
+                )
+            except Exception:
+                medrep_name = ""
+
         return Response({
             "authenticated": True,
             "username": request.user.username,
@@ -1322,6 +1359,7 @@ def me_api(request):
             "is_staff": request.user.is_staff,
             "is_superuser": request.user.is_superuser,
             "country": getattr(request.user, "country", "") or "",
+            "medrep_name": medrep_name,
             "screens": screens,
         })
     return Response({"authenticated": False})
