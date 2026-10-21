@@ -555,13 +555,37 @@ class PharmacyRepository:
 
     # --- other dropdowns derived from the pharmacy table ---
 
-    def chains(self, brand: str = "", country: str = "") -> list:
-        """Группа компаний — solgar_prm.prm_sales_chains'ten, ulkeye gore.
+    # Ulkeye ozel zincir tablolari: bu ulkelerde gruplar prm_sales_chains'te
+    # degil, kendi tablolarinda (country kolonu yok, tum tablo o ulkenindir).
+    # prm_sales_chains'te satiri olmayan bu ulkelerde dropdown bos geliyordu.
+    _CHAIN_TABLE_BY_COUNTRY = {
+        "ukraine": "solgar_prm.prm_ukraine_chains",
+    }
 
-        Olga: gruplar prm_sales_chains tablosunda (country, group_company).
-        Ulke secilmezse hepsini, secilirse o ulkenin gruplarini dondur.
-        Parametreli sorgu (SQL injection yok)."""
+    def chains(self, brand: str = "", country: str = "") -> list:
+        """Группа компаний — zincir listesi, ulkeye gore.
+
+        Cogu ulke prm_sales_chains tablosunda (country, group_company).
+        Bazi ulkelerin kendi zincir tablosu var (Russia -> prm_russia_chains
+        statu icin; Ukraine -> prm_ukraine_chains). Boyle ulkelerde o tablodan
+        okunur; aksi halde prm_sales_chains'ten country filtresiyle. Ulke
+        secilmezse prm_sales_chains'teki hepsi. Parametreli sorgu."""
         from django.db import connections
+
+        special = self._CHAIN_TABLE_BY_COUNTRY.get((country or "").strip().lower())
+        if special:
+            # Ulkeye ozel tablo: country kolonu yok, group_company ile gelir.
+            sql = ("SELECT DISTINCT group_company FROM " + special + " "
+                   "WHERE group_company IS NOT NULL AND group_company <> '' "
+                   "ORDER BY group_company")
+            try:
+                with connections["refdb"].cursor() as cur:
+                    cur.execute(sql)
+                    return [str(r[0]).strip() for r in cur.fetchall()
+                            if r[0] and str(r[0]).strip()]
+            except Exception:
+                return self._distinct(brand, "group_company", country=country)
+
         sql = ("SELECT DISTINCT group_company FROM solgar_prm.prm_sales_chains "
                "WHERE group_company IS NOT NULL AND group_company <> '' ")
         params = []
