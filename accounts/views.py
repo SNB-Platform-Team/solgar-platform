@@ -24,27 +24,35 @@ from authorization.decorators import require_screen
 from .forms import LoginForm
 
 
-# Email domain uzantisi -> ulke. SSO ile ilk kez olusan (сотрудник)
-# kullanicinin country'si buradan atanir; country-locked erisimi bu
-# degere gore calisir. Yeni ulke eklemek = buraya bir satir.
-_EMAIL_TLD_COUNTRY = {
-    "ru": "Russia",
-    "kz": "Kazakhistan",
-}
+def _country_from_employees(email: str) -> str:
+    """SSO mailinden ulkeyi dondur (solgar_org.employees.country).
 
-
-def _country_from_email(email: str) -> str:
-    """Email adresinin domain uzantisindan ulke dondur.
-
-    'ccevik@solgarvitamin.ru' -> 'Russia', '...kz' -> 'Kazakhstan'.
-    Bilinmeyen uzanti ya da gecersiz email -> '' (kisit yok)."""
+    Eslesme: LOWER(TRIM(EMPLOYEE_EMAIL)) = email, sadece EMPLOYEE_ACTIVE=
+    'ACTIVE'. Employees'teki country yazimi prm_countries ile birebir ayni
+    (Russia, Kazakhistan, Ukraine ...), bu yuzden country-lock ve Страна
+    dropdown ile dogrudan eslesir. Bulunamazsa '' (kisit yok; admin elle
+    girer). solgar_org'a solgar_app'in SELECT yetkisi olmayabilir, bu yuzden
+    solgar_prm gibi refdb baglantisindan okunur. Sadece ILK SSO olusturmada
+    (get_or_create defaults) cagrilir; sonradan admin elle degistirirse ezilmez.
+    """
+    email = (email or "").strip().lower()
     if not email or "@" not in email:
         return ""
-    domain = email.rsplit("@", 1)[1].strip().lower()
-    if "." not in domain:
+    from django.db import connections
+    sql = (
+        "SELECT country FROM solgar_org.employees "
+        "WHERE LOWER(TRIM(EMPLOYEE_EMAIL)) = %s "
+        "AND UPPER(TRIM(EMPLOYEE_ACTIVE)) = 'ACTIVE' "
+        "AND country IS NOT NULL AND country <> '' "
+        "ORDER BY id LIMIT 1"
+    )
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, [email])
+            row = cur.fetchone()
+        return str(row[0]).strip() if row and row[0] else ""
+    except Exception:
         return ""
-    tld = domain.rsplit(".", 1)[1]
-    return _EMAIL_TLD_COUNTRY.get(tld, "")
 
 
 def verify_recaptcha(token: str, remote_ip: str | None = None) -> bool:
@@ -173,11 +181,12 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
             "first_name": name.split(" ")[0] if name else "",
             "last_name": " ".join(name.split(" ")[1:]) if " " in name else "",
             "user_type": UserType.EMPLOYEE,
-            # Ulke: email domain uzantisindan turet (sadece ILK olusturmada).
-            # .ru -> Russia, .kz -> Kazakhstan. Bilinmeyen uzanti -> bos
-            # (kisit yok). get_or_create defaults'unda oldugu icin sadece
-            # create aninda uygulanir; sonradan admin elle degistirirse ezilmez.
-            "country": _country_from_email(email),
+            # Ulke: solgar_org.employees.country'den (SADECE ilk olusturmada).
+            # Employees'teki yazim prm_countries ile birebir ayni oldugu icin
+            # country-lock ve Страna dropdown ile dogrudan eslesir. Eslesme
+            # yoksa '' (kisit yok). defaults'ta oldugu icin yalnizca create
+            # aninda uygulanir; sonradan admin elle degistirirse ezilmez.
+            "country": _country_from_employees(email),
         },
     )
 
@@ -238,4 +247,3 @@ def faq_view(request: HttpRequest) -> HttpResponse:
         "user_display": request.user.get_full_name() or request.user.username,
     }
     return render(request, "accounts/faq.html", context)
- 
