@@ -348,6 +348,21 @@ def pharmacy_api(request):
         "marketing_staff", "pharmacy_activeness", "pharmacy_address",
     ]
     filters = {k: (request.GET.get(k) or "").strip() for k in fkeys}
+
+    # Satir-seviyesi guvenlik (doctor_api ile ayni mantik): medrep (Сотрудник,
+    # is_staff=False) SADECE kendi aptekalarini gorur. Apteka tablosunda med.
+    # temsilci kolonu 'marketing_staff'. Kisit SERVER tarafinda zorunlu — panel
+    # kaldirmak tek basina yetmez, API dogrudan cagrilabilir. Admin/Menecer
+    # (is_staff=True) icin kisit yok. Eslesme yoksa bos liste (guvenli taraf).
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and not user.is_staff:
+        name = ""
+        try:
+            name = _medrep_name_from_email(getattr(user, "email", "") or "")
+        except Exception:
+            name = ""
+        filters["marketing_staff"] = name or "\x00__no_medrep_match__"
+
     try:
         result = service.query(brand=brand, search=search, page=page, **filters)
     except Exception as exc:
