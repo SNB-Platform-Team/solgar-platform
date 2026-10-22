@@ -1,0 +1,1 @@
+import{a as e,t}from"./jsx-runtime-B-hcVAMW.js";import{l as n}from"./nav-utils-BfSO8qfj.js";import{t as r}from"./placeholder-B62G7PqZ.js";var i=e(t()),a=()=>(0,i.jsx)(r,{title:`HRlink`,description:`Интеграция с внешней системой HRlink пока не подключена.`,icon:n});export{a as component};
