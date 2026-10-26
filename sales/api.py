@@ -583,43 +583,59 @@ def chain_report_api(request):
     try:
         result = service.chain_report(
             main_group=main_group, sub_group=sub_group,
-            region=region, district=district, **filters
+            region=region, district=district,
+            page=page, page_size=_CHAIN_REPORT_PAGE_SIZE, **filters
         )
     except Exception as exc:
         return Response({"error": f"Ошибка отчета: {exc}"}, status=500)
 
-    qs = result["records"]
-    total = result["total_rows"]
-
-    size = _CHAIN_REPORT_PAGE_SIZE
-    start = (page - 1) * size
-    page_records = list(qs[start:start + size])
-    num_pages = max(1, (total + size - 1) // size)
-
     columns = ["Компания", "Наименование", "Сеть", "Дата", "Город",
                "Аптека", "Кол-во", "Сумма"]
+
+    # Tarih araligi zorunlu — secilmemisse bos sonuc + bilgi mesaji.
+    if result.get("needs_date_range"):
+        return Response({
+            "brands": CHAIN_REPORT_BRANDS_API,
+            "columns": columns,
+            "rows": [],
+            "total_rows": 0,
+            "page": 1, "num_pages": 1,
+            "has_prev": False, "has_next": False,
+            "message": "Выберите период (дата с и дата по) для формирования отчёта.",
+            "needs_date_range": True,
+            "totals": {"solgar_count": 0, "solgar_amount": 0,
+                       "bounty_count": 0, "bounty_amount": 0},
+            "f": {
+                "brand": request.GET.get("brand", ""), "chain_name": request.GET.get("chain_name", ""),
+                "country": request.GET.get("country", ""), "city": request.GET.get("city", ""),
+                "date_from": date_from, "date_to": date_to, "search": search,
+            },
+        })
+
+    # service dict satirlari (kaynak-agnostik) -> tablo satirlari.
     rows = []
-    for rec in page_records:
+    for r in result["rows"]:
+        rd = r.get("report_date")
         rows.append([
-            rec.get_brand_display() if hasattr(rec, "get_brand_display") else _json_safe(getattr(rec, "brand", "")),
-            _json_safe(getattr(rec, "product_name", "")),
-            _json_safe(getattr(rec, "chain_name", "")),
-            rec.report_date.strftime("%d.%m.%Y") if getattr(rec, "report_date", None) else "",
-            _json_safe(getattr(rec, "city", "") or ""),
-            _json_safe(getattr(rec, "pharmacy", "") or ""),
-            _json_safe(getattr(rec, "count", 0)),
-            _json_safe(getattr(rec, "amount", 0)),
+            _json_safe(r.get("brand_label", "")),
+            _json_safe(r.get("product_name", "")),
+            _json_safe(r.get("chain_name", "")),
+            rd.strftime("%d.%m.%Y") if rd else "",
+            _json_safe(r.get("city", "") or ""),
+            _json_safe(r.get("pharmacy", "") or ""),
+            _json_safe(r.get("count", 0)),
+            _json_safe(r.get("amount", 0)),
         ])
 
     return Response({
         "brands": CHAIN_REPORT_BRANDS_API,
         "columns": columns,
         "rows": rows,
-        "total_rows": total,
-        "page": page,
-        "num_pages": num_pages,
-        "has_prev": page > 1,
-        "has_next": page < num_pages,
+        "total_rows": result["total_rows"],
+        "page": result["page"],
+        "num_pages": result["num_pages"],
+        "has_prev": result["has_prev"],
+        "has_next": result["has_next"],
         "totals": {
             "solgar_count": _json_safe(result.get("solgar_count", 0)),
             "solgar_amount": _json_safe(result.get("solgar_amount", 0)),

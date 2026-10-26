@@ -391,29 +391,82 @@ class SalesViewService:
         options.update(self.repository.group_options(country=country))
         return options
 
-    def chain_report(self, main_group="", sub_group="", region="", district="", **filters) -> dict:
+    # API/UI brand filtre kodu ('SL'/'BN') <-> model degeri (SOLGAR/BOUNTY)
+    # ve legacy product_type kodu. Tek kaynaktan reconcile edilir.
+    _BRAND_API_TO_MODEL = {"SL": SalesRecord.Brand.SOLGAR,
+                           "BN": SalesRecord.Brand.BOUNTY}
+    _BRAND_API_TO_LEGACY = {"SL": "SL", "BN": "BN"}
+
+    def chain_report(self, main_group="", sub_group="", region="", district="",
+                     page: int = 1, page_size: int = 200, **filters) -> dict:
         """
-        Date-range chain-sales query with brand totals, plus optional
-        product-category and geographic filters resolved via reference data.
+        Date-range chain-sales report combining BOTH sources:
+          - legacy solgar_tst.sales_pharmacy (historical, read via refdb)
+          - sales_record (new platform uploads)
+        Brand totals + a single paginated page across both. A date range
+        (date_from AND date_to) is MANDATORY — without it nothing is queried
+        (the 45M-row legacy table must never be scanned unbounded).
+
+        Returns a normalized dict:
+          rows (one page of dicts), total_rows, page, num_pages, has_prev,
+          has_next, per-brand totals, needs_date_range (bool). The legacy
+          "records" QuerySet key is kept (empty) for backward compat with the
+          unused HTML view so it never raises.
         """
         from django.db.models import Sum
+        from django.db.models.functions import Lower
 
-        records = self.repository.filter_by_range(**filters)
+        date_from = filters.get("date_from")
+        date_to = filters.get("date_to")
 
-        # Product category filter: match sales product_name against ProductGroup.
+        empty = {
+            "records": SalesRecord.objects.none(),
+            "rows": [], "total_rows": 0, "page": 1, "num_pages": 1,
+            "has_prev": False, "has_next": False,
+            "solgar_count": 0, "solgar_amount": 0,
+            "bounty_count": 0, "bounty_amount": 0,
+        }
+
+        # --- mandatory date range guard ---
+        if not (date_from and date_to):
+            empty["needs_date_range"] = True
+            return empty
+        empty["needs_date_range"] = False
+
+        if page < 1:
+            page = 1
+        size = page_size
+
+        # --- brand reconciliation ---
+        api_brand = (filters.get("brand") or "").strip()
+        legacy_brand = self._BRAND_API_TO_LEGACY.get(api_brand, "")
+
+        # ================= sales_record (new) side =================
+        sr_filters = dict(filters)
+        # SalesRecord.brand stores SOLGAR/BOUNTY, not SL/BN -> translate.
+        if api_brand:
+            sr_filters["brand"] = self._BRAND_API_TO_MODEL.get(api_brand, "")
+            if not sr_filters["brand"]:
+                sr_filters.pop("brand", None)
+        else:
+            sr_filters.pop("brand", None)
+
+        records = self.repository.filter_by_range(**sr_filters)
+
+        # Product-category filter (via ProductGroup product names).
+        product_names = None
         if main_group or sub_group:
-            keys = self.repository.product_names_for_group(main_group, sub_group)
-            # Match case-insensitively: annotate lower(product_name) in Python-safe way.
-            from django.db.models.functions import Lower
-            records = records.annotate(pn_lower=Lower("product_name")).filter(pn_lower__in=keys)
+            product_names = self.repository.product_names_for_group(main_group, sub_group)
+            records = records.annotate(pn_lower=Lower("product_name")).filter(
+                pn_lower__in=product_names)
 
-        # Geographic filter: match sales city against AddressGroup.
-        # Sales cities carry settlement suffixes (" г", " с", " пгт"...) that
-        # reference cities lack, so we strip them before matching.
+        # Geographic filter (via AddressGroup cities, normalized).
+        city_keys = None
         if region or district:
             city_keys = self.repository.cities_for_region(region, district)
             id_city = list(
-                SalesRecord.objects.filter(id__in=records.values("id")).values_list("id", "city")
+                SalesRecord.objects.filter(id__in=records.values("id"))
+                .values_list("id", "city")
             )
             matching_ids = [
                 rid for rid, city in id_city
@@ -421,28 +474,73 @@ class SalesViewService:
             ]
             records = records.filter(id__in=matching_ids)
 
-        solgar = records.filter(brand=SalesRecord.Brand.SOLGAR).aggregate(
-            c=Sum("count"), a=Sum("amount")
-        )
-        bounty = records.filter(brand=SalesRecord.Brand.BOUNTY).aggregate(
-            c=Sum("count"), a=Sum("amount")
-        )
-        return {
-            "records": records,
-            "total_rows": records.count(),
-            "solgar_count": solgar["c"] or 0,
-            "solgar_amount": solgar["a"] or 0,
-            "bounty_count": bounty["c"] or 0,
-            "bounty_amount": bounty["a"] or 0,
+        sr_solgar = records.filter(brand=SalesRecord.Brand.SOLGAR).aggregate(
+            c=Sum("count"), a=Sum("amount"))
+        sr_bounty = records.filter(brand=SalesRecord.Brand.BOUNTY).aggregate(
+            c=Sum("count"), a=Sum("amount"))
+        sr_count = records.count()
+
+        # ================= legacy sales_pharmacy side =================
+        legacy_filters = {
+            "date_from": date_from, "date_to": date_to,
+            "chain_name": filters.get("chain_name", ""),
+            "country": filters.get("country", ""),
+            "brand_code": legacy_brand,
+            "city": filters.get("city", ""),
+            "search": filters.get("search", ""),
+            "product_names": product_names,   # None = filtre yok
+            "cities": city_keys,              # None = filtre yok
         }
+        legacy_count = self.repository.legacy_count(**legacy_filters)
+        legacy_tot = self.repository.legacy_totals(**legacy_filters)
+
+        # ================= combined totals =================
+        total_rows = legacy_count + sr_count
+        num_pages = max(1, (total_rows + size - 1) // size)
+        if page > num_pages:
+            page = num_pages
+
+        # ================= one page of rows (legacy first, then sr) ==
+        start = (page - 1) * size
+        end = start + size
+        rows: list[dict] = []
+
+        # legacy slice
+        if start < legacy_count:
+            l_limit = min(size, legacy_count - start)
+            rows.extend(self.repository.legacy_page(
+                limit=l_limit, offset=start, **legacy_filters))
+
+        # sales_record slice (continues after the legacy block)
+        if end > legacy_count and sr_count > 0:
+            sr_offset = max(0, start - legacy_count)
+            sr_take = size - len(rows)
+            if sr_take > 0:
+                for rec in records.order_by("chain_name", "product_name")[sr_offset:sr_offset + sr_take]:
+                    rows.append({
+                        "brand_label": rec.get_brand_display(),
+                        "product_name": rec.product_name or "",
+                        "chain_name": rec.chain_name or "",
+                        "report_date": rec.report_date,
+                        "city": rec.city or "",
+                        "pharmacy": rec.pharmacy or "",
+                        "count": rec.count or 0,
+                        "amount": rec.amount or 0,
+                    })
 
         return {
-            "records": records,
-            "total_rows": records.count(),
-            "solgar_count": solgar["c"] or 0,
-            "solgar_amount": solgar["a"] or 0,
-            "bounty_count": bounty["c"] or 0,
-            "bounty_amount": bounty["a"] or 0,
+            "records": SalesRecord.objects.none(),  # backward compat (HTML view)
+            "rows": rows,
+            "total_rows": total_rows,
+            "page": page,
+            "num_pages": num_pages,
+            "has_prev": page > 1,
+            "has_next": page < num_pages,
+            "needs_date_range": False,
+            "solgar_count": (sr_solgar["c"] or 0) + legacy_tot["solgar_count"],
+            "solgar_amount": (sr_solgar["a"] or 0) + legacy_tot["solgar_amount"],
+            "bounty_count": (sr_bounty["c"] or 0) + legacy_tot["bounty_count"],
+            "bounty_amount": (sr_bounty["a"] or 0) + legacy_tot["bounty_amount"],
         }
 
     @staticmethod

@@ -268,6 +268,133 @@ class SalesRepository:
             qs = qs.filter(district=district)
         return {c.lower() for c in qs.values_list("city_region", flat=True) if c}
 
+    # ------------------------------------------------------------------
+    # Legacy aptek satislari — solgar_tst.sales_pharmacy (45M+ satir, eski
+    # Java'nin tablosu). refdb uzerinden ham SQL ile okunur; tasinmaz.
+    # Chain report "eski + yeni" birlesik gosterim icin kullanilir.
+    # product_type: 'SL'=SOLGAR, 'BN'=BOUNTY, 'OB'=diger. sales_amount ve
+    # remaining_amount varchar oldugu icin SUM'da DECIMAL'e cast edilir.
+    # Kolon -> cikti: main_group=chain_name, sub_group=subgroup,
+    #   pharmacy_address=pharmacy, product_Name=product_name,
+    #   pharmacy_no=aptekno, sales_count=count, sales_amount=amount,
+    #   sales_date=report_date, sales_reader=salesreader.
+    # HER sorgu tarih araligi (date_from + date_to) ZORUNLU; filtresiz
+    # 45M tarama yapilmaz (service katmaninda garanti edilir).
+    # ------------------------------------------------------------------
+    _LEGACY_BRAND_CODE_TO_LABEL = {"SL": "Solgar", "BN": "Nature's Bounty",
+                                   "OB": "Other"}
+
+    def _legacy_where(self, date_from, date_to, chain_name="", country="",
+                      brand_code="", city="", search="",
+                      product_names=None, cities=None):
+        """Build the shared WHERE clause + params for sales_pharmacy reads.
+
+        product_names / cities: iterables for product-category / geographic
+        filters (lowercased), applied as IN(...) when given. brand_code is the
+        legacy code ('SL'/'BN'), passed straight to product_type.
+        Returns (where_sql, params). Date range is assumed present (caller
+        guarantees it)."""
+        clauses = ["sales_date >= %s", "sales_date < %s"]
+        # date_to end-exclusive: ertesi gun (datetime kolonunda gun-sonu dahil).
+        import datetime as _d
+        dt_to = date_to
+        if isinstance(dt_to, _d.date) and not isinstance(dt_to, _d.datetime):
+            dt_to = _d.datetime.combine(dt_to, _d.time()) + _d.timedelta(days=1)
+        params = [date_from, dt_to]
+        if chain_name:
+            clauses.append("main_group = %s")
+            params.append(chain_name)
+        if country:
+            clauses.append("country = %s")
+            params.append(country)
+        if brand_code:
+            clauses.append("product_type = %s")
+            params.append(brand_code)
+        if city:
+            clauses.append("city LIKE %s")
+            params.append(f"%{city}%")
+        if search:
+            clauses.append("product_Name LIKE %s")
+            params.append(f"%{search}%")
+        if product_names:
+            names = list(product_names)
+            if names:
+                ph = ",".join(["%s"] * len(names))
+                clauses.append(f"LOWER(product_Name) IN ({ph})")
+                params.extend(names)
+        if cities is not None:
+            names = list(cities)
+            if names:
+                ph = ",".join(["%s"] * len(names))
+                clauses.append(f"LOWER(city) IN ({ph})")
+                params.extend(names)
+            else:
+                # Geo filtre verildi ama eslesen sehir yok -> hic satir.
+                clauses.append("1 = 0")
+        return " AND ".join(clauses), params
+
+    def legacy_count(self, **filters) -> int:
+        """COUNT(*) of legacy sales_pharmacy rows matching the filters."""
+        from django.db import connections
+        where, params = self._legacy_where(**filters)
+        sql = f"SELECT COUNT(*) FROM solgar_tst.sales_pharmacy WHERE {where}"
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            return int(cur.fetchone()[0] or 0)
+
+    def legacy_totals(self, **filters) -> dict:
+        """Per-brand SUM(count)/SUM(amount) over the filtered legacy set."""
+        from django.db import connections
+        where, params = self._legacy_where(**filters)
+        sql = (
+            "SELECT product_type, "
+            "COALESCE(SUM(sales_count), 0), "
+            "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))), 0) "
+            f"FROM solgar_tst.sales_pharmacy WHERE {where} "
+            "GROUP BY product_type"
+        )
+        out = {"solgar_count": 0, "solgar_amount": 0,
+               "bounty_count": 0, "bounty_amount": 0}
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            for code, cnt, amt in cur.fetchall():
+                if code == "SL":
+                    out["solgar_count"] += int(cnt or 0)
+                    out["solgar_amount"] += amt or 0
+                elif code == "BN":
+                    out["bounty_count"] += int(cnt or 0)
+                    out["bounty_amount"] += amt or 0
+        return out
+
+    def legacy_page(self, *, limit, offset, **filters) -> list[dict]:
+        """One ordered page of legacy rows as normalized dicts."""
+        from django.db import connections
+        where, params = self._legacy_where(**filters)
+        sql = (
+            "SELECT product_type, product_Name, main_group, sales_date, "
+            "city, pharmacy_address, sales_count, "
+            "CAST(sales_amount AS DECIMAL(14,2)) "
+            f"FROM solgar_tst.sales_pharmacy WHERE {where} "
+            "ORDER BY main_group, product_Name "
+            "LIMIT %s OFFSET %s"
+        )
+        rows = []
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params + [int(limit), int(offset)])
+            for pt, pname, chain, sdate, city, pharm, cnt, amt in cur.fetchall():
+                rows.append({
+                    "brand_label": self._LEGACY_BRAND_CODE_TO_LABEL.get(
+                        pt, pt or ""),
+                    "product_name": pname or "",
+                    "chain_name": chain or "",
+                    "report_date": sdate,
+                    "city": city or "",
+                    "pharmacy": pharm or "",
+                    "count": int(cnt or 0),
+                    "amount": amt or 0,
+                })
+        return rows
+
 
 class DistributorRepository:
     """Data access for distributor records."""
