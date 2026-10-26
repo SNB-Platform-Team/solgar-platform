@@ -1663,8 +1663,8 @@ def employees_api(request):
 @permission_classes([IsAuthenticated])
 def country_options_api(request):
     """
-    Country dropdown options from solgar_prm.prm_countries, scoped to the
-    current user:
+    Country dropdown options from solgar_prm.prm_sales_addresses, scoped to
+    the current user:
       - Staff/admin: all active countries, dropdown editable.
       - Regular user with a country set: only that country, dropdown LOCKED.
 
@@ -1676,21 +1676,16 @@ def country_options_api(request):
         is_staff: bool,
       }
     """
-    from django.db import connections
+    from .repositories import _prm_countries
 
     user = request.user
     is_staff = bool(user.is_staff)
     user_country = (getattr(user, "country", "") or "").strip()
 
-    # Full active country list from prm_countries.
-    all_countries = []
+    # Full country list from prm_sales_addresses (DISTINCT country) — ayni
+    # kaynak Страна -> Область -> ... kaskadiyla. prm_countries prod'da yok.
     try:
-        with connections["refdb"].cursor() as cur:
-            cur.execute(
-                "SELECT country FROM solgar_prm.prm_countries "
-                "WHERE status = 1 ORDER BY country"
-            )
-            all_countries = [r[0] for r in cur.fetchall()]
+        all_countries = _prm_countries()
     except Exception:
         all_countries = []
 

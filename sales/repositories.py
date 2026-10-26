@@ -27,15 +27,18 @@ from .models import SalesRecord
 # ======================================================================
 
 def _prm_countries() -> list:
-    """Страна — solgar_prm.prm_countries'teki tum aktif ulkeler.
+    """Страна — solgar_prm.prm_sales_addresses'teki tum ulkeler (distinct).
 
-    Adres dropdown'larinin en ustu. country-options endpoint'i ile ayni
-    kaynak (9 ulke: Armenia..Kazakhistan..Uzbekistan), boylece doctor_data/
-    pharmacy_data'da henuz kaydi olmayan ulkeler de (or. Kazakhistan)
-    listelenir."""
+    Adres dropdown'larinin en ustu ve ayni kaynaktan (prm_sales_addresses)
+    beslenir, boylece Страна -> Область -> Регион -> Город kaskadi bastan
+    sona tutarli olur. prm_countries tablosu prod'da bulunmadigi icin
+    (adres tablosu referans alinir) ulkeler burada DISTINCT country ile
+    gelir: 9 ulke (Armenia, Azerbaijan, Belarusian, Kazakhistan, Kyrgystan,
+    Russia, Tajikistan, Ukraine, Uzbekistan), doctor_data/pharmacy_data'da
+    henuz kaydi olmayan ulkeler de (or. Kazakhistan) dahil."""
     from django.db import connections
-    sql = ("SELECT country FROM solgar_prm.prm_countries "
-           "WHERE status = 1 AND country IS NOT NULL AND country <> '' "
+    sql = ("SELECT DISTINCT country FROM solgar_prm.prm_sales_addresses "
+           "WHERE country IS NOT NULL AND country <> '' "
            "ORDER BY country")
     with connections["refdb"].cursor() as cur:
         cur.execute(sql)
