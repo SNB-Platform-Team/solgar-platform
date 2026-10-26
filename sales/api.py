@@ -3097,8 +3097,26 @@ def chain_sales_report_api(request):
             if not group:
                 raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
 
-            qs = SalesRecord.objects.filter(is_confirmed=True)
+            # Tarih araligi ZORUNLU — legacy sales_pharmacy (45M) filtresiz
+            # taranmaz. begin+end yoksa bos rapor + bilgi mesaji.
+            if not (begin and end):
+                report = {"columns": [], "rows": [], "total_rows": 0}
+                return Response({
+                    "options": {
+                        "rep_types": _CHAIN_REPORT_TYPES,
+                        "brands": [
+                            {"value": "SOLGAR", "label": "SOLGAR"},
+                            {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                            {"value": "OTHER", "label": "OTHER"},
+                        ],
+                    },
+                    "report": report,
+                    "error": "",
+                    "message": "Выберите период (дата с и дата по) для формирования отчёта.",
+                })
 
+            # ---- yeni platform verisi (sales_record) ----
+            qs = SalesRecord.objects.filter(is_confirmed=True)
             if brand:
                 qs = qs.filter(brand=brand)
             if country:
@@ -3122,12 +3140,85 @@ def chain_sales_report_api(request):
                 .order_by(*group)
             )
 
+            # grup anahtari -> [count, amount] birikimli sozluk
+            combined: dict = {}
+            for r in agg:
+                key = tuple(r.get(g, "") or "" for g in group)
+                combined.setdefault(key, [0, 0])
+                combined[key][0] += int(r.get("total_count") or 0)
+                combined[key][1] += r.get("total_amount") or 0
+
+            # ---- eski (legacy sales_pharmacy) verisi ----
+            # Sadece legacy'de net karsiligi olan rapor tiplerine eklenir.
+            # SUBGROUP/MAINGROUP legacy'de urun grubu DEGIL (zincir adi), bu
+            # yuzden onlar sadece sales_record'dan gelir.
+            _LEGACY_GROUP_COL = {
+                "CHAIN_SALES": "main_group",
+                "CITY_SALES": "city",
+                "PRODUCT_SALES": "product_Name",
+                "MEDREP_SALES": "sales_reader",
+                "BRAND_SALES": "product_type",
+            }
+            legacy_col = _LEGACY_GROUP_COL.get(rep_type)
+            if legacy_col:
+                from django.db import connections
+                import datetime as _d
+                # brand: API SOLGAR/BOUNTY -> legacy SL/BN
+                _b2legacy = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OB"}
+                _legacy2label = {"SL": "SOLGAR", "BN": "BOUNTY", "OB": "OTHER"}
+
+                where = ["sales_date >= %s", "sales_date < %s"]
+                # end'i gun-sonu dahil et (ertesi gun, exclusive)
+                try:
+                    end_dt = _d.datetime.strptime(end, "%Y-%m-%d") + _d.timedelta(days=1)
+                    end_x = end_dt.strftime("%Y-%m-%d")
+                except ValueError:
+                    end_x = end
+                params = [begin, end_x]
+                if brand:
+                    where.append("product_type = %s")
+                    params.append(_b2legacy.get(brand, brand))
+                if country:
+                    where.append("country = %s")
+                    params.append(country)
+                if chain:
+                    where.append("main_group = %s")
+                    params.append(chain)
+                if city:
+                    where.append("city = %s")
+                    params.append(city)
+                if product:
+                    where.append("product_Name = %s")
+                    params.append(product)
+                if medrep:
+                    where.append("sales_reader = %s")
+                    params.append(medrep)
+
+                sql = (
+                    f"SELECT {legacy_col} AS k, "
+                    "COALESCE(SUM(sales_count),0), "
+                    "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))),0) "
+                    f"FROM solgar_tst.sales_pharmacy WHERE {' AND '.join(where)} "
+                    f"GROUP BY {legacy_col}"
+                )
+                with connections["refdb"].cursor() as cur:
+                    cur.execute(sql, params)
+                    for k, cnt, amt in cur.fetchall():
+                        # BRAND_SALES: legacy kodu (SL/BN) -> etiket (SOLGAR/BOUNTY)
+                        if rep_type == "BRAND_SALES":
+                            k = _legacy2label.get(k, k or "")
+                        key = (k or "",)
+                        combined.setdefault(key, [0, 0])
+                        combined[key][0] += int(cnt or 0)
+                        combined[key][1] += amt or 0
+
+            # ---- birlesik sonucu satirlara dok ----
             columns = [_CHAIN_REPORT_LABELS.get(g, g) for g in group] + ["Кол-во", "Сумма"]
             rows = []
-            for r in agg:
-                row = [r.get(g, "") for g in group]
-                row.append(_json_safe(r.get("total_count") or 0))
-                row.append(_json_safe(r.get("total_amount") or 0))
+            for key in sorted(combined.keys(), key=lambda t: tuple(str(x) for x in t)):
+                row = list(key)
+                row.append(_json_safe(combined[key][0]))
+                row.append(_json_safe(combined[key][1]))
                 rows.append(row)
 
             report = {"columns": columns, "rows": rows, "total_rows": len(rows)}
