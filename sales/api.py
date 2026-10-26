@@ -2968,11 +2968,30 @@ def distributor_report_api(request):
             if not group:
                 raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
 
-            qs = DistributorRecord.objects.filter(is_confirmed=True)
+            # Tarih araligi ZORUNLU — legacy stock_sales_table (14M) filtresiz
+            # taranmaz. begin+end yoksa bos rapor + bilgi mesaji.
+            if not (begin and end):
+                return Response({
+                    "options": {
+                        "rep_types": _DIST_REPORT_TYPES,
+                        "operations": [
+                            {"value": "STOCK", "label": "STOCK"},
+                            {"value": "SALE", "label": "SALES"},
+                        ],
+                    },
+                    "report": {"columns": [], "rows": [], "total_rows": 0},
+                    "error": "",
+                    "message": "Выберите период (дата с и дата по) для формирования отчёта.",
+                })
 
-            # Operation (SALE->SALES uyumu: SALE ya da STOCK)
+            # normalize edilmis operation ('STOCK' / 'SALE')
+            op = ""
             if operation_type:
                 op = "SALE" if operation_type.startswith("SAL") else "STOCK"
+
+            # ---- yeni platform verisi (DistributorRecord) ----
+            qs = DistributorRecord.objects.filter(is_confirmed=True)
+            if op:
                 qs = qs.filter(operation_type=op)
             if distributor:
                 qs = qs.filter(distributor=distributor)
@@ -2995,13 +3014,82 @@ def distributor_report_api(request):
                 .order_by(*group)
             )
 
-            # Kolonlar: gruplama alanlari + Kол-во + Сумма
+            # grup anahtari -> [count, amount] birikimli sozluk
+            combined: dict = {}
+            for r in agg:
+                key = tuple(r.get(g, "") or "" for g in group)
+                combined.setdefault(key, [0, 0])
+                combined[key][0] += int(r.get("total_count") or 0)
+                combined[key][1] += r.get("total_amount") or 0
+
+            # ---- eski (legacy solgar_stk.stock_sales_table) verisi ----
+            # Kolon eslemesi: optype->operation_type, distributor, city,
+            # product->product_name, product_type->brand(SL/BN/OS).
+            # Grup alani -> legacy kolon:
+            _LEG_COL = {"operation_type": "optype", "distributor": "distributor",
+                        "city": "city", "product_name": "product",
+                        "brand": "product_type"}
+            from django.db import connections
+            import datetime as _d
+            _b2legacy = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OS"}
+            _legacy2label = {"SL": "SOLGAR", "BN": "BOUNTY", "OS": "OTHER"}
+            # frontend op -> legacy optype ('SALE' -> 'SALES')
+            _op2legacy = {"SALE": "SALES", "STOCK": "STOCK"}
+
+            where = ["rep_begin_date >= %s", "rep_end_date <= %s"]
+            params = [begin, end]
+            if op:
+                where.append("optype = %s")
+                params.append(_op2legacy.get(op, op))
+            if distributor:
+                where.append("distributor = %s")
+                params.append(distributor)
+            if city:
+                where.append("city = %s")
+                params.append(city)
+            if brand:
+                where.append("product_type = %s")
+                params.append(_b2legacy.get(brand, brand))
+            if product:
+                where.append("product = %s")
+                params.append(product)
+            # country: legacy stock_sales_table'da country kolonu YOK -> atlanir.
+
+            group_cols = [_LEG_COL[g] for g in group]
+            sql = (
+                f"SELECT {', '.join(group_cols)}, "
+                "COALESCE(SUM(count),0), "
+                "COALESCE(SUM(CAST(amount AS DECIMAL(14,2))),0) "
+                f"FROM solgar_stk.stock_sales_table WHERE {' AND '.join(where)} "
+                f"GROUP BY {', '.join(group_cols)}"
+            )
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql, params)
+                for rec in cur.fetchall():
+                    key_vals = list(rec[:-2])
+                    cnt, amt = rec[-2], rec[-1]
+                    # alan-bazli normalize: optype 'SALES'->'SALE',
+                    # product_type 'SL'->'SOLGAR' (sales_record ile ayni gorunum)
+                    norm = []
+                    for g, v in zip(group, key_vals):
+                        v = v or ""
+                        if g == "operation_type":
+                            v = "SALE" if str(v).startswith("SAL") else v
+                        elif g == "brand":
+                            v = _legacy2label.get(v, v)
+                        norm.append(v)
+                    key = tuple(norm)
+                    combined.setdefault(key, [0, 0])
+                    combined[key][0] += int(cnt or 0)
+                    combined[key][1] += amt or 0
+
+            # ---- birlesik sonucu satirlara dok ----
             columns = [_DIST_REPORT_LABELS.get(g, g) for g in group] + ["Кол-во", "Сумма"]
             rows = []
-            for r in agg:
-                row = [r.get(g, "") for g in group]
-                row.append(_json_safe(r.get("total_count") or 0))
-                row.append(_json_safe(r.get("total_amount") or 0))
+            for key in sorted(combined.keys(), key=lambda t: tuple(str(x) for x in t)):
+                row = list(key)
+                row.append(_json_safe(combined[key][0]))
+                row.append(_json_safe(combined[key][1]))
                 rows.append(row)
 
             report = {"columns": columns, "rows": rows, "total_rows": len(rows)}
