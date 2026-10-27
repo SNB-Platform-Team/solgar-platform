@@ -2034,25 +2034,120 @@ def depo_upload_page_api(request):
     })
 
 
+# Distributor upload onayinda yazilacak hedef: solgar_stk.stock_sales_table
+# (legacy, 14M satir, refdb). id auto_increment -> atlanir. uploadDate NOW().
+_STOCK_INSERT_SQL = (
+    "INSERT INTO solgar_stk.stock_sales_table "
+    "(status, distributor, optype, city, product, product_type, count, amount, "
+    " rep_begin_date, rep_end_date, client, legalAddress, actualAddress, INN, "
+    " segment, uploadDate) "
+    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+)
+# operation_type (SALE/STOCK) -> legacy optype ('SALE'->'SALES')
+_DEPO_OP_TO_LEGACY = {"SALE": "SALES", "STOCK": "STOCK"}
+# brand -> legacy product_type kodu (SL/BN/OS)
+_DEPO_BRAND_TO_PTYPE = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OS"}
+
+
 @api_view(["POST"])
 @permission_classes([HasScreen("DIST_UPLOAD")])
 def depo_upload_save_api(request):
-    """Batch'i onayla (is_confirmed=True). Kayit zaten yapildi, sadece onay."""
+    """
+    Distributor upload ONAY: taslak satirlari (DistributorRecord) okur ve
+    solgar_stk.stock_sales_table'a (legacy) yazar. Basarili olunca taslaklari
+    siler. Ayni distributor+donem zaten varsa tekrar yukleme ENGELLENIR.
+    stock_sales_table'da ID eslesme YOK — duz INSERT.
+    """
     from .models import DistributorRecord
+    from django.db import connections, transaction as _txn
+    import datetime as _d
 
     data = request.data or {}
     batch_id = (data.get("batch_id") or "").strip()
     if not batch_id:
         return Response({"error": "batch_id gerekli."}, status=400)
 
-    updated = DistributorRecord.objects.filter(
+    drafts = list(DistributorRecord.objects.filter(
         batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
-    ).update(is_confirmed=True)
-
-    if updated == 0:
+    ).order_by("id"))
+    if not drafts:
         return Response({"error": "Onaylanacak taslak bulunamadi (suresi dolmus olabilir)."}, status=400)
 
-    return Response({"created": updated, "error": ""})
+    distributor = drafts[0].distributor or ""
+    op_code = (drafts[0].operation_type or "").upper()
+    legacy_op = _DEPO_OP_TO_LEGACY.get(op_code, op_code)
+    begins = sorted({d.begin_date for d in drafts if d.begin_date})
+    ends = sorted({d.end_date for d in drafts if d.end_date})
+    bdate = begins[0] if begins else None
+    edate = ends[-1] if ends else None
+
+    # --- re-upload kontrolu: ayni distributor+optype+donem var mi? ---
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM solgar_stk.stock_sales_table "
+                "WHERE distributor = %s AND optype = %s "
+                "  AND rep_begin_date = %s AND rep_end_date = %s LIMIT 1",
+                [distributor, legacy_op, str(bdate), str(edate)],
+            )
+            if cur.fetchone():
+                return Response({"error": (
+                    f"Загрузка заблокирована: данные по «{distributor}» "
+                    f"({legacy_op}) за период {bdate}—{edate} уже есть в базе. "
+                    f"Повторная загрузка не допускается."
+                )}, status=400)
+    except Exception as exc:
+        return Response({"error": f"Ошибка проверки дублей: {exc}"}, status=500)
+
+    # --- INSERT tuple'lari ---
+    now = _d.datetime.now()
+
+    def _amt(v):
+        try:
+            from decimal import Decimal as _Dec
+            return f"{_Dec(str(v or 0)):.2f}"
+        except Exception:
+            return "0.00"
+
+    rows = []
+    for d in drafts:
+        ptype = _DEPO_BRAND_TO_PTYPE.get((d.brand or "").upper(),
+                                         (d.product_type or "SL")[:2].upper())
+        rows.append((
+            "1",                                   # status (NOT NULL, hep '1')
+            (d.distributor or "")[:45],            # distributor (NOT NULL)
+            legacy_op[:5],                         # optype (NOT NULL)
+            (d.city or "")[:100],                  # city (NOT NULL)
+            (d.product_name or "")[:255],          # product (NOT NULL)
+            ptype,                                 # product_type (NOT NULL)
+            int(d.count or 0),                     # count (NOT NULL)
+            _amt(d.amount),                        # amount
+            str(d.begin_date) if d.begin_date else None,  # rep_begin_date
+            str(d.end_date) if d.end_date else None,      # rep_end_date
+            (d.client or "")[:255] or None,        # client
+            (d.legal_address or "")[:255] or None, # legalAddress
+            (d.actual_address or "")[:255] or None,# actualAddress
+            (d.inn or "")[:255] or None,           # INN
+            (d.segment or "")[:255] or None,       # segment
+            now,                                   # uploadDate (NOT NULL, PK)
+        ))
+
+    # --- INSERT (refdb transaction, chunk'li) ---
+    try:
+        with _txn.atomic(using="refdb"):
+            with connections["refdb"].cursor() as cur:
+                CH = 5000
+                for i in range(0, len(rows), CH):
+                    cur.executemany(_STOCK_INSERT_SQL, rows[i:i + CH])
+    except Exception as exc:
+        return Response({"error": f"Ошибка записи в базу: {exc}"}, status=500)
+
+    # Basarili -> taslaklari sil
+    DistributorRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).delete()
+
+    return Response({"created": len(rows), "error": ""})
 
 
 # ==================== Eczane (parametrik parser) upload API - batch/taslak ====================
