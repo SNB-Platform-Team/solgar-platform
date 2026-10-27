@@ -2989,7 +2989,41 @@ def distributor_report_api(request):
             if operation_type:
                 op = "SALE" if operation_type.startswith("SAL") else "STOCK"
 
-            # ---- yeni platform verisi (DistributorRecord) ----
+            import datetime as _d
+            from django.db import connections
+
+            # ---- HAFTALIK pivot: begin'den 7'ser gun, end'e kadar ----
+            # Her blok [bstart, bend] (bend dahil). Sutun adi = blogun son gunu
+            # (Mon_DD). Son blok kisa olabilir. Resimdeki Java ekranindaki gibi.
+            try:
+                d_begin = _d.datetime.strptime(begin, "%Y-%m-%d").date()
+                d_end = _d.datetime.strptime(end, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError("Неверный формат даты (YYYY-MM-DD).")
+            if d_end < d_begin:
+                d_begin, d_end = d_end, d_begin
+
+            _MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            weeks = []  # (label, start_date, end_date_inclusive)
+            cur_start = d_begin
+            while cur_start <= d_end:
+                cur_end = min(cur_start + _d.timedelta(days=6), d_end)
+                label = f"{_MON[cur_end.month - 1]}_{cur_end.day:02d}"
+                weeks.append((label, cur_start, cur_end))
+                cur_start = cur_end + _d.timedelta(days=1)
+            n_weeks = len(weeks)
+
+            # grup anahtari -> [count_per_week_list, total]
+            combined: dict = {}
+
+            def _add(key, wi, val):
+                if key not in combined:
+                    combined[key] = [[0] * n_weeks, 0]
+                combined[key][0][wi] += int(val or 0)
+                combined[key][1] += int(val or 0)
+
+            # ---- yeni platform (DistributorRecord) — haftalara dagit ----
             qs = DistributorRecord.objects.filter(is_confirmed=True)
             if op:
                 qs = qs.filter(operation_type=op)
@@ -3003,41 +3037,28 @@ def distributor_report_api(request):
                 qs = qs.filter(country=country)
             if product:
                 qs = qs.filter(product_name=product)
-            if begin:
-                qs = qs.filter(begin_date__gte=begin)
-            if end:
-                qs = qs.filter(end_date__lte=end)
+            qs = qs.filter(begin_date__gte=d_begin, begin_date__lte=d_end)
 
-            agg = (
-                qs.values(*group)
-                .annotate(total_count=Sum("count"), total_amount=Sum("amount"))
-                .order_by(*group)
-            )
+            for rec in qs.values(*group, "begin_date", "count"):
+                bd = rec.get("begin_date")
+                if not bd:
+                    continue
+                wi = (bd - d_begin).days // 7
+                if wi < 0 or wi >= n_weeks:
+                    continue
+                key = tuple(rec.get(g, "") or "" for g in group)
+                _add(key, wi, rec.get("count") or 0)
 
-            # grup anahtari -> [count, amount] birikimli sozluk
-            combined: dict = {}
-            for r in agg:
-                key = tuple(r.get(g, "") or "" for g in group)
-                combined.setdefault(key, [0, 0])
-                combined[key][0] += int(r.get("total_count") or 0)
-                combined[key][1] += r.get("total_amount") or 0
-
-            # ---- eski (legacy solgar_stk.stock_sales_table) verisi ----
-            # Kolon eslemesi: optype->operation_type, distributor, city,
-            # product->product_name, product_type->brand(SL/BN/OS).
-            # Grup alani -> legacy kolon:
+            # ---- eski (legacy stock_sales_table) — haftalik CASE pivot ----
             _LEG_COL = {"operation_type": "optype", "distributor": "distributor",
                         "city": "city", "product_name": "product",
                         "brand": "product_type"}
-            from django.db import connections
-            import datetime as _d
             _b2legacy = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OS"}
             _legacy2label = {"SL": "SOLGAR", "BN": "BOUNTY", "OS": "OTHER"}
-            # frontend op -> legacy optype ('SALE' -> 'SALES')
             _op2legacy = {"SALE": "SALES", "STOCK": "STOCK"}
 
-            where = ["rep_begin_date >= %s", "rep_end_date <= %s"]
-            params = [begin, end]
+            where = ["rep_begin_date >= %s", "rep_begin_date <= %s"]
+            params = [str(d_begin), str(d_end)]
             if op:
                 where.append("optype = %s")
                 params.append(_op2legacy.get(op, op))
@@ -3053,23 +3074,32 @@ def distributor_report_api(request):
             if product:
                 where.append("product = %s")
                 params.append(product)
-            # country: legacy stock_sales_table'da country kolonu YOK -> atlanir.
+            # country: stock_sales_table'da yok -> atlanir.
 
             group_cols = [_LEG_COL[g] for g in group]
+            # Her hafta icin bir SUM(CASE ...) sutunu.
+            case_cols = []
+            case_params = []
+            for (_lbl, ws, we) in weeks:
+                case_cols.append(
+                    "COALESCE(SUM(CASE WHEN rep_begin_date >= %s "
+                    "AND rep_begin_date <= %s THEN count ELSE 0 END),0)"
+                )
+                case_params.extend([str(ws), str(we)])
+
             sql = (
-                f"SELECT {', '.join(group_cols)}, "
-                "COALESCE(SUM(count),0), "
-                "COALESCE(SUM(CAST(amount AS DECIMAL(14,2))),0) "
+                f"SELECT {', '.join(group_cols)}, {', '.join(case_cols)} "
                 f"FROM solgar_stk.stock_sales_table WHERE {' AND '.join(where)} "
                 f"GROUP BY {', '.join(group_cols)}"
             )
+            # SQL metninde SELECT (CASE param'lari) WHERE'den once gelir, bu
+            # yuzden case_params WHERE params'tan ONCE baglanir.
+            full_params = case_params + params
             with connections["refdb"].cursor() as cur:
-                cur.execute(sql, params)
+                cur.execute(sql, full_params)
                 for rec in cur.fetchall():
-                    key_vals = list(rec[:-2])
-                    cnt, amt = rec[-2], rec[-1]
-                    # alan-bazli normalize: optype 'SALES'->'SALE',
-                    # product_type 'SL'->'SOLGAR' (sales_record ile ayni gorunum)
+                    key_vals = list(rec[:len(group_cols)])
+                    week_vals = list(rec[len(group_cols):])
                     norm = []
                     for g, v in zip(group, key_vals):
                         v = v or ""
@@ -3079,18 +3109,30 @@ def distributor_report_api(request):
                             v = _legacy2label.get(v, v)
                         norm.append(v)
                     key = tuple(norm)
-                    combined.setdefault(key, [0, 0])
-                    combined[key][0] += int(cnt or 0)
-                    combined[key][1] += amt or 0
+                    for wi, wv in enumerate(week_vals):
+                        _add(key, wi, wv)
 
-            # ---- birlesik sonucu satirlara dok ----
-            columns = [_DIST_REPORT_LABELS.get(g, g) for g in group] + ["Кол-во", "Сумма"]
-            rows = []
+            # ---- satirlar: grup kolonlari + hafta sutunlari + TOTAL ----
+            week_labels = [w[0] for w in weeks]
+            columns = ([_DIST_REPORT_LABELS.get(g, g) for g in group]
+                       + week_labels + ["TOTAL"])
+
+            week_totals = [0] * n_weeks
+            grand_total = 0
+            data_rows = []
             for key in sorted(combined.keys(), key=lambda t: tuple(str(x) for x in t)):
-                row = list(key)
-                row.append(_json_safe(combined[key][0]))
-                row.append(_json_safe(combined[key][1]))
-                rows.append(row)
+                wk, tot = combined[key]
+                row = list(key) + [_json_safe(v) for v in wk] + [_json_safe(tot)]
+                data_rows.append(row)
+                for i in range(n_weeks):
+                    week_totals[i] += wk[i]
+                grand_total += tot
+
+            # "Total" satiri en uste
+            total_row = (["Total"] + [""] * (len(group) - 1)
+                         + [_json_safe(v) for v in week_totals]
+                         + [_json_safe(grand_total)])
+            rows = [total_row] + data_rows
 
             report = {"columns": columns, "rows": rows, "total_rows": len(rows)}
         except Exception as exc:
