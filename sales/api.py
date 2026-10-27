@@ -2270,21 +2270,175 @@ def pharmacy_upload_page_api(request):
     })
 
 
+# Eczane upload onayinda yazilacak hedef: solgar_tst.sales_pharmacy (legacy,
+# 45M satir, refdb uzerinden). id/creation_time/modification_time otomatik.
+_PHARM_INSERT_SQL = (
+    "INSERT INTO solgar_tst.sales_pharmacy "
+    "(main_group, sub_group, pharmacy_address, product_Name, pharmacy_no, "
+    " sales_count, sales_amount, sales_date, sales_reader, city, "
+    " product_type, reader_id, pharm_id, product_id, country, "
+    " remaining_count, remaining_amount) "
+    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+)
+
+# brand -> product_type kodu (legacy _BRAND_MAP ile ayni: SL/BN/OS)
+_PH_BRAND_TO_PTYPE = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OS"}
+
+
+def _ph_norm(s):
+    """Eslesme icin normalize: trim, upper, ic bosluklari tek bosluga indir."""
+    return " ".join((s or "").strip().upper().split())
+
+
 @api_view(["POST"])
 @permission_classes([HasScreen("SALES_UPLOAD")])
 def pharmacy_upload_save_api(request):
-    """Batch'i onayla (is_confirmed=True)."""
+    """
+    Eczane upload ONAY: taslak satirlari (sales_record) okur, reader_id /
+    pharm_id / product_id'yi referans tablolardan cozer ve
+    solgar_tst.sales_pharmacy'ye (legacy) yazar. Basarili olunca taslaklari
+    siler. sales_record ARTIK kalici veri degil, sadece onizleme tamponu.
+
+    ID eslesme kurallari (Olga/DBA):
+      reader_id  = sales_address_group.id  (sales_reader = SALESREADER,
+                   main_group esit, processed=1, online tablosunda OLMAYAN)
+      pharm_id   = o reader satirinin marketing kolonu (SL->marketing_id,
+                   BN->marketing_id_nb), >0 ise; yoksa 0
+      product_id = sales_product_group.id  (product_sales_name = PRODUCT,
+                   product_type esit); yoksa 0
+    Ayni sebeke+tarih zaten varsa tekrar yukleme ENGELLENIR.
+    """
     from .models import SalesRecord
+    from django.db import connections, transaction as _txn
+    import datetime as _d
+
     data = request.data or {}
     batch_id = (data.get("batch_id") or "").strip()
     if not batch_id:
         return Response({"error": "batch_id gerekli."}, status=400)
-    updated = SalesRecord.objects.filter(
+
+    drafts = list(SalesRecord.objects.filter(
         batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
-    ).update(is_confirmed=True)
-    if updated == 0:
+    ).order_by("id"))
+    if not drafts:
         return Response({"error": "Onaylanacak taslak bulunamadi."}, status=400)
-    return Response({"created": updated, "error": ""})
+
+    # Bu batch'in sebeke ve tarih(ler)i
+    chain_name = drafts[0].chain_name or ""
+    report_dates = sorted({d.report_date for d in drafts if d.report_date})
+
+    # --- re-upload kontrolu: ayni sebeke+tarih sales_pharmacy'de var mi? ---
+    try:
+        with connections["refdb"].cursor() as cur:
+            for rd in report_dates:
+                cur.execute(
+                    "SELECT 1 FROM solgar_tst.sales_pharmacy "
+                    "WHERE main_group = %s AND DATE(sales_date) = %s LIMIT 1",
+                    [chain_name, str(rd)],
+                )
+                if cur.fetchone():
+                    return Response({"error": (
+                        f"Загрузка заблокирована: данные по сети «{chain_name}» "
+                        f"за {rd} уже есть в базе. Повторная загрузка не допускается."
+                    )}, status=400)
+    except Exception as exc:
+        return Response({"error": f"Ошибка проверки дублей: {exc}"}, status=500)
+
+    # --- lookup dict'leri (2 sorgu, sebeke'ye gore daraltilmis) ---
+    # reader/pharm: sales_address_group (processed=1, chain esit, online haric)
+    addr_map = {}  # norm(sales_reader) -> (id, marketing_id, marketing_id_nb)
+    product_map = {}  # (ptype, norm(product_sales_name)) -> id
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                "SELECT g.id, g.sales_reader, g.marketing_id, g.marketing_id_nb "
+                "FROM solgar_tst.sales_address_group g "
+                "WHERE g.processed = 1 AND g.main_group = %s "
+                "  AND g.id NOT IN (SELECT id FROM solgar_tst.sales_address_group_online)",
+                [chain_name],
+            )
+            for gid, sreader, mid, mid_nb in cur.fetchall():
+                k = _ph_norm(sreader)
+                if k and k not in addr_map:
+                    addr_map[k] = (gid, int(mid or 0), int(mid_nb or 0))
+
+            cur.execute(
+                "SELECT id, product_type, product_sales_name "
+                "FROM solgar_tst.sales_product_group"
+            )
+            for pid, ptype, pname in cur.fetchall():
+                k = ((ptype or "").strip().upper(), _ph_norm(pname))
+                if k[1] and k not in product_map:
+                    product_map[k] = pid
+    except Exception as exc:
+        return Response({"error": f"Ошибка загрузки справочников: {exc}"}, status=500)
+
+    # --- her taslak satiri cozup INSERT tuple'i olustur ---
+    def _amt(v):
+        try:
+            from decimal import Decimal as _Dec
+            return f"{_Dec(str(v or 0)):.2f}"
+        except Exception:
+            return "0.00"
+
+    rows = []
+    for d in drafts:
+        ptype = _PH_BRAND_TO_PTYPE.get((d.brand or "").upper(), "SL")
+        # reader_id + pharm_id
+        reader_id = 0
+        pharm_id = 0
+        ar = addr_map.get(_ph_norm(d.salesreader))
+        if ar:
+            reader_id = ar[0]
+            mk = ar[1] if ptype == "SL" else (ar[2] if ptype == "BN" else ar[1])
+            pharm_id = mk if mk and mk > 0 else 0
+        # product_id
+        product_id = product_map.get((ptype, _ph_norm(d.product_name)), 0)
+
+        sd = d.report_date
+        sd_dt = _d.datetime.combine(sd, _d.time.min) if sd else None
+
+        rows.append((
+            (d.chain_name or "")[:100],           # main_group (NOT NULL)
+            (d.subgroup or "")[:100] or None,      # sub_group
+            (d.pharmacy or "")[:255] or None,      # pharmacy_address
+            (d.product_name or "")[:255] or None,  # product_Name
+            (d.aptekno or "")[:100] or None,       # pharmacy_no
+            int(d.count or 0),                     # sales_count
+            _amt(d.amount),                        # sales_amount (str)
+            sd_dt,                                 # sales_date (NOT NULL, PK)
+            (d.salesreader or "")[:255] or None,   # sales_reader
+            (d.city or "")[:255] or None,          # city
+            ptype,                                 # product_type
+            int(reader_id or 0),                   # reader_id (NOT NULL)
+            int(pharm_id or 0),                    # pharm_id (NOT NULL)
+            int(product_id or 0),                  # product_id (NOT NULL)
+            (d.country or "Russia")[:45],          # country
+            int(d.remaining_count or 0),           # remaining_count
+            _amt(d.remaining_amount),              # remaining_amount (str)
+        ))
+
+    # sales_date NOT NULL kontrolu (PK) — bos tarih tum batch'i patlatir
+    if any(r[7] is None for r in rows):
+        return Response({"error": "Bazı satırlarda rapor tarihi eksik."}, status=400)
+
+    # --- INSERT (refdb transaction, chunk'li executemany) ---
+    try:
+        with _txn.atomic(using="refdb"):
+            with connections["refdb"].cursor() as cur:
+                CH = 5000
+                for i in range(0, len(rows), CH):
+                    cur.executemany(_PHARM_INSERT_SQL, rows[i:i + CH])
+    except Exception as exc:
+        # Prod'a yazilamadi -> taslaklar DURUR, kullanici tekrar deneyebilir.
+        return Response({"error": f"Ошибка записи в базу: {exc}"}, status=500)
+
+    # Basarili -> taslaklari sil (artik sales_record kalici degil)
+    SalesRecord.objects.filter(
+        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+    ).delete()
+
+    return Response({"created": len(rows), "error": ""})
 
 
 
