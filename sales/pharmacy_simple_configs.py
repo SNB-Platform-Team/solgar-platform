@@ -81,6 +81,10 @@ SIMPLE_CONFIGS = {
     "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', '', '', 'СуммаЗак'),
     "SHAH": _sv("SHAH", 'Наименование ИРИС', 'Адрес', 'Количество в упак', 'Сумма в ценах закупки от первичных дист с НДС', '', 'Город', '', '', 'Сумма в ценах закупки от первичных дист с НДС'),
     "ZOLOTOE_YABLOKO": _sv("ZOLOTOE_YABLOKO", 'Наименование товара', 'Адрес', 'Продано упаковок', 'Сумма оборота, руб.', '', '', '', '', 'Сумма оборота, руб.'),
+    # Dropdown'daki ad RU_ZOLOTOE_YOBLOKO (COUNTRY_CHAINS), parse config ise
+    # ZOLOTOE_YABLOKO adiyla kayitliydi -> transliterasyon farki (YOBLOKO/YABLOKO)
+    # yuzunden eslesmiyordu. Ayni config'i dropdown adiyla da ekliyoruz.
+    "RU_ZOLOTOE_YOBLOKO": _sv("RU_ZOLOTOE_YOBLOKO", 'Наименование товара', 'Адрес', 'Продано упаковок', 'Сумма оборота, руб.', '', '', '', '', 'Сумма оборота, руб.'),
     "FARM_HAB": _sv("FARM_HAB", 'Сматченное название', 'Адрес точки', 'Количество в шт.', 'Сумма в руб.', '', '', '', '', 'Сумма в руб.'),
     "AC_SEMEINAYA": _sv("AC_SEMEINAYA", 'Товар', 'Аптека', 'Расход', '', '', '', '', 'КонОст', 'КонОст'),
     "SERDCE_ROSSII": _sv("SERDCE_ROSSII", 'Наименование', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
