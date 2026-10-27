@@ -3404,21 +3404,20 @@ def distributor_report_api(request):
 # Java repChainSalesNew'in optimize karsiligi. Veri: SalesRecord (eczane upload).
 # Report turleri SalesRecord alanlarina gore (region yok, city var).
 
+# CITY_SALES, SUBGROUP_SALES, MAINGROUP_SALES kaldirildi.
+# MEDREP_SALES -> ADRES_SALES (ayni salesreader kolonu; adres metni).
 _CHAIN_REPORT_GROUPS = {
     "CHAIN_SALES": ["chain_name"],
-    "CITY_SALES": ["city"],
     "PRODUCT_SALES": ["product_name"],
-    "MEDREP_SALES": ["salesreader"],
+    "ADRES_SALES": ["salesreader"],
     "BRAND_SALES": ["brand"],
-    "SUBGROUP_SALES": ["subgroup"],
-    "MAINGROUP_SALES": ["main_group"],
 }
 
 _CHAIN_REPORT_LABELS = {
     "chain_name": "Аптечная сеть",
     "city": "Город",
     "product_name": "Товар",
-    "salesreader": "Мед. представитель",
+    "salesreader": "Адрес",
     "brand": "Бренд",
     "subgroup": "Подгруппа",
     "main_group": "Основная группа",
@@ -3426,12 +3425,9 @@ _CHAIN_REPORT_LABELS = {
 
 _CHAIN_REPORT_TYPES = [
     {"value": "CHAIN_SALES", "label": "CHAIN_SALES"},
-    {"value": "CITY_SALES", "label": "CITY_SALES"},
     {"value": "PRODUCT_SALES", "label": "PRODUCT_SALES"},
-    {"value": "MEDREP_SALES", "label": "MEDREP_SALES"},
+    {"value": "ADRES_SALES", "label": "ADRES_SALES"},
     {"value": "BRAND_SALES", "label": "BRAND_SALES"},
-    {"value": "SUBGROUP_SALES", "label": "SUBGROUP_SALES"},
-    {"value": "MAINGROUP_SALES", "label": "MAINGROUP_SALES"},
 ]
 
 
@@ -3533,9 +3529,8 @@ def chain_sales_report_api(request):
             # yuzden onlar sadece sales_record'dan gelir.
             _LEGACY_GROUP_COL = {
                 "CHAIN_SALES": "main_group",
-                "CITY_SALES": "city",
                 "PRODUCT_SALES": "product_Name",
-                "MEDREP_SALES": "sales_reader",
+                "ADRES_SALES": "sales_reader",
                 "BRAND_SALES": "product_type",
             }
             legacy_col = _LEGACY_GROUP_COL.get(rep_type)
