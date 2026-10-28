@@ -3431,11 +3431,11 @@ def _date_range_error(begin: str, end: str, max_months: int):
 # Report turleri SalesRecord alanlarina gore (region yok, city var).
 
 # CITY_SALES, SUBGROUP_SALES, MAINGROUP_SALES kaldirildi.
-# MEDREP_SALES -> ADRES_SALES (ayni salesreader kolonu; adres metni).
+# MEDREP_SALES -> ADDRESS_SALES (ayni salesreader kolonu; adres metni).
 _CHAIN_REPORT_GROUPS = {
     "CHAIN_SALES": ["chain_name"],
     "PRODUCT_SALES": ["product_name"],
-    "ADRES_SALES": ["salesreader"],
+    "ADDRESS_SALES": ["salesreader"],
     "BRAND_SALES": ["brand"],
 }
 
@@ -3452,7 +3452,7 @@ _CHAIN_REPORT_LABELS = {
 _CHAIN_REPORT_TYPES = [
     {"value": "CHAIN_SALES", "label": "CHAIN_SALES"},
     {"value": "PRODUCT_SALES", "label": "PRODUCT_SALES"},
-    {"value": "ADRES_SALES", "label": "ADRES_SALES"},
+    {"value": "ADDRESS_SALES", "label": "ADDRESS_SALES"},
     {"value": "BRAND_SALES", "label": "BRAND_SALES"},
 ]
 
@@ -3571,7 +3571,7 @@ def chain_sales_report_api(request):
             _LEGACY_GROUP_COL = {
                 "CHAIN_SALES": "main_group",
                 "PRODUCT_SALES": "product_Name",
-                "ADRES_SALES": "sales_reader",
+                "ADDRESS_SALES": "sales_reader",
                 "BRAND_SALES": "product_type",
             }
             legacy_col = _LEGACY_GROUP_COL.get(rep_type)
