@@ -1,1 +1,0 @@
-import{v as e}from"./index-BP5GIDQ-.js";var t=e;export{t as component};
