@@ -3437,6 +3437,159 @@ def _date_range_error(begin: str, end: str, max_months: int):
 
 # CITY_SALES, SUBGROUP_SALES, MAINGROUP_SALES kaldirildi.
 # MEDREP_SALES -> ADDRESS_SALES (ayni salesreader kolonu; adres metni).
+# --- Aylik (ay-ay) CHAIN_SALES raporu yardimcisi -------------------------------
+# rep_type=CHAIN_SALES icin zincir x ay matrisi uretir:
+#   Аптечная сеть | <Ay> кол | <Ay> сумма | ... | Итого кол | Итого сумма
+# Hem yeni veri (SalesRecord.report_date) hem legacy (sales_pharmacy.sales_date)
+# aya gore gruplanir, ayni zincirde birlestirilir. Diger rep_type'lar bu
+# fonksiyona hic ugramaz — mevcut toplam mantigi degismez.
+_MONTH_RU = {
+    1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
+    7: "Июл", 8: "Авг", 9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек",
+}
+
+
+def _month_span(begin: str, end: str):
+    """begin/end 'YYYY-MM-DD' -> sirali [(year, month), ...] listesi."""
+    import datetime as _d
+    bd = _d.datetime.strptime(begin, "%Y-%m-%d").date()
+    ed = _d.datetime.strptime(end, "%Y-%m-%d").date()
+    out = []
+    y, m = bd.year, bd.month
+    while (y < ed.year) or (y == ed.year and m <= ed.month):
+        out.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return out
+
+
+def _chain_sales_monthly_report(*, brand, country, chain, city, product,
+                                medrep, begin, end):
+    """
+    CHAIN_SALES aylik raporu. {columns, rows, total_rows} dondurur.
+    rows: her zincir bir satir; her ay icin [kol, сумма]; sonda Итого.
+    """
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth
+    from .models import SalesRecord
+
+    months = _month_span(begin, end)  # [(y, m), ...]
+    # chain -> {(y,m): [kol, сумма]}
+    data: dict = {}
+
+    def _slot(ch, ym):
+        d = data.setdefault(ch or "", {})
+        return d.setdefault(ym, [0, 0])
+
+    # ---- yeni platform verisi (sales_record), aya gore ----
+    qs = SalesRecord.objects.filter(is_confirmed=True)
+    if brand:
+        qs = qs.filter(brand=brand)
+    if country:
+        qs = qs.filter(country=country)
+    if chain:
+        qs = qs.filter(chain_name=chain)
+    if city:
+        qs = qs.filter(city=city)
+    if product:
+        qs = qs.filter(product_name=product)
+    if medrep:
+        qs = qs.filter(salesreader=medrep)
+    if begin:
+        qs = qs.filter(report_date__gte=begin)
+    if end:
+        qs = qs.filter(report_date__lte=end)
+
+    sr = (
+        qs.annotate(m=TruncMonth("report_date"))
+        .values("chain_name", "m")
+        .annotate(c=Sum("count"), a=Sum("amount"))
+    )
+    for r in sr:
+        mdate = r["m"]
+        if not mdate:
+            continue
+        ym = (mdate.year, mdate.month)
+        slot = _slot(r["chain_name"], ym)
+        slot[0] += int(r["c"] or 0)
+        slot[1] += float(r["a"] or 0)
+
+    # ---- legacy sales_pharmacy verisi, aya gore ----
+    from django.db import connections
+    import datetime as _d
+    _b2legacy = {"SOLGAR": "SL", "BOUNTY": "BN", "OTHER": "OB"}
+    where = ["sales_date >= %s", "sales_date < %s"]
+    try:
+        end_x = (_d.datetime.strptime(end, "%Y-%m-%d") + _d.timedelta(days=1)).strftime("%Y-%m-%d")
+    except ValueError:
+        end_x = end
+    params = [begin, end_x]
+    if brand:
+        where.append("product_type = %s"); params.append(_b2legacy.get(brand, brand))
+    if country:
+        where.append("country = %s"); params.append(country)
+    if chain:
+        where.append("main_group = %s"); params.append(chain)
+    if city:
+        where.append("city = %s"); params.append(city)
+    if product:
+        where.append("product_Name = %s"); params.append(product)
+    if medrep:
+        where.append("sales_reader = %s"); params.append(medrep)
+
+    sql = (
+        "SELECT main_group AS ch, "
+        "YEAR(sales_date) AS y, MONTH(sales_date) AS m, "
+        "COALESCE(SUM(sales_count),0) AS c, "
+        "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))),0) AS a "
+        f"FROM solgar_tst.sales_pharmacy WHERE {' AND '.join(where)} "
+        "GROUP BY main_group, YEAR(sales_date), MONTH(sales_date)"
+    )
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, params)
+            for ch, y, m, c, a in cur.fetchall():
+                if y is None or m is None:
+                    continue
+                slot = _slot(ch, (int(y), int(m)))
+                slot[0] += int(c or 0)
+                slot[1] += float(a or 0)
+    except Exception:
+        # legacy kaynak erisilemezse sadece yeni veriyle devam et.
+        pass
+
+    # ---- columns ----
+    columns = ["Аптечная сеть"]
+    for (y, m) in months:
+        label = f"{_MONTH_RU.get(m, m)} {y}"
+        columns.append(f"{label} кол")
+        columns.append(f"{label} сумма")
+    columns += ["Итого кол", "Итого сумма"]
+
+    # ---- rows (zincir basina, Итого кол'a gore azalan) ----
+    rows = []
+    for ch in data.keys():
+        per = data[ch]
+        tot_c = 0
+        tot_a = 0.0
+        row = [ch]
+        for ym in months:
+            c, a = per.get(ym, [0, 0])
+            row.append(_json_safe(c))
+            row.append(_json_safe(a))
+            tot_c += c
+            tot_a += a
+        row.append(_json_safe(tot_c))
+        row.append(_json_safe(tot_a))
+        rows.append((tot_c, row))
+    rows.sort(key=lambda t: t[0], reverse=True)
+    rows = [r for _, r in rows]
+
+    return {"columns": columns, "rows": rows, "total_rows": len(rows)}
+
+
 _CHAIN_REPORT_GROUPS = {
     "CHAIN_SALES": ["chain_name"],
     "PRODUCT_SALES": ["product_name"],
@@ -3502,6 +3655,53 @@ def chain_sales_report_api(request):
             group = _CHAIN_REPORT_GROUPS.get(rep_type)
             if not group:
                 raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
+
+            # CHAIN_SALES: ay-ay (aylik) matris. Diger rep_type'lar eski
+            # toplam mantigiyla devam eder (asagisi degismedi).
+            if rep_type == "CHAIN_SALES":
+                _rng_err = _date_range_error(begin, end, 6)
+                if _rng_err:
+                    return Response({
+                        "options": {
+                            "rep_types": _CHAIN_REPORT_TYPES,
+                            "brands": [
+                                {"value": "SOLGAR", "label": "SOLGAR"},
+                                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                                {"value": "OTHER", "label": "OTHER"},
+                            ],
+                        },
+                        "report": None, "error": _rng_err,
+                    })
+                if not (begin and end):
+                    return Response({
+                        "options": {
+                            "rep_types": _CHAIN_REPORT_TYPES,
+                            "brands": [
+                                {"value": "SOLGAR", "label": "SOLGAR"},
+                                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                                {"value": "OTHER", "label": "OTHER"},
+                            ],
+                        },
+                        "report": {"columns": [], "rows": [], "total_rows": 0},
+                        "error": "",
+                        "message": "Выберите период (дата с и дата по) для формирования отчёта.",
+                    })
+                report = _chain_sales_monthly_report(
+                    brand=brand, country=country, chain=chain, city=city,
+                    product=product, medrep=medrep, begin=begin, end=end,
+                )
+                return Response({
+                    "options": {
+                        "rep_types": _CHAIN_REPORT_TYPES,
+                        "brands": [
+                            {"value": "SOLGAR", "label": "SOLGAR"},
+                            {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                            {"value": "OTHER", "label": "OTHER"},
+                        ],
+                    },
+                    "report": report,
+                    "error": "",
+                })
 
             # Tarih araligi limiti: aptek raporlari max 6 ay.
             _rng_err = _date_range_error(begin, end, 6)
