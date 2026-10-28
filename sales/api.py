@@ -703,9 +703,13 @@ def sales_obs_api(request):
     report = None
     error = ""
     if begin and end:
+        # Tarih araligi limiti: distributör raporlari max 3 ay.
+        _rng_err = _date_range_error(begin, end, 3)
+        if _rng_err:
+            error = _rng_err
         b = begin.replace("-", "")
         e = end.replace("-", "")
-        if len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
+        if not error and len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit():
             try:
                 result = service.run_chain_sales(
                     comp_type, b, e, chain=chain, country=country,
@@ -3400,6 +3404,28 @@ def distributor_report_api(request):
     })
 
 
+# Tarih araligi limiti (Hakan): aptek raporlari max 6 ay, distributör max 3 ay.
+def _date_range_error(begin: str, end: str, max_months: int):
+    """begin/end (YYYY-MM-DD) arasi max_months ayi asarsa Rusca hata mesaji
+    doner, yoksa None. Tam max_months kabul, 1 gun fazlasi ret."""
+    import datetime as _dd
+    try:
+        b = _dd.datetime.strptime(begin, "%Y-%m-%d").date()
+        e = _dd.datetime.strptime(end, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    if e < b:
+        b, e = e, b
+    months = (e.year - b.year) * 12 + (e.month - b.month)
+    if e.day > b.day:
+        months += 1
+    if months > max_months:
+        return (f"Период не может превышать {max_months} "
+                f"{'месяцев' if max_months != 1 else 'месяц'}. "
+                f"Выберите диапазон не больше {max_months} мес.")
+    return None
+
+
 # ==================== Chain Sales Report (eczane gorumtuleme - report turleri) ====================
 # Java repChainSalesNew'in optimize karsiligi. Veri: SalesRecord (eczane upload).
 # Report turleri SalesRecord alanlarina gore (region yok, city var).
@@ -3471,6 +3497,21 @@ def chain_sales_report_api(request):
             group = _CHAIN_REPORT_GROUPS.get(rep_type)
             if not group:
                 raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
+
+            # Tarih araligi limiti: aptek raporlari max 6 ay.
+            _rng_err = _date_range_error(begin, end, 6)
+            if _rng_err:
+                return Response({
+                    "options": {
+                        "rep_types": _CHAIN_REPORT_TYPES,
+                        "brands": [
+                            {"value": "SOLGAR", "label": "SOLGAR"},
+                            {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                            {"value": "OTHER", "label": "OTHER"},
+                        ],
+                    },
+                    "report": None, "error": _rng_err,
+                })
 
             # Tarih araligi ZORUNLU — legacy sales_pharmacy (45M) filtresiz
             # taranmaz. begin+end yoksa bos rapor + bilgi mesaji.
