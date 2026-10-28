@@ -28,12 +28,15 @@ def _build_msal_app() -> msal.ConfidentialClientApplication:
     )
 
 
-def build_auth_url(state: str) -> str:
+def build_auth_url(state: str, redirect_uri: str | None = None) -> str:
     """
     Return the Microsoft sign-in URL to redirect the user to.
 
     Args:
         state: A random anti-CSRF token stored in the session.
+        redirect_uri: Kullanicinin geldigi domaine gore callback URL'si
+            (fortemira.ru / .org / .online). Verilmezse settings'teki sabit
+            deger. Boylece .ru'dan giren .ru'ya doner.
 
     Returns:
         The full authorization-request URL.
@@ -42,16 +45,18 @@ def build_auth_url(state: str) -> str:
     return app.get_authorization_request_url(
         scopes=_SCOPES,
         state=state,
-        redirect_uri=settings.AZURE_AD["REDIRECT_URI"],
+        redirect_uri=redirect_uri or settings.AZURE_AD["REDIRECT_URI"],
     )
 
 
-def acquire_user_claims(code: str) -> dict[str, Any] | None:
+def acquire_user_claims(code: str, redirect_uri: str | None = None) -> dict[str, Any] | None:
     """
     Exchange the authorization code for the signed-in user's claims.
 
     Args:
         code: The authorization code returned by Microsoft.
+        redirect_uri: build_auth_url ile AYNI redirect_uri olmali (Microsoft
+            kurali). Kullanicinin geldigi domaine gore (.ru/.org/.online).
 
     Returns:
         A dict of ID-token claims (oid, email, name, ...), or None on failure.
@@ -60,7 +65,7 @@ def acquire_user_claims(code: str) -> dict[str, Any] | None:
     result = app.acquire_token_by_authorization_code(
         code=code,
         scopes=_SCOPES,
-        redirect_uri=settings.AZURE_AD["REDIRECT_URI"],
+        redirect_uri=redirect_uri or settings.AZURE_AD["REDIRECT_URI"],
     )
 
     print("=== MSAL RESULT ===")

@@ -136,10 +136,16 @@ def azure_login_view(request: HttpRequest) -> HttpResponse:
         return redirect("accounts:login")
 
     from . import azure_auth
+    from django.urls import reverse
 
     state = secrets.token_urlsafe(24)
     request.session["azure_auth_state"] = state
-    return redirect(azure_auth.build_auth_url(state))
+    # Kullanicinin geldigi domaine gore callback URL'si (fortemira.ru/.org/
+    # .online). build_absolute_uri istek host'unu kullanir -> .ru'dan giren
+    # .ru'ya doner. Callback'te AYNI redirect_uri lazim, session'da saklanir.
+    redirect_uri = request.build_absolute_uri(reverse("accounts:azure_callback"))
+    request.session["azure_redirect_uri"] = redirect_uri
+    return redirect(azure_auth.build_auth_url(state, redirect_uri=redirect_uri))
 
 
 @require_http_methods(["GET"])
@@ -159,7 +165,12 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Authentication was cancelled.")
         return redirect("accounts:login")
 
-    claims = azure_auth.acquire_user_claims(code)
+    # build_auth_url'de kullanilan redirect_uri ile AYNISINI kullan (Microsoft
+    # kurali). Login adiminda session'a yazildi; yoksa istek host'undan uret.
+    from django.urls import reverse
+    redirect_uri = request.session.pop("azure_redirect_uri", None) \
+        or request.build_absolute_uri(reverse("accounts:azure_callback"))
+    claims = azure_auth.acquire_user_claims(code, redirect_uri=redirect_uri)
     if claims is None:
         messages.error(request, "Could not verify your Microsoft account.")
         return redirect("accounts:login")
