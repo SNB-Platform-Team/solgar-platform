@@ -1731,7 +1731,12 @@ def country_options_api(request):
 # ==================== Storage options API (distributor, country-scoped) ====================
 
 @api_view(["GET"])
-@permission_classes([HasScreen("ONEC_STOCK")])
+# Not: Bu dropdown (ulke/depo listesi) hem distributor-upload hem sales-obs
+# sayfalarindan cagriliyor. Eskiden ONEC_STOCK isteniyordu (yanlis ekran),
+# o yetkisi olmayan distributor kullanicilari 403 alip Главная'ya
+# yonlendiriliyordu. Hassas rapor verisi degil; country_options_api gibi
+# giris yapmis olmak yeterli.
+@permission_classes([IsAuthenticated])
 def storage_options_api(request):
     """
     Distributor storage (склад) options from solgar_prm.prm_storages,
