@@ -202,10 +202,18 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
     )
 
     if created and user.access_level is None:
+        # Ilk giriste: menu_user_relation'daki kendi satirina gore AccessLevel
+        # (email -> employees -> employee_name -> menu satiri -> imza -> level).
+        # SADECE create aninda; sonradan admin elle degistirirse ezilmez.
+        # Menu'de bulunamazsa eski davranis: en dusuk rank (fallback).
+        from authorization.menu_access import level_for_email
         from authorization.models import AccessLevel
-        default_level = AccessLevel.objects.filter(rank=1).order_by("rank").first()
-        if default_level:
-            user.access_level = default_level
+
+        level = level_for_email(email)
+        if level is None:
+            level = AccessLevel.objects.filter(rank=1).order_by("rank").first()
+        if level:
+            user.access_level = level
             user.save(update_fields=["access_level"])
 
     if not user.is_enabled:
