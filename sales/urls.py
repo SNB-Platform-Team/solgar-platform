@@ -40,6 +40,7 @@ urlpatterns = [
     path("api/dashboard/", api.dashboard_api, name="dashboard_api"),
     path("api/sales-obs/", api.sales_obs_api, name="sales_obs_api"), #
     path("api/faq/", api.faq_api, name="faq_api"),
+    path("api/faq/document/<int:doc_id>/", api.faq_document_api, name="faq_document_api"),
     path("api/sales-upload/options/", api.sales_upload_options_api, name="sales_upload_options_api"),
     path("api/sales-upload/preview/", api.sales_upload_preview_api, name="sales_upload_preview_api"),
     path("api/sales-upload/save/", api.sales_upload_save_api, name="sales_upload_save_api"),

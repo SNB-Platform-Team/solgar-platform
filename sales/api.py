@@ -1016,11 +1016,52 @@ def faq_api(request):
                "администратору или в отдел ИТ.")},
     ]
 
+    # Kullanim talimatlari (admin panelden yuklenen PDF'ler). FAQ'da baglanti
+    # olarak gosterilir; kullanici document endpoint'inden tarayicida acar.
+    from authorization.models import Document
+    documents = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "url": f"/sales/api/faq/document/{d.id}/",
+            "size": d.size,
+        }
+        for d in Document.objects.filter(is_active=True).order_by("order", "title")
+    ]
+
     return Response({
         "user_display": request.user.get_full_name() or request.user.username,
         "my_screens": my_screens,
         "faq": faq,
+        "documents": documents,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def faq_document_api(request, doc_id):
+    """
+    FAQ dokumanini (PDF) tarayicida goster. Icerik DB'de (BinaryField) saklanir.
+
+    inline Content-Disposition -> tarayici yeni sekmede acar (indirmez). Sadece
+    aktif dokumanlar servis edilir; giris yapmis her kullanici erisebilir.
+    """
+    from django.http import HttpResponse, Http404
+    from authorization.models import Document
+
+    try:
+        doc = Document.objects.get(pk=doc_id, is_active=True)
+    except Document.DoesNotExist:
+        raise Http404("Документ не найден")
+
+    data = bytes(doc.content or b"")
+    resp = HttpResponse(data, content_type=doc.content_type or "application/pdf")
+    # Dosya adi: baslik + .pdf (ASCII disi karakterler icin RFC 5987).
+    from urllib.parse import quote
+    fname = quote(f"{doc.title}.pdf")
+    resp["Content-Disposition"] = f"inline; filename*=UTF-8''{fname}"
+    resp["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 
