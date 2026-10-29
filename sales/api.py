@@ -3481,9 +3481,8 @@ def _date_range_error(begin: str, end: str, max_months: int):
 # --- Aylik (ay-ay) CHAIN_SALES raporu yardimcisi -------------------------------
 # rep_type=CHAIN_SALES icin zincir x ay matrisi uretir:
 #   Аптечная сеть | <Ay> кол | <Ay> сумма | ... | Итого кол | Итого сумма
-# Hem yeni veri (SalesRecord.report_date) hem legacy (sales_pharmacy.sales_date)
-# aya gore gruplanir, ayni zincirde birlestirilir. Diger rep_type'lar bu
-# fonksiyona hic ugramaz — mevcut toplam mantigi degismez.
+# YALNIZCA legacy sales_pharmacy (sales_date) aya gore gruplanir. Diger
+# rep_type'lar bu fonksiyona hic ugramaz — mevcut toplam mantigi degismez.
 _MONTH_RU = {
     1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
     7: "Июл", 8: "Авг", 9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек",
@@ -3512,10 +3511,6 @@ def _chain_sales_monthly_report(*, brand, country, chain, city, product,
     CHAIN_SALES aylik raporu. {columns, rows, total_rows} dondurur.
     rows: her zincir bir satir; her ay icin [kol, сумма]; sonda Итого.
     """
-    from django.db.models import Sum
-    from django.db.models.functions import TruncMonth
-    from .models import SalesRecord
-
     months = _month_span(begin, end)  # [(y, m), ...]
     # chain -> {(y,m): [kol, сумма]}
     data: dict = {}
@@ -3524,38 +3519,10 @@ def _chain_sales_monthly_report(*, brand, country, chain, city, product,
         d = data.setdefault(ch or "", {})
         return d.setdefault(ym, [0, 0])
 
-    # ---- yeni platform verisi (sales_record), aya gore ----
-    qs = SalesRecord.objects.filter(is_confirmed=True)
-    if brand:
-        qs = qs.filter(brand=brand)
-    if country:
-        qs = qs.filter(country=country)
-    if chain:
-        qs = qs.filter(chain_name=chain)
-    if city:
-        qs = qs.filter(city=city)
-    if product:
-        qs = qs.filter(product_name=product)
-    if medrep:
-        qs = qs.filter(salesreader=medrep)
-    if begin:
-        qs = qs.filter(report_date__gte=begin)
-    if end:
-        qs = qs.filter(report_date__lte=end)
-
-    sr = (
-        qs.annotate(m=TruncMonth("report_date"))
-        .values("chain_name", "m")
-        .annotate(c=Sum("count"), a=Sum("amount"))
-    )
-    for r in sr:
-        mdate = r["m"]
-        if not mdate:
-            continue
-        ym = (mdate.year, mdate.month)
-        slot = _slot(r["chain_name"], ym)
-        slot[0] += int(r["c"] or 0)
-        slot[1] += float(r["a"] or 0)
+    # NOT: Rapor YALNIZCA legacy sales_pharmacy'den okur. sales_record sadece
+    # yukleme onizleme tamponudur (onaylaninca sales_pharmacy'ye yazilir ve
+    # taslak silinir); ikisini birden saymak cift sayima yol aciyordu
+    # ( or. FARMADOM 282 -> 781). Bu yuzden sales_record kismi kaldirildi.
 
     # ---- legacy sales_pharmacy verisi, aya gore ----
     from django.db import connections
@@ -3777,43 +3744,15 @@ def chain_sales_report_api(request):
                     "message": "Выберите период (дата с и дата по) для формирования отчёта.",
                 })
 
-            # ---- yeni platform verisi (sales_record) ----
-            qs = SalesRecord.objects.filter(is_confirmed=True)
-            if brand:
-                qs = qs.filter(brand=brand)
-            if country:
-                qs = qs.filter(country=country)
-            if chain:
-                qs = qs.filter(chain_name=chain)
-            if city:
-                qs = qs.filter(city=city)
-            if product:
-                qs = qs.filter(product_name=product)
-            if medrep:
-                qs = qs.filter(salesreader=medrep)
-            if begin:
-                qs = qs.filter(report_date__gte=begin)
-            if end:
-                qs = qs.filter(report_date__lte=end)
-
-            agg = (
-                qs.values(*group)
-                .annotate(total_count=Sum("count"), total_amount=Sum("amount"))
-                .order_by(*group)
-            )
-
+            # NOT: Rapor YALNIZCA legacy sales_pharmacy'den okur. sales_record
+            # sadece yukleme onizleme tamponudur (onaylaninca sales_pharmacy'ye
+            # yazilir, taslak silinir); ikisini birden saymak cift sayima yol
+            # aciyordu (or. FARMADOM 282 -> 781). sales_record kismi kaldirildi.
             # grup anahtari -> [count, amount] birikimli sozluk
             combined: dict = {}
-            for r in agg:
-                key = tuple(r.get(g, "") or "" for g in group)
-                combined.setdefault(key, [0, 0])
-                combined[key][0] += int(r.get("total_count") or 0)
-                combined[key][1] += r.get("total_amount") or 0
 
-            # ---- eski (legacy sales_pharmacy) verisi ----
-            # Sadece legacy'de net karsiligi olan rapor tiplerine eklenir.
-            # SUBGROUP/MAINGROUP legacy'de urun grubu DEGIL (zincir adi), bu
-            # yuzden onlar sadece sales_record'dan gelir.
+            # ---- legacy sales_pharmacy verisi ----
+            # Her rapor tipinin legacy'deki grup kolonu.
             _LEGACY_GROUP_COL = {
                 "CHAIN_SALES": "main_group",
                 "PRODUCT_SALES": "product_Name",
