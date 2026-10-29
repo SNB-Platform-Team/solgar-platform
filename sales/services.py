@@ -293,7 +293,16 @@ class SalesUploadService:
             )
             for row in parse_result.rows
         ]
-        return self.repository.bulk_create(records)
+        # Batched insert: büyük raporlar (ör. ASNA ~14 bin satır) tek INSERT
+        # olarak gönderilince Azure MySQL max_allowed_packet / wait_timeout
+        # sınırına takılıp "Ошибка сохранения" veriyordu. 500'erlik partiler
+        # her INSERT'i ~<1 MB tutar, hepsi tek transaction'da yazılır
+        # (hata olursa yarım veri kalmaz).
+        from django.db import transaction
+
+        with transaction.atomic():
+            SalesRecord.objects.bulk_create(records, batch_size=500)
+        return len(records)
 
 class SalesViewService:
     """Business operations for viewing and aggregating saved sales data."""
@@ -592,7 +601,11 @@ class DistributorUploadService:
         ]
         for rec in records:
             rec.uploaded_by = user
-        DistributorRecord.objects.bulk_create(records)
+        # Batched insert (aynı max_allowed_packet gerekçesi — bkz. save_records).
+        from django.db import transaction
+
+        with transaction.atomic():
+            DistributorRecord.objects.bulk_create(records, batch_size=500)
         return len(records)
 
 class DistributorViewService:
