@@ -1,0 +1,1 @@
+import{b as e}from"./index-BfcCAS2w.js";var t=e;export{t as component};
