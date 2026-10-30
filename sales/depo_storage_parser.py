@@ -23,14 +23,27 @@ from .depo_parser_config import (
 class DepoStorageParser:
     """Sirkete ozel HICBIR sey bilmez; tum davranis cfg'den gelir."""
 
-    # ---- hucre okuma (openpyxl worksheet: 1-indexli; biz 0-indexli calisiyoruz) ----
+    # ---- hucre okuma (0-indexli col/row) ----
+    # sheet iki sekilde gelebilir:
+    #   1) 2D liste/tuple (grid[row][col]) — read_only streaming ile okunmus,
+    #      buyuk dosyalarda bellek dostu (tercih edilen yol).
+    #   2) openpyxl worksheet (sheet.cell(row, col), 1-indexli) — geriye donuk.
     @staticmethod
     def _read(sheet, col: int, row: int) -> str:
         """Guvenli hucre okuma (0-indexli col/row). Bos -> ''."""
         if col < 0 or row < 0:
             return ""
+        val = None
         try:
-            val = sheet.cell(row=row + 1, column=col + 1).value  # openpyxl 1-indexli
+            if hasattr(sheet, "cell"):
+                # openpyxl worksheet (1-indexli)
+                val = sheet.cell(row=row + 1, column=col + 1).value
+            else:
+                # 2D liste/tuple: grid[row][col]
+                if row < len(sheet):
+                    r = sheet[row]
+                    if col < len(r):
+                        val = r[col]
         except Exception:
             return ""
         if val is None:

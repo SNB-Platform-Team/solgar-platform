@@ -1836,15 +1836,44 @@ def storage_options_api(request):
 import uuid as _uuid
 
 
+class _GridSheet:
+    """2D liste/tuple uzerine max_row/max_column saglayan hafif sarmalayici.
+
+    Parser (_read) 'cell' metodu YOKSA 2D indeksleme (grid[row][col]) yapar;
+    bu sinifta bilerek cell() yok. api.py sheet.max_row/max_column kullaniyor.
+    read_only streaming ile okundugu icin buyuk dosyalarda bellek dostu
+    (158K satir: ~900 MB -> ~120 MB).
+    """
+    __slots__ = ("_g", "max_row", "max_column")
+
+    def __init__(self, grid):
+        self._g = grid
+        self.max_row = len(grid)
+        self.max_column = max((len(r) for r in grid), default=0)
+
+    def __len__(self):
+        return len(self._g)
+
+    def __getitem__(self, i):
+        return self._g[i]
+
+
 def _open_sheet(excel_file):
     """Yuklenen Excel'i oku (xlsx: openpyxl, xls: xlrd, xlsb: pyxlsb). (sheet, err) doner."""
     import io
     data = excel_file.read()
-    # 1) openpyxl (xlsx)
+    # 1) openpyxl (xlsx) — read_only streaming ile 2D grid'e oku (bellek dostu).
+    #    data_only=True: formul yerine cache'li deger. read_only=True: workbook'u
+    #    bir kerede belfege acmaz, satir satir akitir.
     try:
         import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
-        return wb.active, None
+        wb = openpyxl.load_workbook(
+            io.BytesIO(data), data_only=True, read_only=True
+        )
+        ws = wb.active
+        grid = [row for row in ws.iter_rows(values_only=True)]
+        wb.close()
+        return _GridSheet(grid), None
     except Exception:
         pass
     # 2) xlrd (eski xls)
@@ -1999,36 +2028,57 @@ def depo_upload_preview_api(request):
     except ValueError:
         return Response({"error": "Неверный формат даты."}, status=400)
 
-    sheet, err = _open_sheet(excel_file)
-    if err:
-        return Response({"error": err}, status=400)
+    # --- Dosya ac + parse + kayit: hepsini try/except'e sar. Hata olursa
+    # kullaniciya ANLASILIR Rusca mesaj doner; tam traceback sunucu log'una
+    # yazilir (yonetici 'problemleri gorebilsin' istedi). Boylece worker
+    # cokup 502 vermek yerine 400 + aciklama doner.
+    import logging as _logging
+    _log = _logging.getLogger("sales.depo_upload")
+    try:
+        sheet, err = _open_sheet(excel_file)
+        if err:
+            return Response({"error": err}, status=400)
 
-    file_name = getattr(excel_file, "name", "") or ""
-    service = DepoUploadService()
-    result = service.preview(sheet, file_name, distributor, "",
-                             sheet.max_row, sheet.max_column)
-    if result.error:
-        return Response({"error": result.error}, status=400)
-    if not result.rows:
-        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+        file_name = getattr(excel_file, "name", "") or ""
+        service = DepoUploadService()
+        result = service.preview(sheet, file_name, distributor, "",
+                                 sheet.max_row, sheet.max_column)
+        if result.error:
+            return Response({"error": result.error}, status=400)
+        if not result.rows:
+            return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
 
-    
-    DistributorRecord.objects.filter(
-        uploaded_by=request.user, is_confirmed=False
-    ).delete()
+        DistributorRecord.objects.filter(
+            uploaded_by=request.user, is_confirmed=False
+        ).delete()
 
-    #yeni
-    batch_id = _uuid.uuid4().hex
-    op_code = "SALE" if (result.stock_sales_type or "").upper().startswith("SAL") else "STOCK"
+        batch_id = _uuid.uuid4().hex
+        op_code = "SALE" if (result.stock_sales_type or "").upper().startswith("SAL") else "STOCK"
 
-    objs = [
-        _depo_row_to_record(r, batch_id, distributor, country, op_code,
-                            begin_date, end_date, request.user)
-        for r in result.rows
-    ]
-    DistributorRecord.objects.bulk_create(objs, batch_size=1000)
-
-    total = len(objs)
+        # Bellek dostu: 158K ORM nesnesini tek listede tutmak yerine
+        # generator ile parca parca bulk_create'e ver.
+        objs_gen = (
+            _depo_row_to_record(r, batch_id, distributor, country, op_code,
+                                begin_date, end_date, request.user)
+            for r in result.rows
+        )
+        DistributorRecord.objects.bulk_create(objs_gen, batch_size=2000)
+        total = len(result.rows)
+    except MemoryError:
+        _log.exception("depo preview MemoryError | dist=%s file=%s",
+                       distributor, getattr(excel_file, "name", ""))
+        return Response({"error": (
+            "Файл слишком большой для обработки. Разделите его на части "
+            "(например, по неделям) и загрузите по очереди."
+        )}, status=400)
+    except Exception as exc:
+        # Beklenmeyen hata: tam traceback log'a, kullaniciya ozet.
+        _log.exception("depo preview failed | dist=%s file=%s",
+                       distributor, getattr(excel_file, "name", ""))
+        return Response({"error": (
+            "Не удалось обработать файл. Проверьте формат и попробуйте снова. "
+            f"Техническая информация: {type(exc).__name__}: {exc}"
+        )}, status=400)
     
     first = DistributorRecord.objects.filter(batch_id=batch_id).order_by("id")[:_DEPO_PAGE_SIZE]
     rows = [_record_to_row(rec, i + 1) for i, rec in enumerate(first)]
