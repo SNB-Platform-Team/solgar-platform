@@ -3154,6 +3154,105 @@ def pharmacy_detail_api(request):
     return Response(out)
 
 
+# ====================================================================
+# Pharmacy hardware / corner log (промо / корнер / коврик ...)
+# ====================================================================
+# Bir aptek'in SECILI hardware'lerini + her birinin status'larini dondurur.
+#
+# DEMO: Veri su an SAHTE (_demo_corner_rows). Olga'dan gercek veri gelince
+# SADECE _fetch_corner_rows icindeki sorgu degisir (solgar_cor.corner_log'a
+# apteka_id ile JOIN); endpoint imzasi, UI ve frontend ayni kalir.
+#
+# Secenekler (hardware tipleri) genisleyebilir; tek yerde _HARDWARE_TYPES.
+_HARDWARE_TYPES = [
+    {"code": "PROMO",  "label": "Промо"},
+    {"code": "CORNER", "label": "Корнер"},
+    {"code": "KOVRIK", "label": "Коврик"},
+    {"code": "STAND",  "label": "Стенд"},
+    {"code": "SHELF",  "label": "Полка"},
+]
+# Genel status (0/1) etiketleri
+_CORNER_STATUS_LABELS = {0: "Неактивно", 1: "Активно"}
+# Hardware (donanim) status etiketleri
+_HW_STATUS = ["requested", "approved", "installed", "rejected"]
+_HW_STATUS_LABELS = {
+    "requested": "Запрошено",
+    "approved": "Одобрено",
+    "installed": "Установлено",
+    "rejected": "Отклонено",
+}
+
+
+def _demo_corner_rows(pharmacy_id):
+    """DEMO sahte veri: pharmacy_id'ye gore DETERMINISTIK satirlar uretir
+    (ayni aptek hep ayni demo veriyi gorsun). Gercek veri gelince bu fonksiyon
+    _fetch_corner_rows ile degistirilir."""
+    pid = int(pharmacy_id or 0)
+    rows = []
+    # pid'e gore 1-3 hardware sec (deterministik)
+    n = (pid % 3) + 1
+    for i in range(n):
+        ht = _HARDWARE_TYPES[(pid + i) % len(_HARDWARE_TYPES)]
+        gen_status = (pid + i) % 2          # 0/1
+        hw = _HW_STATUS[(pid + i) % len(_HW_STATUS)]
+        rows.append({
+            "id": pid * 100 + i,            # demo satir id'si
+            "apteka_id": pid,
+            "hardware_code": ht["code"],
+            "hardware_label": ht["label"],
+            "status": gen_status,
+            "status_label": _CORNER_STATUS_LABELS.get(gen_status, str(gen_status)),
+            "hardware_status": hw,
+            "hardware_status_label": _HW_STATUS_LABELS.get(hw, hw),
+        })
+    return rows
+
+
+def _fetch_corner_rows(pharmacy_id, brand):
+    """Bir aptek'in hardware/corner kayitlarini dondurur.
+
+    SU AN: demo sahte veri. GERCEK VERI GELINCE: burada solgar_cor.corner_log'a
+    raw SQL ile baglanilacak, orn:
+        SELECT hardware_type, status, hardware_status FROM solgar_cor.corner_log
+        WHERE apteka_id = %s
+    ve ayni sekil ({hardware_code, status, hardware_status, ...}) dondurulecek.
+    Endpoint ve frontend degismez.
+    """
+    return _demo_corner_rows(pharmacy_id)
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("PHARMACY")])
+def pharmacy_corner_log_api(request):
+    """Bir aptek'in secili hardware'leri + status'lari. ?brand=&id=
+
+    Donen: {
+        "pharmacy_id": <id>,
+        "hardware_types": [{code,label}...],   # secim icin tum secenekler
+        "rows": [{hardware_code, hardware_label, status, status_label,
+                  hardware_status, hardware_status_label}...],  # secili + status
+        "demo": true   # demo veri oldugunu isaretler (gercekte false olur)
+    }
+    """
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    obj_id = request.GET.get("id")
+    if not obj_id:
+        return Response({"error": "id gerekli."}, status=400)
+    try:
+        rows = _fetch_corner_rows(obj_id, brand)
+    except Exception as exc:
+        import logging as _logging
+        return _upload_error_response(
+            _logging.getLogger("sales.pharmacy_corner"), exc,
+            "Не удалось загрузить данные оборудования.",
+            context=f"corner_log id={obj_id} brand={brand}",
+        )
+    return Response({
+        "pharmacy_id": int(obj_id) if str(obj_id).isdigit() else obj_id,
+        "hardware_types": _HARDWARE_TYPES,
+        "rows": rows,
+        "demo": True,
+    })
 
 
 
