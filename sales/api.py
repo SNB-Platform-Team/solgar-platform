@@ -3220,10 +3220,10 @@ _DIST_REPORT_LABELS = {
 }
 
 _DIST_REPORT_TYPES = [
+    {"value": "BRAND_REPORT", "label": "BRAND_REPORT"},
     {"value": "DISTRIBUTOR_REPORT", "label": "DISTRIBUTOR_REPORT"},
     {"value": "CITY_REPORT", "label": "CITY_REPORT"},
     {"value": "ALL_PRODUCTS_REPORT", "label": "ALL_PRODUCTS_REPORT"},
-    {"value": "BRAND_REPORT", "label": "BRAND_REPORT"},
 ]
 
 
@@ -3245,7 +3245,7 @@ def distributor_report_api(request):
     from django.db.models import Sum
     from .models import DistributorRecord
 
-    rep_type = (request.GET.get("rep_type") or "DISTRIBUTOR_REPORT").strip()
+    rep_type = (request.GET.get("rep_type") or "BRAND_REPORT").strip()
     operation_type = (request.GET.get("operation_type") or "").strip().upper()
     distributor = (request.GET.get("distributor") or "").strip()
     city = (request.GET.get("city") or "").strip()
@@ -3508,14 +3508,30 @@ def _month_span(begin: str, end: str):
     return out
 
 
-def _chain_sales_monthly_report(*, brand, country, chain, city, product,
-                                medrep, begin, end):
+# rep_type -> (sales_pharmacy grup kolonu, satir basligi). Aylik matriste
+# satirlar bu alana gore gruplanir; sutunlar ay-ay. CHAIN_SALES disindaki
+# tipler de artik ay-ay gosterilir (kullanici istegi).
+_CHAIN_MONTHLY_COL = {
+    "CHAIN_SALES":   ("main_group",   "Аптечная сеть"),
+    "PRODUCT_SALES": ("product_Name", "Товар"),
+    "ADDRESS_SALES": ("sales_reader", "Адрес"),
+    "BRAND_SALES":   ("product_type", "Бренд"),
+}
+# BRAND_SALES icin legacy kod (SL/BN/OB) -> okunur etiket.
+_CHAIN_MONTHLY_BRAND_LABEL = {"SL": "SOLGAR", "BN": "NATURES BOUNTY", "OB": "OTHER", "OS": "OTHER"}
+
+
+def _chain_sales_monthly_report(*, rep_type="CHAIN_SALES", brand, country, chain,
+                                city, product, medrep, begin, end):
     """
-    CHAIN_SALES aylik raporu. {columns, rows, total_rows} dondurur.
-    rows: her zincir bir satir; her ay icin [kol, сумма]; sonda Итого.
+    Aptek raporu — ay-ay (aylik) matris. {columns, rows, total_rows} dondurur.
+    rows: her grup degeri (zincir/urun/adres/brand) bir satir; her ay icin
+    [kol, сумма]; sonda Итого. Grup alani rep_type'a gore secilir.
     """
+    group_col, group_title = _CHAIN_MONTHLY_COL.get(
+        rep_type, _CHAIN_MONTHLY_COL["CHAIN_SALES"])
     months = _month_span(begin, end)  # [(y, m), ...]
-    # chain -> {(y,m): [kol, сумма]}
+    # grup degeri -> {(y,m): [kol, сумма]}
     data: dict = {}
 
     def _slot(ch, ym):
@@ -3551,20 +3567,26 @@ def _chain_sales_monthly_report(*, brand, country, chain, city, product,
         where.append("sales_reader = %s"); params.append(medrep)
 
     sql = (
-        "SELECT main_group AS ch, "
+        f"SELECT {group_col} AS ch, "
         "YEAR(sales_date) AS y, MONTH(sales_date) AS m, "
         "COALESCE(SUM(sales_count),0) AS c, "
         "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))),0) AS a "
         f"FROM solgar_tst.sales_pharmacy WHERE {' AND '.join(where)} "
-        "GROUP BY main_group, YEAR(sales_date), MONTH(sales_date)"
+        f"GROUP BY {group_col}, YEAR(sales_date), MONTH(sales_date)"
     )
+    _is_brand = (rep_type == "BRAND_SALES")
     try:
         with connections["refdb"].cursor() as cur:
             cur.execute(sql, params)
             for ch, y, m, c, a in cur.fetchall():
                 if y is None or m is None:
                     continue
-                slot = _slot(ch, (int(y), int(m)))
+                # BRAND_SALES: legacy kod (SL/BN/OB) -> okunur etiket.
+                key = ch
+                if _is_brand:
+                    key = _CHAIN_MONTHLY_BRAND_LABEL.get(
+                        (ch or "").strip().upper(), ch)
+                slot = _slot(key, (int(y), int(m)))
                 slot[0] += int(c or 0)
                 slot[1] += float(a or 0)
     except Exception:
@@ -3572,7 +3594,7 @@ def _chain_sales_monthly_report(*, brand, country, chain, city, product,
         pass
 
     # ---- columns ----
-    columns = ["Аптечная сеть"]
+    columns = [group_title]
     for (y, m) in months:
         label = f"{_MONTH_RU.get(m, m)} {y}"
         columns.append(f"{label} кол")
@@ -3619,10 +3641,10 @@ _CHAIN_REPORT_LABELS = {
 }
 
 _CHAIN_REPORT_TYPES = [
+    {"value": "BRAND_SALES", "label": "BRAND_SALES"},
     {"value": "CHAIN_SALES", "label": "CHAIN_SALES"},
     {"value": "PRODUCT_SALES", "label": "PRODUCT_SALES"},
     {"value": "ADDRESS_SALES", "label": "ADDRESS_SALES"},
-    {"value": "BRAND_SALES", "label": "BRAND_SALES"},
 ]
 
 
@@ -3643,7 +3665,7 @@ def chain_sales_report_api(request):
     from django.db.models import Sum
     from .models import SalesRecord
 
-    rep_type = (request.GET.get("rep_type") or "CHAIN_SALES").strip()
+    rep_type = (request.GET.get("rep_type") or "BRAND_SALES").strip()
     brand = (request.GET.get("brand") or "").strip()
     country = (request.GET.get("country") or "").strip()
     chain = (request.GET.get("chain") or "").strip()
@@ -3667,52 +3689,37 @@ def chain_sales_report_api(request):
             if not group:
                 raise ValueError(f"Bilinmeyen rapor tipi: {rep_type}")
 
-            # CHAIN_SALES: ay-ay (aylik) matris. Diger rep_type'lar eski
-            # toplam mantigiyla devam eder (asagisi degismedi).
-            if rep_type == "CHAIN_SALES":
-                _rng_err = _date_range_error(begin, end, 6)
-                if _rng_err:
-                    return Response({
-                        "options": {
-                            "rep_types": _CHAIN_REPORT_TYPES,
-                            "brands": [
-                                {"value": "SOLGAR", "label": "SOLGAR"},
-                                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
-                                {"value": "OTHER", "label": "OTHER"},
-                            ],
-                        },
-                        "report": None, "error": _rng_err,
-                    })
-                if not (begin and end):
-                    return Response({
-                        "options": {
-                            "rep_types": _CHAIN_REPORT_TYPES,
-                            "brands": [
-                                {"value": "SOLGAR", "label": "SOLGAR"},
-                                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
-                                {"value": "OTHER", "label": "OTHER"},
-                            ],
-                        },
-                        "report": {"columns": [], "rows": [], "total_rows": 0},
-                        "error": "",
-                        "message": "Выберите период (дата с и дата по) для формирования отчёта.",
-                    })
-                report = _chain_sales_monthly_report(
-                    brand=brand, country=country, chain=chain, city=city,
-                    product=product, medrep=medrep, begin=begin, end=end,
-                )
+            # TUM rep_type'lar ay-ay (aylik) matris gosterir (kullanici istegi).
+            # Grup alani rep_type'a gore secilir (_CHAIN_MONTHLY_COL). Eski
+            # duz-toplam blogu artik calismaz (asagisi erisilmez kalir).
+            _brands_opt = [
+                {"value": "SOLGAR", "label": "SOLGAR"},
+                {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                {"value": "OTHER", "label": "OTHER"},
+            ]
+            _rng_err = _date_range_error(begin, end, 6)
+            if _rng_err:
                 return Response({
-                    "options": {
-                        "rep_types": _CHAIN_REPORT_TYPES,
-                        "brands": [
-                            {"value": "SOLGAR", "label": "SOLGAR"},
-                            {"value": "BOUNTY", "label": "NATURES BOUNTY"},
-                            {"value": "OTHER", "label": "OTHER"},
-                        ],
-                    },
-                    "report": report,
-                    "error": "",
+                    "options": {"rep_types": _CHAIN_REPORT_TYPES, "brands": _brands_opt},
+                    "report": None, "error": _rng_err,
                 })
+            if not (begin and end):
+                return Response({
+                    "options": {"rep_types": _CHAIN_REPORT_TYPES, "brands": _brands_opt},
+                    "report": {"columns": [], "rows": [], "total_rows": 0},
+                    "error": "",
+                    "message": "Выберите период (дата с и дата по) для формирования отчёта.",
+                })
+            report = _chain_sales_monthly_report(
+                rep_type=rep_type,
+                brand=brand, country=country, chain=chain, city=city,
+                product=product, medrep=medrep, begin=begin, end=end,
+            )
+            return Response({
+                "options": {"rep_types": _CHAIN_REPORT_TYPES, "brands": _brands_opt},
+                "report": report,
+                "error": "",
+            })
 
             # Tarih araligi limiti: aptek raporlari max 6 ay.
             _rng_err = _date_range_error(begin, end, 6)
