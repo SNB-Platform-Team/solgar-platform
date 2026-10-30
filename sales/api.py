@@ -1842,6 +1842,27 @@ import uuid as _uuid
 # tanimlanmaz (ayni modulde iki ayni isimli sinif cakismasin diye).
 
 
+def _upload_error_response(logger, exc, user_msg, *, context=""):
+    """
+    Upload hatasini ISLER: benzersiz hata kodu uret, tam traceback'i o kodla
+    log'a yaz, kullaniciya anlasilir mesaj + ayni kodu dondur.
+
+    Boylece kullanici ekranda 'Код ошибки: ERR-XXXXXX' gorur, bunu bize iletir;
+    biz log'da o kodu aratarak (tek grep) tam hatayi aninda buluruz.
+
+    logger: logging.Logger. exc: yakalanan exception. user_msg: kullaniciya
+    gosterilecek Rusca aciklama (kod otomatik eklenir). context: log'a ek bilgi.
+    """
+    import uuid as _u
+    code = "ERR-" + _u.uuid4().hex[:6].upper()
+    # Tam traceback log'a, hata koduyla birlikte (grep icin).
+    logger.exception("[%s] %s | %s", code, context, exc)
+    return Response(
+        {"error": f"{user_msg} Код ошибки: {code}. Сообщите этот код администратору."},
+        status=400,
+    )
+
+
 def _open_sheet(excel_file):
     """Yuklenen Excel'i oku (xlsx: openpyxl, xls: xlrd, xlsb: pyxlsb). (sheet, err) doner."""
     import io
@@ -2048,21 +2069,19 @@ def depo_upload_preview_api(request):
         )
         DistributorRecord.objects.bulk_create(objs_gen, batch_size=2000)
         total = len(result.rows)
-    except MemoryError:
-        _log.exception("depo preview MemoryError | dist=%s file=%s",
-                       distributor, getattr(excel_file, "name", ""))
-        return Response({"error": (
+    except MemoryError as exc:
+        return _upload_error_response(
+            _log, exc,
             "Файл слишком большой для обработки. Разделите его на части "
-            "(например, по неделям) и загрузите по очереди."
-        )}, status=400)
+            "(например, по неделям) и загрузите по очереди.",
+            context=f"depo MemoryError dist={distributor} file={getattr(excel_file, 'name', '')}",
+        )
     except Exception as exc:
-        # Beklenmeyen hata: tam traceback log'a, kullaniciya ozet.
-        _log.exception("depo preview failed | dist=%s file=%s",
-                       distributor, getattr(excel_file, "name", ""))
-        return Response({"error": (
-            "Не удалось обработать файл. Проверьте формат и попробуйте снова. "
-            f"Техническая информация: {type(exc).__name__}: {exc}"
-        )}, status=400)
+        return _upload_error_response(
+            _log, exc,
+            "Не удалось обработать файл. Проверьте формат и попробуйте снова.",
+            context=f"depo preview dist={distributor} file={getattr(excel_file, 'name', '')}",
+        )
     
     first = DistributorRecord.objects.filter(batch_id=batch_id).order_by("id")[:_DEPO_PAGE_SIZE]
     rows = [_record_to_row(rec, i + 1) for i, rec in enumerate(first)]
@@ -2407,20 +2426,19 @@ def pharmacy_upload_preview_api(request):
         with _txn.atomic():
             SalesRecord.objects.filter(uploaded_by=request.user, is_confirmed=False).delete()
             SalesRecord.objects.bulk_create(objs, batch_size=5000)
-    except MemoryError:
-        _log.exception("pharmacy preview MemoryError | chain=%s file=%s",
-                       chain_name, getattr(excel_file, "name", ""))
-        return Response({"error": (
+    except MemoryError as exc:
+        return _upload_error_response(
+            _log, exc,
             "Файл слишком большой для обработки. Разделите его на части "
-            "и загрузите по очереди."
-        )}, status=400)
+            "и загрузите по очереди.",
+            context=f"pharmacy MemoryError chain={chain_name} file={getattr(excel_file, 'name', '')}",
+        )
     except Exception as exc:
-        _log.exception("pharmacy preview failed | chain=%s file=%s",
-                       chain_name, getattr(excel_file, "name", ""))
-        return Response({"error": (
-            "Не удалось обработать файл. Проверьте формат и попробуйте снова. "
-            f"Техническая информация: {type(exc).__name__}: {exc}"
-        )}, status=400)
+        return _upload_error_response(
+            _log, exc,
+            "Не удалось обработать файл. Проверьте формат и попробуйте снова.",
+            context=f"pharmacy preview chain={chain_name} file={getattr(excel_file, 'name', '')}",
+        )
 
     total = len(objs)
     first = SalesRecord.objects.filter(batch_id=batch_id).order_by("id")[:_PHARM_PAGE_SIZE]
