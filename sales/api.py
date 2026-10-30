@@ -3204,22 +3204,27 @@ def _demo_corner_rows(pharmacy_id):
     aptek ilk acildiginda mevcut satirlari (demo) dondurur. Gercek veri gelince
     _fetch_corner_rows solgar_cor.corner_log'dan okur."""
     pid = int(pharmacy_id or 0)
-    # Demo: aptek'e gore 1-2 ornek promo satiri (promo + podtip)
+    # Demo: aptek'e gore 1-2 ornek promo satiri (promo + podtip + boyut).
+    # ADLAR frontend promo-catalog.ts ile BIREBIR AYNI olmali, yoksa tekrar
+    # kontrolu (ayni promo+podtip 2. kez) demo satiriyla eslesmez.
+    # size: kullanici serbest girer; demo'da katalog boyutu ornek olarak.
     samples = [
-        ("СТОЙКИ", "Стойка открытая широкая"),
-        ("КОРНЕР", "Корнер стандарт"),
-        ("КОВРИК", "Коврик напольный"),
+        ("СТОЙКИ", "Стойка открытая широкая серая", "185х74х40"),
+        ("КОРНЕР", "Корнер", "180*30*20"),
+        ("КОВРИК", "Брендированный коврик (квадратный)", "60x40x40"),
     ]
     n = (pid % 2) + 1
     rows = []
     for i in range(n):
-        promo, subtype = samples[(pid + i) % len(samples)]
+        promo, subtype, size = samples[(pid + i) % len(samples)]
         st = _demo_status_for(pid, promo, subtype)
         rows.append({
             "id": pid * 100 + i,
             "apteka_id": pid,
             "promo": promo,
             "subtype": subtype,
+            "size": size,
+            "photos": [],   # demo: sahada cekilmis foto yok (kullanici yukler)
             **st,
         })
     return rows
