@@ -3183,39 +3183,56 @@ _HW_STATUS_LABELS = {
 }
 
 
+def _demo_status_for(pharmacy_id, promo, subtype):
+    """DEMO: bir (aptek, promo, podtip) kombinasyonu icin DETERMINISTIK status
+    uretir. Ayni kombinasyon hep ayni status'u gosterir. Gercek veri gelince
+    bu, solgar_cor.corner_log'dan okunan gercek status ile degistirilir."""
+    seed = abs(hash((int(pharmacy_id or 0), (promo or "").strip(), (subtype or "").strip())))
+    gen_status = seed % 2                       # 0/1
+    hw = _HW_STATUS[seed % len(_HW_STATUS)]
+    return {
+        "status": gen_status,
+        "status_label": _CORNER_STATUS_LABELS.get(gen_status, str(gen_status)),
+        "hardware_status": hw,
+        "hardware_status_label": _HW_STATUS_LABELS.get(hw, hw),
+    }
+
+
 def _demo_corner_rows(pharmacy_id):
-    """DEMO sahte veri: pharmacy_id'ye gore DETERMINISTIK satirlar uretir
-    (ayni aptek hep ayni demo veriyi gorsun). Gercek veri gelince bu fonksiyon
-    _fetch_corner_rows ile degistirilir."""
+    """DEMO sahte veri: aptek'in ONCEDEN EKLENMIS promo satirlari (deterministik).
+    Akis: kullanici Промо+Подтип secip 'Ekle' der, satir birikir. Bu fonksiyon
+    aptek ilk acildiginda mevcut satirlari (demo) dondurur. Gercek veri gelince
+    _fetch_corner_rows solgar_cor.corner_log'dan okur."""
     pid = int(pharmacy_id or 0)
+    # Demo: aptek'e gore 1-2 ornek promo satiri (promo + podtip)
+    samples = [
+        ("СТОЙКИ", "Стойка открытая широкая"),
+        ("КОРНЕР", "Корнер стандарт"),
+        ("КОВРИК", "Коврик напольный"),
+    ]
+    n = (pid % 2) + 1
     rows = []
-    # pid'e gore 1-3 hardware sec (deterministik)
-    n = (pid % 3) + 1
     for i in range(n):
-        ht = _HARDWARE_TYPES[(pid + i) % len(_HARDWARE_TYPES)]
-        gen_status = (pid + i) % 2          # 0/1
-        hw = _HW_STATUS[(pid + i) % len(_HW_STATUS)]
+        promo, subtype = samples[(pid + i) % len(samples)]
+        st = _demo_status_for(pid, promo, subtype)
         rows.append({
-            "id": pid * 100 + i,            # demo satir id'si
+            "id": pid * 100 + i,
             "apteka_id": pid,
-            "hardware_code": ht["code"],
-            "hardware_label": ht["label"],
-            "status": gen_status,
-            "status_label": _CORNER_STATUS_LABELS.get(gen_status, str(gen_status)),
-            "hardware_status": hw,
-            "hardware_status_label": _HW_STATUS_LABELS.get(hw, hw),
+            "promo": promo,
+            "subtype": subtype,
+            **st,
         })
     return rows
 
 
 def _fetch_corner_rows(pharmacy_id, brand):
-    """Bir aptek'in hardware/corner kayitlarini dondurur.
+    """Bir aptek'in promo/hardware kayitlarini dondurur.
 
     SU AN: demo sahte veri. GERCEK VERI GELINCE: burada solgar_cor.corner_log'a
     raw SQL ile baglanilacak, orn:
-        SELECT hardware_type, status, hardware_status FROM solgar_cor.corner_log
+        SELECT promo, subtype, status, hardware_status FROM solgar_cor.corner_log
         WHERE apteka_id = %s
-    ve ayni sekil ({hardware_code, status, hardware_status, ...}) dondurulecek.
+    ve ayni sekil ({promo, subtype, status, hardware_status, ...}) dondurulecek.
     Endpoint ve frontend degismez.
     """
     return _demo_corner_rows(pharmacy_id)
@@ -3224,21 +3241,31 @@ def _fetch_corner_rows(pharmacy_id, brand):
 @api_view(["GET"])
 @permission_classes([HasScreen("PHARMACY")])
 def pharmacy_corner_log_api(request):
-    """Bir aptek'in secili hardware'leri + status'lari. ?brand=&id=
+    """Bir aptek'in promo kayitlari + status'lari. ?brand=&id=[&promo=&subtype=]
 
-    Donen: {
-        "pharmacy_id": <id>,
-        "hardware_types": [{code,label}...],   # secim icin tum secenekler
-        "rows": [{hardware_code, hardware_label, status, status_label,
-                  hardware_status, hardware_status_label}...],  # secili + status
-        "demo": true   # demo veri oldugunu isaretler (gercekte false olur)
-    }
+    Iki kullanim:
+    1) ?brand=&id=  -> aptek'in MEVCUT promo satirlarini dondurur (ilk acilis).
+       Donen: {pharmacy_id, rows:[{promo, subtype, status, status_label,
+               hardware_status, hardware_status_label}], demo}
+    2) ?brand=&id=&promo=X&subtype=Y  -> sadece o promo+podtip kombinasyonunun
+       status'unu dondurur ('Ekle' aninda frontend bunu cagirir).
+       Donen: {promo, subtype, status, status_label, hardware_status,
+               hardware_status_label, demo}
     """
     brand = (request.GET.get("brand") or "SOLGAR").strip()
     obj_id = request.GET.get("id")
+    promo = (request.GET.get("promo") or "").strip()
+    subtype = (request.GET.get("subtype") or "").strip()
     if not obj_id:
         return Response({"error": "id gerekli."}, status=400)
     try:
+        # 2) Tek kombinasyon: 'Ekle' aninda status dondur.
+        if promo:
+            st = _demo_status_for(obj_id, promo, subtype)
+            return Response({
+                "promo": promo, "subtype": subtype, **st, "demo": True,
+            })
+        # 1) Ilk acilis: aptek'in mevcut promo satirlari.
         rows = _fetch_corner_rows(obj_id, brand)
     except Exception as exc:
         import logging as _logging
@@ -3249,7 +3276,6 @@ def pharmacy_corner_log_api(request):
         )
     return Response({
         "pharmacy_id": int(obj_id) if str(obj_id).isdigit() else obj_id,
-        "hardware_types": _HARDWARE_TYPES,
         "rows": rows,
         "demo": True,
     })
