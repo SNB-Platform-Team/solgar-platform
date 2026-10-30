@@ -298,3 +298,48 @@ GEOCODE_PROVIDER = get_secret("GEOCODE_PROVIDER", "dadata")
 DADATA_KEY = get_secret("DADATA_KEY", "")
 DADATA_SECRET = get_secret("DADATA_SECRET", "")
 YANDEX_GEOCODE_KEY = get_secret("YANDEX_GEOCODE_KEY", "")
+
+# --- Logging ---
+# Tum loglar stdout'a (console) yazilir; Azure App Service bunlari otomatik
+# yakalar ve Portal > Log stream ile /home/LogFiles/ docker loglarinda gosterir.
+# Upload hatalari (sales.pharmacy_upload / sales.depo_upload) try/except icinde
+# _log.exception(...) ile tam traceback olarak buraya duser -> yonetici gorebilir.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        # Django'nun kendi request hatalari (500'ler) da console'a dusesin.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        # Upload hata loglari (try/except icindeki _log.exception).
+        "sales.pharmacy_upload": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "sales.depo_upload": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
