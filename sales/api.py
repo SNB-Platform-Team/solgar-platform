@@ -3261,16 +3261,19 @@ def pharmacy_corner_log_api(request):
     obj_id = request.GET.get("id")
     promo = (request.GET.get("promo") or "").strip()
     subtype = (request.GET.get("subtype") or "").strip()
-    if not obj_id:
-        return Response({"error": "id gerekli."}, status=400)
     try:
-        # 2) Tek kombinasyon: 'Ekle' aninda status dondur.
+        # 2) Tek kombinasyon: 'Ekle' aninda status dondur. YENI kayitta (id yok)
+        #    da calisir -> id=0 ile status uretir, boylece bolum sifirdan
+        #    (bos tabloyla) baslayip promo eklemeye izin verir.
         if promo:
-            st = _demo_status_for(obj_id, promo, subtype)
+            st = _demo_status_for(obj_id or 0, promo, subtype)
             return Response({
                 "promo": promo, "subtype": subtype, **st, "demo": True,
             })
-        # 1) Ilk acilis: aptek'in mevcut promo satirlari.
+        # 1) Ilk acilis. id yoksa (yeni kayit) BOS liste dondur; varsa mevcut
+        #    satirlar. Boylece yeni kayitta bolum gorunur ama bos baslar.
+        if not obj_id:
+            return Response({"pharmacy_id": None, "rows": [], "demo": True})
         rows = _fetch_corner_rows(obj_id, brand)
     except Exception as exc:
         import logging as _logging
