@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-Bmo97ich.js";var t=e;export{t as component};
