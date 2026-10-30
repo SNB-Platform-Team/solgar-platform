@@ -1836,26 +1836,10 @@ def storage_options_api(request):
 import uuid as _uuid
 
 
-class _GridSheet:
-    """2D liste/tuple uzerine max_row/max_column saglayan hafif sarmalayici.
-
-    Parser (_read) 'cell' metodu YOKSA 2D indeksleme (grid[row][col]) yapar;
-    bu sinifta bilerek cell() yok. api.py sheet.max_row/max_column kullaniyor.
-    read_only streaming ile okundugu icin buyuk dosyalarda bellek dostu
-    (158K satir: ~900 MB -> ~120 MB).
-    """
-    __slots__ = ("_g", "max_row", "max_column")
-
-    def __init__(self, grid):
-        self._g = grid
-        self.max_row = len(grid)
-        self.max_column = max((len(r) for r in grid), default=0)
-
-    def __len__(self):
-        return len(self._g)
-
-    def __getitem__(self, i):
-        return self._g[i]
+# NOT: _GridSheet sinifi asagida (pharmacy bolumunde) tek yerde tanimli; 2D
+# listeyi openpyxl-benzeri cell(row=, column=) arayuzune sarar. Depo ve
+# pharmacy parser'lari ikisi de cell() uzerinden okur. Burada tekrar
+# tanimlanmaz (ayni modulde iki ayni isimli sinif cakismasin diye).
 
 
 def _open_sheet(excel_file):
@@ -2359,65 +2343,84 @@ def pharmacy_upload_preview_api(request):
 
     file_name = getattr(excel_file, "name", "") or ""
 
-    sheet, err = _ph_open_sheet(excel_file, sheet_name or None)
-    if err:
-        return Response({"error": err}, status=400)
-
-    from .pharmacy_all_configs import parse_chain
-    parsed = parse_chain(sheet, chain_name or file_name, main_group, sheet.max_row, sheet.max_column, country)
-    if parsed is None:
-        return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
-    if not parsed:
-        return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
-
-    def _brand(product):
-        p = (product or "").upper()
-        if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
-            return "BOUNTY"
-        return "SOLGAR"
-
-    def _int(v):
-        try:
-            return int(str(v).split(".")[0].replace(" ", "")) if v else 0
-        except (ValueError, TypeError):
-            return 0
-
-    def _dec(v):
-        try:
-            return _Dec(str(v).replace(" ", "").replace(",", ".")) if v else _Dec("0")
-        except Exception:
-            return _Dec("0")
-
-    batch_id = _ph_uuid.uuid4().hex
-    total_solgar_c = total_bounty_c = 0
-    objs = []
-    for r in parsed:
-        brand = _brand(r.get("PRODUCT"))
-        cnt = _int(r.get("COUNT"))
-        if brand == "BOUNTY":
-            total_bounty_c += cnt
-        else:
-            total_solgar_c += cnt
-        objs.append(SalesRecord(
-            report_date=report_date, chain_name=chain_name, country=country,
-            product_name=(r.get("PRODUCT") or "")[:300], brand=brand,
-            pharmacy=(r.get("PHARMACY") or "")[:400], city=(r.get("CITY") or "")[:150],
-            count=cnt, amount=_dec(r.get("AMOUNT")),
-            remaining_count=_int(r.get("REMAINING_COUNT")),
-            remaining_amount=_dec(r.get("REMAINING_AMOUNT")),
-            aptekno=(r.get("APTEKNO") or "")[:120],
-            salesreader=(r.get("SALESREADER") or "")[:400],
-            subgroup=(r.get("SUBGROUP") or "")[:150],
-            main_group=(r.get("MAINGROUP") or "")[:150],
-            uploaded_by=request.user, batch_id=batch_id, is_confirmed=False,
-        ))
-
+    # --- Dosya ac + parse + kayit: hepsini try/except'e sar (depo ile ayni
+    # desen). Hata olursa kullaniciya ANLASILIR Rusca mesaj + tip doner;
+    # tam traceback sunucu log'una yazilir (yonetici 'problemleri gorebilsin').
+    # Boylece worker cokup 502 vermek yerine 400 + aciklama doner.
+    import logging as _logging
+    _log = _logging.getLogger("sales.pharmacy_upload")
     try:
+        sheet, err = _ph_open_sheet(excel_file, sheet_name or None)
+        if err:
+            return Response({"error": err}, status=400)
+
+        from .pharmacy_all_configs import parse_chain
+        parsed = parse_chain(sheet, chain_name or file_name, main_group,
+                             sheet.max_row, sheet.max_column, country)
+        if parsed is None:
+            return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
+        if not parsed:
+            return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
+
+        def _brand(product):
+            p = (product or "").upper()
+            if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
+                return "BOUNTY"
+            return "SOLGAR"
+
+        def _int(v):
+            try:
+                return int(str(v).split(".")[0].replace(" ", "")) if v else 0
+            except (ValueError, TypeError):
+                return 0
+
+        def _dec(v):
+            try:
+                return _Dec(str(v).replace(" ", "").replace(",", ".")) if v else _Dec("0")
+            except Exception:
+                return _Dec("0")
+
+        batch_id = _ph_uuid.uuid4().hex
+        total_solgar_c = total_bounty_c = 0
+        objs = []
+        for r in parsed:
+            brand = _brand(r.get("PRODUCT"))
+            cnt = _int(r.get("COUNT"))
+            if brand == "BOUNTY":
+                total_bounty_c += cnt
+            else:
+                total_solgar_c += cnt
+            objs.append(SalesRecord(
+                report_date=report_date, chain_name=chain_name, country=country,
+                product_name=(r.get("PRODUCT") or "")[:300], brand=brand,
+                pharmacy=(r.get("PHARMACY") or "")[:400], city=(r.get("CITY") or "")[:150],
+                count=cnt, amount=_dec(r.get("AMOUNT")),
+                remaining_count=_int(r.get("REMAINING_COUNT")),
+                remaining_amount=_dec(r.get("REMAINING_AMOUNT")),
+                aptekno=(r.get("APTEKNO") or "")[:120],
+                salesreader=(r.get("SALESREADER") or "")[:400],
+                subgroup=(r.get("SUBGROUP") or "")[:150],
+                main_group=(r.get("MAINGROUP") or "")[:150],
+                uploaded_by=request.user, batch_id=batch_id, is_confirmed=False,
+            ))
+
         with _txn.atomic():
             SalesRecord.objects.filter(uploaded_by=request.user, is_confirmed=False).delete()
             SalesRecord.objects.bulk_create(objs, batch_size=5000)
+    except MemoryError:
+        _log.exception("pharmacy preview MemoryError | chain=%s file=%s",
+                       chain_name, getattr(excel_file, "name", ""))
+        return Response({"error": (
+            "Файл слишком большой для обработки. Разделите его на части "
+            "и загрузите по очереди."
+        )}, status=400)
     except Exception as exc:
-        return Response({"error": f"Ошибка при подготовке: {exc}"}, status=500)
+        _log.exception("pharmacy preview failed | chain=%s file=%s",
+                       chain_name, getattr(excel_file, "name", ""))
+        return Response({"error": (
+            "Не удалось обработать файл. Проверьте формат и попробуйте снова. "
+            f"Техническая информация: {type(exc).__name__}: {exc}"
+        )}, status=400)
 
     total = len(objs)
     first = SalesRecord.objects.filter(batch_id=batch_id).order_by("id")[:_PHARM_PAGE_SIZE]
