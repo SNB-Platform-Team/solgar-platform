@@ -3207,8 +3207,14 @@ def _fmt_size(w, l, d):
 def _demo_status_for(pharmacy_id, promo, subtype):
     """Yeni EKLEME akisi icin (henuz kaydetme yok) demo status uretir.
     Ayni (aptek, promo, podtip) hep ayni status'u gosterir. Kaydetme eklenince
-    bu, corner_info'ya INSERT + geri okuma ile degistirilir."""
-    seed = abs(hash((int(pharmacy_id or 0), (promo or "").strip(), (subtype or "").strip())))
+    bu, corner_info'ya INSERT + geri okuma ile degistirilir.
+
+    NOT: Frontend artik yeni satirlarda status GOSTERMIYOR (kaydetme yok), bu
+    yuzden pratikte cagrilmaz. Yine de deterministik: Python hash() surec basina
+    degisir, onun yerine md5 kullan (ayni girdi hep ayni cikti)."""
+    import hashlib
+    key = f"{int(pharmacy_id or 0)}|{(promo or '').strip()}|{(subtype or '').strip()}"
+    seed = int(hashlib.md5(key.encode("utf-8")).hexdigest()[:8], 16)
     gen_status = seed % 2                       # 0/1
     hw = _HW_STATUS[seed % len(_HW_STATUS)]
     return {
