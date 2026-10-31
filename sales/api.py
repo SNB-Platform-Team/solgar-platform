@@ -3155,25 +3155,32 @@ def pharmacy_detail_api(request):
 
 
 # ====================================================================
-# Pharmacy hardware / corner log (промо / корнер / коврик ...)
+# Pharmacy hardware / corner (оборудование)
 # ====================================================================
-# Bir aptek'in SECILI hardware'lerini + her birinin status'larini dondurur.
+# Bir aptek'in ekipman (corner) kayitlarini solgar_cor.corner_info'dan okur.
+# Eslesme: SOLGAR icin corner_info.solgar_pharm_id = pharmacy_data_solgar.
+# pharmacy_id; BOUNTY icin bounty_pharm_id = pharmacy_data_bounty.pharmacy_id.
+# (Workbench'te dogrulandi: solgar_pharm_id -> pharmacy_id, PK id degil.)
 #
-# DEMO: Veri su an SAHTE (_demo_corner_rows). Olga'dan gercek veri gelince
-# SADECE _fetch_corner_rows icindeki sorgu degisir (solgar_cor.corner_log'a
-# apteka_id ile JOIN); endpoint imzasi, UI ve frontend ayni kalir.
-#
-# Secenekler (hardware tipleri) genisleyebilir; tek yerde _HARDWARE_TYPES.
-_HARDWARE_TYPES = [
-    {"code": "PROMO",  "label": "Промо"},
-    {"code": "CORNER", "label": "Корнер"},
-    {"code": "KOVRIK", "label": "Коврик"},
-    {"code": "STAND",  "label": "Стенд"},
-    {"code": "SHELF",  "label": "Полка"},
-]
+# NOT: corner_info'da promo/podtip ADI yok (sadece boyut + status +
+# approve_status + corner_id). Bu yuzden mevcut kayitlar boyut ve status ile
+# gosterilir; promo/podtip bos ya da explanation'dan. Yeni EKLEME (promo+podtip
+# secip 'Ekle') su an KAYDEDILMIYOR (demo+): status demo uretilir.
+
 # Genel status (0/1) etiketleri
 _CORNER_STATUS_LABELS = {0: "Неактивно", 1: "Активно"}
-# Hardware (donanim) status etiketleri
+# approve_status (corner_info, 0-5) -> okunur etiket. corner_log logType
+# akisina gore: FIRST ENTRY -> onay bekliyor, MANAGER/CHAIN/MAKET APPROVED,
+# CORNER INSTALLED. Kesin eslesme legacy'de net degil; sayiyi da koruyoruz.
+_APPROVE_STATUS_LABELS = {
+    0: "Новый",
+    1: "Одобрено (менеджер)",
+    2: "Одобрено (сеть)",
+    3: "Макет одобрен",
+    4: "Установлено",
+    5: "Завершено",
+}
+# Yeni EKLEME akisinda (henuz kaydetme yok) kullanilan demo hardware status.
 _HW_STATUS = ["requested", "approved", "installed", "rejected"]
 _HW_STATUS_LABELS = {
     "requested": "Запрошено",
@@ -3183,10 +3190,24 @@ _HW_STATUS_LABELS = {
 }
 
 
+def _fmt_size(w, l, d):
+    """width/length/depth -> 'WxLxD' string. Hepsi bos/0 ise ''."""
+    def _n(x):
+        try:
+            v = int(float(x))
+            return v
+        except (TypeError, ValueError):
+            return 0
+    w, l, d = _n(w), _n(l), _n(d)
+    if w == 0 and l == 0 and d == 0:
+        return ""
+    return f"{w}x{l}x{d}"
+
+
 def _demo_status_for(pharmacy_id, promo, subtype):
-    """DEMO: bir (aptek, promo, podtip) kombinasyonu icin DETERMINISTIK status
-    uretir. Ayni kombinasyon hep ayni status'u gosterir. Gercek veri gelince
-    bu, solgar_cor.corner_log'dan okunan gercek status ile degistirilir."""
+    """Yeni EKLEME akisi icin (henuz kaydetme yok) demo status uretir.
+    Ayni (aptek, promo, podtip) hep ayni status'u gosterir. Kaydetme eklenince
+    bu, corner_info'ya INSERT + geri okuma ile degistirilir."""
     seed = abs(hash((int(pharmacy_id or 0), (promo or "").strip(), (subtype or "").strip())))
     gen_status = seed % 2                       # 0/1
     hw = _HW_STATUS[seed % len(_HW_STATUS)]
@@ -3198,49 +3219,78 @@ def _demo_status_for(pharmacy_id, promo, subtype):
     }
 
 
-def _demo_corner_rows(pharmacy_id):
-    """DEMO sahte veri: aptek'in ONCEDEN EKLENMIS promo satirlari (deterministik).
-    Akis: kullanici Промо+Подтип secip 'Ekle' der, satir birikir. Bu fonksiyon
-    aptek ilk acildiginda mevcut satirlari (demo) dondurur. Gercek veri gelince
-    _fetch_corner_rows solgar_cor.corner_log'dan okur."""
-    pid = int(pharmacy_id or 0)
-    # Demo: aptek'e gore 1-2 ornek promo satiri (promo + podtip + boyut).
-    # ADLAR frontend promo-catalog.ts ile BIREBIR AYNI olmali, yoksa tekrar
-    # kontrolu (ayni promo+podtip 2. kez) demo satiriyla eslesmez.
-    # size: kullanici serbest girer; demo'da katalog boyutu ornek olarak.
-    samples = [
-        ("СТОЙКИ", "Стойка открытая широкая серая", "185х74х40"),
-        ("КОРНЕР", "Корнер", "180*30*20"),
-        ("КОВРИК", "Брендированный коврик (квадратный)", "60x40x40"),
-    ]
-    n = (pid % 2) + 1
-    rows = []
-    for i in range(n):
-        promo, subtype, size = samples[(pid + i) % len(samples)]
-        st = _demo_status_for(pid, promo, subtype)
-        rows.append({
-            "id": pid * 100 + i,
-            "apteka_id": pid,
-            "promo": promo,
-            "subtype": subtype,
-            "size": size,
-            "photos": [],   # demo: sahada cekilmis foto yok (kullanici yukler)
-            **st,
-        })
-    return rows
-
-
 def _fetch_corner_rows(pharmacy_id, brand):
-    """Bir aptek'in promo/hardware kayitlarini dondurur.
+    """Bir aptek'in GERCEK ekipman kayitlarini solgar_cor.corner_info'dan okur.
 
-    SU AN: demo sahte veri. GERCEK VERI GELINCE: burada solgar_cor.corner_log'a
-    raw SQL ile baglanilacak, orn:
-        SELECT promo, subtype, status, hardware_status FROM solgar_cor.corner_log
-        WHERE apteka_id = %s
-    ve ayni sekil ({promo, subtype, status, hardware_status, ...}) dondurulecek.
-    Endpoint ve frontend degismez.
+    brand -> hangi pharm_id kolonu (solgar_pharm_id / bounty_pharm_id) ve o
+    markanin pharmacy_data tablosundan pharmacy_id eslesmesi. pharmacy_id
+    parametresi platform kaydinin PK 'id'si; once oradan gercek pharmacy_id'yi
+    (legacy ID) bulup corner_info'yu onunla sorgular.
     """
-    return _demo_corner_rows(pharmacy_id)
+    b = (brand or "SOLGAR").upper()
+    is_bounty = ("BOUNTY" in b or b == "BN")
+    pharm_col = "bounty_pharm_id" if is_bounty else "solgar_pharm_id"
+    data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
+
+    from django.db import connections
+
+    # 1) Platform PK id -> legacy pharmacy_id. Frontend 'id' olarak kaydin PK'sini
+    #    gonderiyor (detail API id ile calisiyor). corner_info pharmacy_id ister.
+    legacy_pid = None
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                f"SELECT pharmacy_id FROM solgar_tst.{data_table} WHERE id = %s LIMIT 1",
+                [pharmacy_id],
+            )
+            r = cur.fetchone()
+            if r and r[0]:
+                legacy_pid = int(r[0])
+    except Exception:
+        legacy_pid = None
+
+    # Eslesme bulunamazsa parametreyi dogrudan legacy pharmacy_id kabul et
+    # (frontend ileride pharmacy_id gonderiyorsa da calissin).
+    if legacy_pid is None:
+        try:
+            legacy_pid = int(pharmacy_id)
+        except (TypeError, ValueError):
+            return []
+
+    rows = []
+    sql = (
+        f"SELECT id, width, length, depth, status, approve_status, "
+        f"explanation, corner_id "
+        f"FROM solgar_cor.corner_info "
+        f"WHERE {pharm_col} = %s "
+        f"ORDER BY id DESC"
+    )
+    with connections["refdb"].cursor() as cur:
+        cur.execute(sql, [legacy_pid])
+        for cid, w, l, d, st, appr, expl, corner_id in cur.fetchall():
+            try:
+                st = int(st or 0)
+            except (TypeError, ValueError):
+                st = 0
+            try:
+                appr = int(appr or 0)
+            except (TypeError, ValueError):
+                appr = 0
+            rows.append({
+                "id": cid,
+                "apteka_id": legacy_pid,
+                # corner_info'da promo/podtip adi yok; explanation ya da bos.
+                "promo": "",
+                "subtype": (str(expl).strip() if expl else ""),
+                "size": _fmt_size(w, l, d),
+                "photos": [],
+                "status": st,
+                "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
+                # hardware_status alanina approve_status etiketi (0-5).
+                "hardware_status": str(appr),
+                "hardware_status_label": _APPROVE_STATUS_LABELS.get(appr, str(appr)),
+            })
+    return rows
 
 
 @api_view(["GET"])
@@ -3262,30 +3312,29 @@ def pharmacy_corner_log_api(request):
     promo = (request.GET.get("promo") or "").strip()
     subtype = (request.GET.get("subtype") or "").strip()
     try:
-        # 2) Tek kombinasyon: 'Ekle' aninda status dondur. YENI kayitta (id yok)
-        #    da calisir -> id=0 ile status uretir, boylece bolum sifirdan
-        #    (bos tabloyla) baslayip promo eklemeye izin verir.
+        # 2) Tek kombinasyon: 'Ekle' aninda status dondur. Bu status HENUZ
+        #    demo (kaydetme yok) -> demo:True. YENI kayitta (id yok) da calisir.
         if promo:
             st = _demo_status_for(obj_id or 0, promo, subtype)
             return Response({
                 "promo": promo, "subtype": subtype, **st, "demo": True,
             })
-        # 1) Ilk acilis. id yoksa (yeni kayit) BOS liste dondur; varsa mevcut
-        #    satirlar. Boylece yeni kayitta bolum gorunur ama bos baslar.
+        # 1) Ilk acilis. id yoksa (yeni kayit) BOS liste. Varsa corner_info'dan
+        #    GERCEK satirlar -> demo:False (okuma gercek; sadece ekleme demo).
         if not obj_id:
-            return Response({"pharmacy_id": None, "rows": [], "demo": True})
+            return Response({"pharmacy_id": None, "rows": [], "demo": False})
         rows = _fetch_corner_rows(obj_id, brand)
     except Exception as exc:
         import logging as _logging
         return _upload_error_response(
             _logging.getLogger("sales.pharmacy_corner"), exc,
             "Не удалось загрузить данные оборудования.",
-            context=f"corner_log id={obj_id} brand={brand}",
+            context=f"corner_info id={obj_id} brand={brand}",
         )
     return Response({
         "pharmacy_id": int(obj_id) if str(obj_id).isdigit() else obj_id,
         "rows": rows,
-        "demo": True,
+        "demo": False,
     })
 
 
