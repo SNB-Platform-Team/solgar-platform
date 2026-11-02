@@ -1060,9 +1060,11 @@ def faq_api(request):
         else:
             uncategorized.append(_doc_json(d))
 
+    # Tum aktif klasorler gosterilir (bos olanlar dahil) -> yonetici olusturdugu
+    # klasoru FAQ'da gorsun, icini doldurabilsin.
     document_folders = [
         {"id": c.id, "name": c.name, "documents": by_cat[c.id]}
-        for c in cats if by_cat[c.id]
+        for c in cats
     ]
     if uncategorized:
         document_folders.append(
