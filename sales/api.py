@@ -1031,24 +1031,53 @@ def faq_api(request):
                "разобраться.")},
     ]
 
-    # Kullanim talimatlari (admin panelden yuklenen PDF'ler). FAQ'da baglanti
-    # olarak gosterilir; kullanici document endpoint'inden tarayicida acar.
-    from authorization.models import Document
-    documents = [
-        {
+    # Kullanim dokumanlari (admin panelden yuklenir), klasore gore gruplanir.
+    # Her dokuman document endpoint'inden acilir/indirilir (tipe gore).
+    from authorization.models import Document, DocumentCategory
+
+    def _doc_json(d):
+        return {
             "id": d.id,
             "title": d.title,
             "url": f"/sales/api/faq/document/{d.id}/",
             "size": d.size,
+            "content_type": d.content_type or "",
+            "inline": d.is_inline,   # PDF/resim -> tarayicida acilir
         }
-        for d in Document.objects.filter(is_active=True).order_by("order", "title")
+
+    docs = list(
+        Document.objects.filter(is_active=True)
+        .select_related("category")
+        .order_by("order", "title")
+    )
+    # Klasorlere gore grupla (klasorsuz dokumanlar 'Прочее' altinda).
+    cats = list(DocumentCategory.objects.filter(is_active=True).order_by("order", "name"))
+    by_cat = {c.id: [] for c in cats}
+    uncategorized = []
+    for d in docs:
+        if d.category_id and d.category_id in by_cat:
+            by_cat[d.category_id].append(_doc_json(d))
+        else:
+            uncategorized.append(_doc_json(d))
+
+    document_folders = [
+        {"id": c.id, "name": c.name, "documents": by_cat[c.id]}
+        for c in cats if by_cat[c.id]
     ]
+    if uncategorized:
+        document_folders.append(
+            {"id": None, "name": "Прочее", "documents": uncategorized}
+        )
+
+    # Geriye donuk: duz 'documents' listesi de gonderilir (eski frontend icin).
+    documents = [_doc_json(d) for d in docs]
 
     return Response({
         "user_display": request.user.get_full_name() or request.user.username,
         "my_screens": my_screens,
         "faq": faq,
         "documents": documents,
+        "document_folders": document_folders,
     })
 
 
@@ -1056,10 +1085,10 @@ def faq_api(request):
 @permission_classes([IsAuthenticated])
 def faq_document_api(request, doc_id):
     """
-    FAQ dokumanini (PDF) tarayicida goster. Icerik DB'de (BinaryField) saklanir.
+    FAQ dokumanini servis et. Icerik DB'de (BinaryField) saklanir.
 
-    inline Content-Disposition -> tarayici yeni sekmede acar (indirmez). Sadece
-    aktif dokumanlar servis edilir; giris yapmis her kullanici erisebilir.
+    PDF ve resimler tarayicida acilir (inline); diger turler (Word/Excel/zip...)
+    indirilir (attachment). Sadece aktif dokumanlar; giris yapmis herkes erisir.
     """
     from django.http import HttpResponse, Http404
     from authorization.models import Document
@@ -1070,11 +1099,23 @@ def faq_document_api(request, doc_id):
         raise Http404("Документ не найден")
 
     data = bytes(doc.content or b"")
-    resp = HttpResponse(data, content_type=doc.content_type or "application/pdf")
-    # Dosya adi: baslik + .pdf (ASCII disi karakterler icin RFC 5987).
+    ct = doc.content_type or "application/octet-stream"
+    resp = HttpResponse(data, content_type=ct)
+
+    # Dosya adi: orijinal ad (uzantisi dahil), yoksa baslik. RFC 5987 (UTF-8).
+    import os
     from urllib.parse import quote
-    fname = quote(f"{doc.title}.pdf")
-    resp["Content-Disposition"] = f"inline; filename*=UTF-8''{fname}"
+    name = (doc.original_name or "").strip()
+    if not name:
+        # orijinal ad yoksa basliga uzanti ekle (icerik tipinden tahmin)
+        import mimetypes
+        ext = mimetypes.guess_extension(ct) or ""
+        name = f"{doc.title}{ext}"
+    fname = quote(name)
+
+    # PDF/resim -> inline (tarayicida ac); digerleri -> attachment (indir).
+    disposition = "inline" if doc.is_inline else "attachment"
+    resp["Content-Disposition"] = f"{disposition}; filename*=UTF-8''{fname}"
     resp["X-Content-Type-Options"] = "nosniff"
     return resp
 

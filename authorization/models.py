@@ -65,23 +65,51 @@ class AccessLevel(models.Model):
             self.screens.filter(is_active=True).values_list("code", flat=True)
         )
 
+class DocumentCategory(models.Model):
+    """
+    FAQ dokuman klasoru (Marketing, HR, ...). Yonetici /admin'den olusturur;
+    her klasorun icinde birden fazla Document olabilir. FAQ sayfasinda
+    dokumanlar klasorlere gore gruplanir.
+    """
+
+    name = models.CharField("Название папки", max_length=120, unique=True)
+    order = models.PositiveIntegerField("Порядок", default=0)
+    is_active = models.BooleanField("Активно", default=True)
+
+    class Meta:
+        verbose_name = "Папка документов (FAQ)"
+        verbose_name_plural = "Папки документов (FAQ)"
+        db_table = "authorization_document_category"
+        ordering = ["order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Document(models.Model):
     """
-    FAQ sayfasinda kullanicilara sunulan PDF dokumani (kullanim talimatlari).
+    FAQ sayfasinda kullanicilara sunulan dokuman (talimat, politika, vb.).
 
-    Yonetici /admin'den yukler; FAQ API'si aktif dokumanlari listeler ve
-    kullanici tarayicida acar. PDF icerigi DB'de (BinaryField) saklanir, ciplak
-    dosya sisteminde degil: Azure App Service diski deploy'da sifirlandigi icin
-    dosya tabanli depolama kalici degil. DB (Sber MySQL) kalici.
+    Yonetici /admin'den yukler; her tur dosya olabilir (PDF, Office, resim,
+    zip...). FAQ API'si aktif dokumanlari klasore gore gruplar. PDF ve resimler
+    tarayicida acilir, digerleri indirilir. Icerik DB'de (BinaryField) saklanir:
+    Azure App Service diski deploy'da sifirlandigi icin dosya tabanli depolama
+    kalici degil, DB (Sber MySQL) kalici.
     """
 
-    title = models.CharField("Название", max_length=200)
-    # PDF'in ikili icerigi (DB'de kalici). Yukleme ModelAdmin'de bir dosya
-    # alanindan okunup buraya yazilir (bkz. authorization/admin.py).
-    content = models.BinaryField("PDF содержимое", editable=False)
-    content_type = models.CharField(
-        "MIME", max_length=100, default="application/pdf", editable=False
+    category = models.ForeignKey(
+        DocumentCategory, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="documents", verbose_name="Папка",
     )
+    title = models.CharField("Название", max_length=200)
+    # Dosyanin ikili icerigi (DB'de kalici). Yukleme ModelAdmin'de bir dosya
+    # alanindan okunup buraya yazilir (bkz. authorization/admin.py).
+    content = models.BinaryField("Содержимое файла", editable=False)
+    content_type = models.CharField(
+        "MIME", max_length=120, default="application/octet-stream", editable=False
+    )
+    # Orijinal dosya adi (uzanti dahil) — indirme/goruntuleme icin.
+    original_name = models.CharField("Имя файла", max_length=255, blank=True, editable=False)
     size = models.PositiveIntegerField("Размер (байт)", default=0, editable=False)
     order = models.PositiveIntegerField("Порядок", default=0)
     is_active = models.BooleanField("Активно", default=True)
@@ -95,3 +123,9 @@ class Document(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+    @property
+    def is_inline(self) -> bool:
+        """Tarayicida acilabilir mi (PDF/resim) yoksa indirilsin mi."""
+        ct = (self.content_type or "").lower()
+        return ct == "application/pdf" or ct.startswith("image/")
