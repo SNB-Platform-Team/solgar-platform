@@ -3280,24 +3280,14 @@ def _demo_status_for(pharmacy_id, promo, subtype):
     }
 
 
-def _fetch_corner_rows(pharmacy_id, brand):
-    """Bir aptek'in GERCEK ekipman kayitlarini solgar_cor.corner_info'dan okur.
-
-    brand -> hangi pharm_id kolonu (solgar_pharm_id / bounty_pharm_id) ve o
-    markanin pharmacy_data tablosundan pharmacy_id eslesmesi. pharmacy_id
-    parametresi platform kaydinin PK 'id'si; once oradan gercek pharmacy_id'yi
-    (legacy ID) bulup corner_info'yu onunla sorgular.
-    """
+def _legacy_pharmacy_id(pharmacy_id, brand):
+    """Platform PK id -> legacy pharmacy_id (pharmacy_data_*.pharmacy_id).
+    Frontend 'id' olarak PK gonderir; corner_info ve yeni tablo legacy ID ister.
+    Eslesme yoksa parametreyi dogrudan legacy kabul eder."""
     b = (brand or "SOLGAR").upper()
     is_bounty = ("BOUNTY" in b or b == "BN")
-    pharm_col = "bounty_pharm_id" if is_bounty else "solgar_pharm_id"
     data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
-
     from django.db import connections
-
-    # 1) Platform PK id -> legacy pharmacy_id. Frontend 'id' olarak kaydin PK'sini
-    #    gonderiyor (detail API id ile calisiyor). corner_info pharmacy_id ister.
-    legacy_pid = None
     try:
         with connections["refdb"].cursor() as cur:
             cur.execute(
@@ -3306,19 +3296,70 @@ def _fetch_corner_rows(pharmacy_id, brand):
             )
             r = cur.fetchone()
             if r and r[0]:
-                legacy_pid = int(r[0])
+                return int(r[0])
     except Exception:
-        legacy_pid = None
+        pass
+    try:
+        return int(pharmacy_id)
+    except (TypeError, ValueError):
+        return None
 
-    # Eslesme bulunamazsa parametreyi dogrudan legacy pharmacy_id kabul et
-    # (frontend ileride pharmacy_id gonderiyorsa da calissin).
-    if legacy_pid is None:
+
+def _equipment_photo_list(eq):
+    """Bir PharmacyEquipment'in fotograf url listesi (SAS link'li)."""
+    from sales import blob_storage as _blob
+    out = []
+    for ph in eq.photos.all():
+        url = ""
         try:
-            legacy_pid = int(pharmacy_id)
-        except (TypeError, ValueError):
-            return []
+            if _blob.blob_configured():
+                url = _blob.get_sas_url(ph.blob_name, minutes=120)
+        except Exception:
+            url = ""
+        out.append({"id": ph.id, "url": url, "name": ph.original_name})
+    return out
+
+
+def _fetch_corner_rows(pharmacy_id, brand):
+    """Bir aptek'in ekipman kayitlari: eski solgar_cor.corner_info (salt-okunur)
+    + platformun kendi PharmacyEquipment tablosu (silinebilir). Birlikte doner.
+    Her satirda 'source': 'legacy' (corner_info) ya da 'new' (bizim tablo).
+    """
+    b = (brand or "SOLGAR").upper()
+    is_bounty = ("BOUNTY" in b or b == "BN")
+    pharm_col = "bounty_pharm_id" if is_bounty else "solgar_pharm_id"
+
+    legacy_pid = _legacy_pharmacy_id(pharmacy_id, brand)
+    if legacy_pid is None:
+        return []
+
+    from django.db import connections
 
     rows = []
+
+    # 1) YENI kayitlar (bizim tablo) — en uste, silinebilir, fotolu.
+    from .models import PharmacyEquipment
+    brand_key = "BOUNTY" if is_bounty else "SOLGAR"
+    for eq in (PharmacyEquipment.objects
+               .filter(pharmacy_id=legacy_pid, brand=brand_key)
+               .prefetch_related("photos").order_by("-created_at")):
+        st = int(eq.status or 0)
+        rows.append({
+            "id": eq.id,
+            "source": "new",            # silinebilir
+            "apteka_id": legacy_pid,
+            "promo": eq.promo or "",
+            "subtype": eq.subtype or "",
+            "size": eq.size or "",
+            "photos": _equipment_photo_list(eq),
+            "status": st,
+            "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
+            # yeni kayitta approve_status yok -> bos.
+            "hardware_status": "",
+            "hardware_status_label": "",
+        })
+
+    # 2) ESKI corner_info (salt-okunur).
     sql = (
         f"SELECT id, width, length, depth, status, approve_status, "
         f"explanation, corner_id "
@@ -3339,15 +3380,14 @@ def _fetch_corner_rows(pharmacy_id, brand):
                 appr = 0
             rows.append({
                 "id": cid,
+                "source": "legacy",     # salt-okunur
                 "apteka_id": legacy_pid,
-                # corner_info'da promo/podtip adi yok; explanation ya da bos.
                 "promo": "",
                 "subtype": (str(expl).strip() if expl else ""),
                 "size": _fmt_size(w, l, d),
                 "photos": [],
                 "status": st,
                 "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
-                # hardware_status alanina approve_status etiketi (0-5).
                 "hardware_status": str(appr),
                 "hardware_status_label": _APPROVE_STATUS_LABELS.get(appr, str(appr)),
             })
@@ -3397,6 +3437,115 @@ def pharmacy_corner_log_api(request):
         "rows": rows,
         "demo": False,
     })
+
+
+@api_view(["POST"])
+@permission_classes([HasScreen("PHARMACY")])
+def pharmacy_equipment_save_api(request):
+    """
+    Yeni ekipman kaydi olustur (multipart). Fotograflar Azure Blob'a yuklenir,
+    kayit + foto blob adlari PharmacyEquipment/Photo'ya INSERT edilir.
+
+    multipart alanlar:
+      brand, id (platform PK ya da legacy pharmacy_id), promo, subtype, size
+      photos (0+ dosya, alan adi 'photos')
+    Doner: olusan satir (_fetch_corner_rows formatinda, source='new').
+    """
+    from .models import PharmacyEquipment, PharmacyEquipmentPhoto
+    from sales import blob_storage as _blob
+
+    brand = (request.POST.get("brand") or "SOLGAR").strip()
+    obj_id = request.POST.get("id")
+    promo = (request.POST.get("promo") or "").strip()
+    subtype = (request.POST.get("subtype") or "").strip()
+    size = (request.POST.get("size") or "").strip()
+
+    if not obj_id:
+        return Response({"error": "id gerekli."}, status=400)
+    if not (promo or subtype):
+        return Response({"error": "Выберите промо и подтип."}, status=400)
+
+    legacy_pid = _legacy_pharmacy_id(obj_id, brand)
+    if legacy_pid is None:
+        return Response({"error": "Аптека не найдена."}, status=404)
+
+    brand_key = "BOUNTY" if ("BOUNTY" in brand.upper() or brand.upper() == "BN") else "SOLGAR"
+
+    try:
+        eq = PharmacyEquipment.objects.create(
+            pharmacy_id=legacy_pid, brand=brand_key,
+            promo=promo, subtype=subtype, size=size, status=1,
+            created_by=(getattr(request.user, "email", "") or
+                        getattr(request.user, "username", "") or ""),
+        )
+        # Fotograflar -> Blob (yapilandirilmissa). Yoksa kayit fotosuz olusur.
+        files = request.FILES.getlist("photos")
+        if files and _blob.blob_configured():
+            for f in files:
+                data = f.read()
+                ct = getattr(f, "content_type", "") or "image/jpeg"
+                name = getattr(f, "name", "") or ""
+                blob_name, _url = _blob.upload_photo(
+                    data, name, content_type=ct,
+                    prefix=f"equipment/{legacy_pid}",
+                )
+                PharmacyEquipmentPhoto.objects.create(
+                    equipment=eq, blob_name=blob_name, content_type=ct,
+                    original_name=name, size=len(data),
+                )
+    except Exception as exc:
+        import logging as _logging
+        return _upload_error_response(
+            _logging.getLogger("sales.equipment"), exc,
+            "Не удалось сохранить оборудование.",
+            context=f"equipment save pid={legacy_pid} brand={brand_key}",
+        )
+
+    st = int(eq.status or 0)
+    row = {
+        "id": eq.id, "source": "new", "apteka_id": legacy_pid,
+        "promo": eq.promo, "subtype": eq.subtype, "size": eq.size,
+        "photos": _equipment_photo_list(eq),
+        "status": st, "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
+        "hardware_status": "", "hardware_status_label": "",
+    }
+    return Response({"row": row})
+
+
+@api_view(["POST"])
+@permission_classes([HasScreen("PHARMACY")])
+def pharmacy_equipment_delete_api(request):
+    """
+    Yeni ekipman kaydini sil (SADECE bizim tablo; corner_info salt-okunur).
+    JSON ya da form: {equipment_id}. Fotolar Blob'dan da silinir.
+    """
+    from .models import PharmacyEquipment
+    from sales import blob_storage as _blob
+
+    eq_id = request.data.get("equipment_id") if hasattr(request, "data") else None
+    eq_id = eq_id or request.POST.get("equipment_id")
+    if not eq_id:
+        return Response({"error": "equipment_id gerekli."}, status=400)
+
+    try:
+        eq = PharmacyEquipment.objects.prefetch_related("photos").get(pk=eq_id)
+    except PharmacyEquipment.DoesNotExist:
+        return Response({"error": "Запись не найдена."}, status=404)
+
+    try:
+        # Once Blob'daki fotolari sil (best-effort), sonra DB kaydi.
+        if _blob.blob_configured():
+            for ph in eq.photos.all():
+                _blob.delete_blob(ph.blob_name)
+        eq.delete()   # CASCADE -> foto satirlari da gider
+    except Exception as exc:
+        import logging as _logging
+        return _upload_error_response(
+            _logging.getLogger("sales.equipment"), exc,
+            "Не удалось удалить оборудование.",
+            context=f"equipment delete id={eq_id}",
+        )
+    return Response({"ok": True})
 
 
 @api_view(["GET", "POST"])

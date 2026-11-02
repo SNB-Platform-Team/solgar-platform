@@ -582,3 +582,58 @@ class GeocodeSettings(models.Model):
     @classmethod
     def current(cls):
         return cls.objects.filter(is_active=True).first()
+
+class PharmacyEquipment(models.Model):
+    """
+    Bir aptek'in ekipman (оборудование) kaydi — PLATFORMUN KENDI tablosu.
+
+    Eski solgar_cor.corner_info salt-okunur gosterilir; YENI kayitlar buraya
+    yazilir (kullanici 'Добавить' -> kaydet). pharmacy_id: legacy pharmacy_id
+    (pharmacy_data_*.pharmacy_id), brand ile birlikte aptek'i belirler.
+    Fotograflar Azure Blob'da; blob adlari PharmacyEquipmentPhoto'da.
+    """
+
+    pharmacy_id = models.IntegerField("Pharmacy ID (legacy)", db_index=True)
+    brand = models.CharField("Brand", max_length=20, default="SOLGAR")
+    promo = models.CharField("Промо", max_length=120, blank=True)
+    subtype = models.CharField("Подтип", max_length=200, blank=True)
+    size = models.CharField("Размер", max_length=120, blank=True)
+    # Genel durum (0/1). Yeni kayitlar varsayilan 1 (aktif).
+    status = models.PositiveSmallIntegerField("Статус", default=1)
+    created_by = models.CharField("Создал", max_length=255, blank=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Оборудование аптеки"
+        verbose_name_plural = "Оборудование аптек"
+        db_table = "intern_pharmacy_equipment"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.brand} #{self.pharmacy_id}: {self.promo} / {self.subtype}"
+
+
+class PharmacyEquipmentPhoto(models.Model):
+    """
+    Bir ekipman kaydina ait sahada cekilmis fotograf. Icerik Azure Blob'da;
+    burada sadece blob adi (container icindeki yol) ve meta tutulur.
+    """
+
+    equipment = models.ForeignKey(
+        PharmacyEquipment, on_delete=models.CASCADE, related_name="photos",
+        verbose_name="Оборудование",
+    )
+    blob_name = models.CharField("Blob name", max_length=300)
+    content_type = models.CharField("MIME", max_length=120, default="image/jpeg")
+    original_name = models.CharField("Имя файла", max_length=255, blank=True)
+    size = models.PositiveIntegerField("Размер (байт)", default=0)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Фото оборудования"
+        verbose_name_plural = "Фото оборудования"
+        db_table = "intern_pharmacy_equipment_photo"
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return self.blob_name

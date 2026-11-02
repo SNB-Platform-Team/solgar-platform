@@ -100,3 +100,24 @@ from .models import GeocodeSettings
 class GeocodeSettingsAdmin(admin.ModelAdmin):
     list_display = ("provider", "is_active", "updated_at")
     fields = ("provider", "is_active", "dadata_key", "dadata_secret", "yandex_key")
+
+from .models import PharmacyEquipment, PharmacyEquipmentPhoto
+
+
+class PharmacyEquipmentPhotoInline(admin.TabularInline):
+    model = PharmacyEquipmentPhoto
+    extra = 0
+    readonly_fields = ("blob_name", "content_type", "original_name", "size", "created_at")
+    can_delete = True
+
+
+@admin.register(PharmacyEquipment)
+class PharmacyEquipmentAdmin(admin.ModelAdmin):
+    """Platformun kendi ekipman kayitlari (оборудование). Fotolar Azure Blob'da."""
+
+    list_display = ("id", "pharmacy_id", "brand", "promo", "subtype", "size",
+                    "status", "created_by", "created_at")
+    list_filter = ("brand", "status")
+    search_fields = ("pharmacy_id", "promo", "subtype", "created_by")
+    ordering = ("-created_at",)
+    inlines = [PharmacyEquipmentPhotoInline]
