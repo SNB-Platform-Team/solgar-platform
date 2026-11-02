@@ -343,3 +343,10 @@ LOGGING = {
         },
     },
 }
+
+
+# --- Azure Blob Storage (ekipman fotograflari) ---
+# Zafer tarafindan App Settings'e eklendi. Bos ise blob devre disi
+# (sales.blob_storage.blob_configured() False doner).
+AZURE_STORAGE_CONNECTION_STRING: str = get_secret("AZURE_STORAGE_CONNECTION_STRING", "")
+AZURE_STORAGE_CONTAINER: str = get_secret("AZURE_STORAGE_CONTAINER", "equipment-photos")

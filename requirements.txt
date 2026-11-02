@@ -15,3 +15,5 @@ django-unfold==0.81.0
 
 
 pyxlsb
+
+azure-storage-blob==12.23.1

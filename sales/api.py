@@ -3399,6 +3399,63 @@ def pharmacy_corner_log_api(request):
     })
 
 
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def blob_selftest_api(request):
+    """
+    Azure Blob baglantisini test et (admin/staff). GET: yapilandirma durumu.
+    POST (multipart, 'file'): dosyayi Blob'a yukle, geri oku, dogrula, sil.
+    Deploy sonrasi Blob'un gercekten calistigini kontrol etmek icin.
+    """
+    if not (request.user and request.user.is_staff):
+        return Response({"error": "Только для администратора."}, status=403)
+
+    from sales import blob_storage as _blob
+
+    configured = _blob.blob_configured()
+    if request.method == "GET":
+        return Response({
+            "configured": configured,
+            "container": _blob._container_name(),
+        })
+
+    # POST: gercek yukleme testi
+    if not configured:
+        return Response({"error": "Blob не настроен (нет connection string)."}, status=400)
+
+    f = request.FILES.get("file")
+    if not f:
+        return Response({"error": "Файл не выбран (поле 'file')."}, status=400)
+
+    try:
+        data = f.read()
+        ct = getattr(f, "content_type", "") or "application/octet-stream"
+        name, url = _blob.upload_photo(data, getattr(f, "name", ""), content_type=ct)
+        # geri oku + dogrula
+        back, back_ct = _blob.download_blob(name)
+        ok = (back == data)
+        sas = _blob.get_sas_url(name, minutes=10)
+        # temizle (test dosyasini birakma)
+        deleted = _blob.delete_blob(name)
+        return Response({
+            "ok": ok,
+            "blob_name": name,
+            "uploaded_bytes": len(data),
+            "readback_bytes": len(back),
+            "content_type": back_ct,
+            "sas_url_sample": sas[:120] + "...",
+            "deleted": deleted,
+            "message": "Blob yükleme/okuma/silme başarılı." if ok and deleted
+                       else "Tamamlandı ama doğrulama kısmen.",
+        })
+    except Exception as exc:
+        import logging as _logging
+        return _upload_error_response(
+            _logging.getLogger("sales.blob"), exc,
+            "Ошибка при проверке Blob.",
+            context="blob selftest",
+        )
+
 
 @api_view(["POST"])
 @permission_classes([HasScreen("PHARMACY")])
