@@ -140,6 +140,15 @@ class DepoStorageParser:
                 if self._spec_strips(cfg, "COUNT"):
                     count = self._strip_separators(count)
 
+            # COUNT_ADD: ikinci bir sayac kolonu varsa COUNT'a eklenir (ornegin
+            # Protek STOCK: 'всего' + 'входящий транзит'). Her ikisi de sayi.
+            add_col = col_index.get("COUNT_ADD")
+            if add_col is not None:
+                add_raw = self._read(sheet, add_col, i)
+                if self._not_empty(add_raw):
+                    count = str(self._parse_int_safe(count)
+                                + self._parse_int_safe(add_raw))
+
             split = self._matching_split(cfg, city_raw)
             if split is not None:
                 self._emit_split_row(out, table_index, cfg, col_index, sheet, i, main_group, split, count)

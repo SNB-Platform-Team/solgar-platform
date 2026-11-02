@@ -74,7 +74,10 @@ def protek_stock() -> DepoParserConfig:
     c = DepoParserConfig("PROTEK", "STOCK", layout=ParserLayout.VERTICAL)
     c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "наименование", 0, 1))
     c.columns.append(DepoColumnSpec.of("CITY", "склад"))
+    # Miktar = 'всего' (depo toplami) + 'входящий транзит' (gelen transit).
+    # COUNT_ADD parser'da COUNT'a eklenir; ikisi birden gercek stok.
     c.columns.append(DepoColumnSpec.of("COUNT", "всего"))
+    c.columns.append(DepoColumnSpec.of("COUNT_ADD", "входящий транзит"))
     for city in _PROTEK_CITIES:
         c.city_rules.append(DepoCityRule.map(city, city))
     return c
