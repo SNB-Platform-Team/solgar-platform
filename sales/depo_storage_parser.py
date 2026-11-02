@@ -175,8 +175,11 @@ class DepoStorageParser:
 
         table_index = 0
         stride = getattr(cfg, "pivot_col_stride", 1) or 1
-        for col in range(start_column, h_limit - 1, stride):
-            for i in range(start_row, v_limit - 1):
+        # NOT: v_limit/h_limit SON satir/kolonu da dahil et (eskiden -1 ile son
+        # satir/kolon atlaniyordu -> Пульс'te son urun '1560' kayboluyordu).
+        # Bos satir/kolon zaten asagida not_empty ile atlanir, dolu olan eklenir.
+        for col in range(start_column, h_limit, stride):
+            for i in range(start_row, v_limit):
                 city_raw = self._read(sheet, col, city_row)
                 if not self._not_empty(city_raw):
                     continue

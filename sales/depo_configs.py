@@ -115,10 +115,13 @@ def pulse_sale() -> DepoParserConfig:
 
 def pulse_stock() -> DepoParserConfig:
     # PIVOT: urun 'Номенклатура' (col2, r4); sehirler ustteki r3; her sehir 2 sutun
-    # (Фактический Остаток / Товар в пути) -> stride=2, sayac ilk sutun (Остаток)
+    # (Фактический Остаток / Товар в пути) -> stride=2, sayac ilk sutun (Остаток).
+    # Urun col2 -> aralarinda 'Контракт' (col3, metin) var; veri col4'ten
+    # basliyor, bu yuzden offset=2 (offset=1 olunca Контракт metni sayac
+    # sanilip toplam yanlis cikiyordu).
     c = DepoParserConfig("PULSE", "STOCK", layout=ParserLayout.PIVOT)
     c.pivot_product_keyword = "Номенклатура"
-    c.pivot_first_data_column_offset = 1
+    c.pivot_first_data_column_offset = 2
     c.pivot_first_data_row_offset = 1
     c.pivot_city_row_offset = -1
     c.pivot_col_stride = 2
