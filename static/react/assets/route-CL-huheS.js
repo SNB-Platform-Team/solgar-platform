@@ -1,0 +1,1 @@
+import{t as e}from"./authenticated-layout-BD4-dAGr.js";var t=e;export{t as component};

@@ -1,0 +1,1 @@
+import{y as e}from"./index-Bia1hJEw.js";var t=e;export{t as component};
