@@ -358,13 +358,16 @@ def pharmacy_api(request):
     ]
     filters = {k: (request.GET.get(k) or "").strip() for k in fkeys}
 
-    # Satir-seviyesi guvenlik (doctor_api ile ayni mantik): medrep (Сотрудник,
-    # is_staff=False) SADECE kendi aptekalarini gorur. Apteka tablosunda med.
-    # temsilci kolonu 'marketing_staff'. Kisit SERVER tarafinda zorunlu — panel
-    # kaldirmak tek basina yetmez, API dogrudan cagrilabilir. Admin/Menecer
-    # (is_staff=True) icin kisit yok. Eslesme yoksa bos liste (guvenli taraf).
+    # Satir-seviyesi guvenlik: SADECE saf saha temsilcisi (medrep) kendi
+    # aptekalarini gorur. Yonetici/menecer — "Аптеки Обзор" (PHARM_MGR) ekrani
+    # olan ya da is_staff/superuser — TUM aptekalari gorur. Ayrim is_staff'a
+    # degil ekran yetkisine bagli: menecerin hesabi is_staff=False olsa da
+    # PHARM_MGR ekrani varsa hepsini gormeli. Kisit SERVER tarafinda zorunlu —
+    # panel kaldirmak tek basina yetmez, API dogrudan cagrilabilir. Eslesme
+    # yoksa bos liste (guvenli taraf). Apteka tablosunda temsilci kolonu
+    # 'marketing_staff'.
     user = getattr(request, "user", None)
-    if user and user.is_authenticated and not user.is_staff:
+    if _is_row_restricted(user, "PHARM_MGR"):
         name = ""
         try:
             name = _medrep_name_from_email(getattr(user, "email", "") or "")
@@ -483,13 +486,15 @@ def doctor_api(request):
     ]
     filters = {k: (request.GET.get(k) or "").strip() for k in dkeys}
 
-    # Satir-seviyesi guvenlik: medrep (Сотрудник, is_staff=False) SADECE kendi
-    # doktorlarini gorur (medrep = kendi adi). Bu kisit SERVER tarafinda zorunlu
-    # kilinir — frontend'de filtre panelini kaldirmak tek basina yeterli degil,
-    # cunku medrep API'yi dogrudan cagirip baskasinin doktorlarini cekebilir.
-    # Admin/Menecer (is_staff=True) icin kisit yok, hepsini gorur.
+    # Satir-seviyesi guvenlik: SADECE saf saha temsilcisi (medrep) kendi
+    # doktorlarini gorur (medrep = kendi adi). Yonetici/menecer — "Врачи Обзор"
+    # (DOCTOR_MGR) ekrani olan ya da is_staff/superuser — TUM doktorlari gorur.
+    # Ayrim is_staff'a degil ekran yetkisine bagli: menecerin hesabi
+    # is_staff=False olsa da DOCTOR_MGR ekrani varsa hepsini gormeli. Kisit
+    # SERVER tarafinda zorunlu — frontend panelini kaldirmak tek basina yetmez,
+    # API dogrudan cagrilabilir. Eslesme yoksa bos liste (guvenli taraf).
     user = getattr(request, "user", None)
-    if user and user.is_authenticated and not user.is_staff:
+    if _is_row_restricted(user, "DOCTOR_MGR"):
         name = ""
         try:
             name = _medrep_name_from_email(getattr(user, "email", "") or "")
@@ -1552,6 +1557,34 @@ def _medrep_name_from_email(email: str) -> str:
         cur.execute(sql, [email])
         row = cur.fetchone()
     return str(row[0]).strip() if row and row[0] else ""
+
+
+def _is_row_restricted(user, manager_screen: str) -> bool:
+    """Bu kullanici apteka/doktor listesinde satir-kisitina tabi mi?
+
+    Kisit SADECE saf saha temsilcisine (medrep) uygulanir: kendi
+    aptekalarini/doktorlarini gorur. Asagidakilerden biri dogruysa kisit
+    YOK (hepsini gorur):
+      - anonim/oturumsuz degil + superuser -> gorur (zaten tum ekranlar)
+      - is_staff (admin/menecer) -> gorur
+      - `manager_screen` (PHARM_MGR / DOCTOR_MGR = "... Обзор") ekrani var ->
+        menecerdir, hepsini gorur (hesabi is_staff=False olsa bile)
+
+    Boylece ayrim is_staff'a degil ekran yetkisine baglanir; yonetici
+    PHARM_MGR/DOCTOR_MGR ekranina sahipse tum satirlari gorur."""
+    if not user or not getattr(user, "is_authenticated", False):
+        # HasScreen zaten oturumsuzu engeller; guvenli taraf: kisitli say.
+        return True
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return False
+    try:
+        from authorization.permissions import _user_screen_codes
+        if manager_screen in _user_screen_codes(user):
+            return False
+    except Exception:
+        # Ekran cozumu patlarsa guvenli taraf: saf medrep gibi kisitla.
+        pass
+    return True
 
 
 @api_view(["GET"])
