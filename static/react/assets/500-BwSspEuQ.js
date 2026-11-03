@@ -1,1 +1,0 @@
-import{b as e}from"./index-Ccv32b4p.js";var t=e;export{t as component};
