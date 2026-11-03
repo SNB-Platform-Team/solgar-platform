@@ -3452,6 +3452,15 @@ def pharmacy_corner_log_api(request):
         if not obj_id:
             return Response({"pharmacy_id": None, "rows": [], "demo": False})
         rows = _fetch_corner_rows(obj_id, brand)
+        # GERCEK (legacy) pharmacy_id — ekipman satiri olmasa bile dolu gelsin.
+        # Yonetici her apteka'da ID gormek istiyor; satirlardaki apteka_id
+        # bos olabilir (hic ekipman yoksa), bu yuzden ust seviyede de legacy
+        # id'yi dondururuz. _legacy_pharmacy_id: platform PK -> pharmacy_id.
+        legacy_pid = None
+        try:
+            legacy_pid = _legacy_pharmacy_id(obj_id, brand)
+        except Exception:
+            legacy_pid = None
     except Exception as exc:
         import logging as _logging
         return _upload_error_response(
@@ -3459,8 +3468,14 @@ def pharmacy_corner_log_api(request):
             "Не удалось загрузить данные оборудования.",
             context=f"corner_info id={obj_id} brand={brand}",
         )
+    # Ust seviye pharmacy_id artik GERCEK legacy id (eski: platform PK idi).
+    # legacy cozulmezse guvenli taraf: platform PK'ya don.
+    if legacy_pid is not None:
+        resolved_pid = int(legacy_pid)
+    else:
+        resolved_pid = int(obj_id) if str(obj_id).isdigit() else obj_id
     return Response({
-        "pharmacy_id": int(obj_id) if str(obj_id).isdigit() else obj_id,
+        "pharmacy_id": resolved_pid,
         "rows": rows,
         "demo": False,
     })
