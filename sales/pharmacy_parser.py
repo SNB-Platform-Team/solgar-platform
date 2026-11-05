@@ -84,6 +84,28 @@ class ExtractRule:
                           marker_offset=marker_offset)
 
 
+# Pivot/liste dosyalarinin son satiri genelde bir genel-toplam satiridir
+# ("Общий итог", "Итого", "Итог", "Всего", "Total"...) ve urun DEGILDIR.
+# Urun gibi sayilirsa marka toplami ikiye katlanir (Эмити: 8931 -> 17862).
+# Urun adi TAM olarak bu kelimelerden biriyse (trim+lower) o satir atlanir;
+# gercek urun adlarinin icinde bu kelimeler gecse de (ör. "...итого за месяц")
+# yanlis atlanmamasi icin sadece tam eslesme kabul edilir.
+_TOTAL_PRODUCT_WORDS = {
+    "итого", "итог", "общий итог", "общий итог:", "итого:", "итог:",
+    "всего", "всего:", "total", "grand total", "общий", "общий итого",
+}
+
+
+def is_total_product(product) -> bool:
+    """Urun adi bir genel-toplam/footer satirina mi isaret ediyor?"""
+    if product is None:
+        return False
+    p = str(product).strip().lower().replace("ё", "е")
+    # sondaki nokta/bosluk cesitlemelerini normalize et
+    p = p.rstrip(".: ").strip()
+    return p in {w.rstrip(".: ").strip() for w in _TOTAL_PRODUCT_WORDS}
+
+
 @dataclass
 class PharmacyConfig:
     """
@@ -189,6 +211,9 @@ class PharmacyParser:
             # Product bos ya da baslik kalintisi ise atla (Java pratikte bos satir uretir,
             # ama anlamsiz; product dolu olmali).
             if not self._ne(product_val):
+                continue
+            # Genel-toplam/footer satirini atla ("Общий итог", "Итого"...).
+            if is_total_product(product_val):
                 continue
             rec = {}
             rec["PRODUCT"] = product_val
@@ -399,6 +424,7 @@ class GenericParser:
         for i in range(start_row, v_limit):
             product = _read2(sheet, cols["product"], i)
             if not _ne2(product): continue
+            if is_total_product(product): continue  # "Общий итог"/footer atla
             rec = {"PRODUCT": product}
             ph = _read2(sheet, cols["pharmacy"], i) if p.pharmacy else ""
             rec["PHARMACY"] = ph; rec["SALESREADER"] = ph
@@ -441,6 +467,7 @@ class NestedParser:
         for i in range(start_row, v_limit):
             cell = _read2(sheet, c_prod, i)
             if not _ne2(cell): continue
+            if is_total_product(cell): continue  # "Общий итог"/footer atla
             if self._is_ph(cell, p):
                 pharmacy = cell
             elif self._is_pr(cell, p):
@@ -557,6 +584,13 @@ class MatrixParser:
       aptek_index: aptek ekseninin sabit index'i
       data_start_row, data_start_col: deger matrisinin basladigi yer
       skip_last_col / skip_last_row: True ise son (Itog/toplam) atlanir
+      header_marker: (ops) baslik hucresini bulan metin (orn 'Номенклатура').
+        Verilirse SABIT index'ler yerine baslik DINAMIK bulunur — aylar arasi
+        satir kaymasina (orn ALOE'de bazi dosyalarda fazladan 'Кон. ост'
+        alt-baslik satiri) dayaniklidir. col modunda: baslik hucresinin
+        satiri=aptek_index, kolonu=product_index; veri o satirin altindan,
+        urun sutunu DOLU ilk satirdan baslar (bos alt-baslik satirlari
+        otomatik atlanir). row modunda simetrik.
     """
     def parse(self, sheet, cfg, main_group, v_limit, h_limit):
         pax = cfg.get("product_axis", "col")
@@ -566,6 +600,37 @@ class MatrixParser:
         dsc = cfg.get("data_start_col", 1)
         skip_last_col = cfg.get("skip_last_col", False)
         skip_last_row = cfg.get("skip_last_row", False)
+
+        # --- DINAMIK baslik (header_marker verilirse) ---
+        hmark = cfg.get("header_marker")
+        if hmark:
+            hm = hmark.strip().lower()
+            hr = hc = None
+            for r in range(min(v_limit, 40)):
+                for c in range(min(h_limit, 40)):
+                    if _read2(sheet, c, r).strip().lower() == hm:
+                        hr, hc = r, c
+                        break
+                if hr is not None:
+                    break
+            if hr is None:
+                return []  # baslik bulunamadi
+            if pax == "col":
+                aidx = hr           # aptek basliklari bu satirda
+                pidx = hc           # urun bu sutunda
+                dsc = hc + 1        # ilk eczane sutunu
+                # veri: baslik satirinin altindan, urun sutunu DOLU ilk satir
+                dsr = hr + 1
+                while dsr < v_limit and not _ne2(_read2(sheet, pidx, dsr).strip()):
+                    dsr += 1
+            else:
+                pidx = hr           # urun basliklari bu satirda (row modu)
+                aidx = hc           # aptek bu sutunda
+                dsr = hr + 1
+                dsc = hc + 1
+                while dsc < h_limit and not _ne2(_read2(sheet, dsc, pidx).strip()):
+                    dsc += 1
+
         out = []
         rmax = v_limit - (1 if skip_last_row else 0)
         cmax = h_limit - (1 if skip_last_col else 0)
@@ -727,6 +792,58 @@ class Nested1CParser:
             "AMOUNT": "0.00", "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
             "SUBGROUP": mg, "MAINGROUP": mg,
         }
+
+
+class FarmaimpeksStockParser:
+    """FARMAIMPEKS stok: eczane kirilimi YOK, urun-bazli roll-up.
+    'Лист2' sayfasinda iki pivot blok var:
+      Block A: col0=urun, col1='Сумма по полю Остатки, шт'  (adet)
+      Block B: col0=urun, col1='Сумма по полю Остатки, уп'  (paket/упаковка)
+    Diger zincirlerle birim tutarliligi icin 'уп' blogu TERCIH edilir; yoksa
+    'шт'. 'Общий итог' satiri atlanir. Eczane bos; brand urun adindan belirlenir
+    (cagiran taraf). Kayit: COUNT=stok adeti (preview is_stock'ta REMAINING'e tasir).
+    """
+    SHEET = "Лист2"
+
+    def parse(self, sheet, cfg, main_group, v_limit, h_limit):
+        # Dogru sayfa: _ph_open_sheet ilk sayfayi acar; FARMAIMPEKS'te stok
+        # 'Лист2'dedir. Cagiran taraf sheet_name='Лист2' gondermezse, burada
+        # gelen sheet zaten _GridSheet; biz yine de 'Названия строк'+'Остатки'
+        # basligini TUM satirlarda arayarak dogru blogu buluruz.
+        # Iki blogu da bul; 'уп' olani tercih et.
+        blocks = []  # (header_row, unit)  unit: 'уп' | 'шт'
+        for r in range(v_limit):
+            c0 = _read2(sheet, 0, r).strip().lower()
+            c1 = _read2(sheet, 1, r).strip().lower()
+            if "названия строк" in c0 and "остатк" in c1:
+                unit = "уп" if "уп" in c1 else ("шт" if "шт" in c1 else "")
+                blocks.append((r, unit))
+        if not blocks:
+            return []
+        # 'уп' blogunu tercih et
+        chosen = None
+        for hr, unit in blocks:
+            if unit == "уп":
+                chosen = hr; break
+        if chosen is None:
+            chosen = blocks[0][0]
+
+        out = []
+        for i in range(chosen + 1, v_limit):
+            product = _read2(sheet, 0, i).strip()
+            if not _ne2(product):
+                break  # blok bos satirla biter
+            if "итог" in product.lower():
+                break  # 'Общий итог' -> blok sonu
+            cnt = _read2(sheet, 1, i).strip()
+            out.append({
+                "PRODUCT": product, "PHARMACY": "", "SALESREADER": "",
+                "APTEKNO": "", "CITY": "",
+                "COUNT": cnt if _ne2(cnt) else "0", "AMOUNT": "0.00",
+                "REMAINING_COUNT": "0", "REMAINING_AMOUNT": "0.00",
+                "SUBGROUP": main_group, "MAINGROUP": main_group,
+            })
+        return out
 
 
 class HorizontalParser:
