@@ -1,0 +1,1 @@
+import{y as e}from"./index-CtvRLMH6.js";var t=e;export{t as component};
