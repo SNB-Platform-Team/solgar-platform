@@ -196,6 +196,13 @@ class DepoStorageParser:
         # satir/kolon atlaniyordu -> Пульс'te son urun '1560' kayboluyordu).
         # Bos satir/kolon zaten asagida not_empty ile atlanir, dolu olan eklenir.
         for col in range(start_column, h_limit, stride):
+            # Toplam/footer KOLONUNU atla: sehir basligi "Итого"/"Всего"/
+            # "Общий итог" ise bu kolon bir satir-toplami kolonudur, gercek
+            # sehir degil. Islenirse her urun hem sehirlerde hem toplam
+            # kolonunda sayilir ve adet 2'ye katlanir (ЭМИТИ: 8931 -> 17862).
+            city_header = self._read(sheet, col, city_row)
+            if self._is_total_row(city_header):
+                continue
             for i in range(start_row, v_limit):
                 city_raw = self._read(sheet, col, city_row)
                 if not self._not_empty(city_raw):
