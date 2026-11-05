@@ -403,6 +403,102 @@ def pharmacy_api(request):
 
 
 
+def _rows_to_xlsx_response(columns, rows, filename):
+    """Kolon basliklari + satir listesini .xlsx indirmesine cevir.
+
+    columns: ["ID","Country",...] (etiketler). rows: [[v,v,...], ...].
+    filename: indirilecek dosya adi (uzantisiz; .xlsx eklenir).
+    Tum export endpoint'leri (Аптеки/Врачи/raporlar) bunu kullanir -> tutarli.
+    """
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from django.http import HttpResponse
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Данные"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="4F6F8F")
+    ws.append([str(c) for c in columns])
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for r in rows:
+        ws.append(["" if v is None else v for v in r])
+
+    # Basit kolon genisligi (okunur olsun).
+    for i, _c in enumerate(columns, start=1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(i)].width = 20
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    resp = HttpResponse(
+        buf.read(),
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+    )
+    safe_name = (filename or "export").strip() or "export"
+    resp["Content-Disposition"] = f'attachment; filename="{safe_name}.xlsx"'
+    return resp
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("PHARMACY")])
+def pharmacy_export_api(request):
+    """Аптеки listesini (filtrelenmis, TUM satirlar) .xlsx olarak indirir.
+
+    pharmacy_api ile AYNI filtre + satir-guvenlik mantigini kullanir; tek fark
+    sayfalama YOK — tum eslesen kayitlar tek dosyada. 'Скачать в Excel' butonu
+    bunu cagirir."""
+    from .services import PharmacyViewService
+
+    service = PharmacyViewService()
+    brand = (request.GET.get("brand") or "SOLGAR").strip()
+    search = (request.GET.get("search") or "").strip()
+    fkeys = [
+        "country", "area", "region", "city", "group_company",
+        "subgroup_company", "pharmacy_category", "pharmacy_type", "promo",
+        "marketing_staff", "pharmacy_activeness", "pharmacy_address",
+    ]
+    filters = {k: (request.GET.get(k) or "").strip() for k in fkeys}
+
+    user = getattr(request, "user", None)
+    if _is_row_restricted(user, "PHARM_MGR"):
+        name = ""
+        try:
+            name = _medrep_name_from_email(getattr(user, "email", "") or "")
+        except Exception:
+            name = ""
+        filters["marketing_staff"] = name or "\x00__no_medrep_match__"
+
+    col_keys = [c[0] for c in _PHARMACY_API_COLUMNS]
+    col_labels = [c[1] for c in _PHARMACY_API_COLUMNS]
+    rows = []
+    try:
+        page = 1
+        while True:
+            result = service.query(brand=brand, search=search, page=page,
+                                   **filters)
+            for rec in result["records"]:
+                rows.append([_json_safe(getattr(rec, k, "")) for k in col_keys])
+            if not result.get("has_next"):
+                break
+            page += 1
+            if page > 2000:  # guvenlik siniri (cok buyuk veri)
+                break
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    return _rows_to_xlsx_response(col_labels, rows, f"apteki_{brand.lower()}")
+
+
 # Tabloda gosterilecek kolonlar (doctor entry ana alanlari).
 _DOCTOR_API_COLUMNS = [
     ("id", "ID"),
@@ -526,6 +622,54 @@ def doctor_api(request):
         "has_next": result["has_next"],
         "search": search,
     })
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("DOCTOR")])
+def doctor_export_api(request):
+    """Врачи listesini (filtrelenmis, TUM satirlar) .xlsx olarak indirir.
+
+    doctor_api ile AYNI filtre + satir-guvenlik mantigi; sayfalama YOK.
+    'Скачать в Excel' butonu bunu cagirir."""
+    from .services import DoctorViewService
+
+    service = DoctorViewService()
+    brand = (request.GET.get("brand") or "").strip()
+    search = (request.GET.get("search") or "").strip()
+    dkeys = [
+        "country", "area", "region", "city", "medrep", "specialty",
+        "unified_specialty", "category", "activeness", "clinic_status",
+    ]
+    filters = {k: (request.GET.get(k) or "").strip() for k in dkeys}
+
+    user = getattr(request, "user", None)
+    if _is_row_restricted(user, "DOCTOR_MGR"):
+        name = ""
+        try:
+            name = _medrep_name_from_email(getattr(user, "email", "") or "")
+        except Exception:
+            name = ""
+        filters["medrep"] = name or "\x00__no_medrep_match__"
+
+    col_keys = [c[0] for c in _DOCTOR_API_COLUMNS]
+    col_labels = [c[1] for c in _DOCTOR_API_COLUMNS]
+    rows = []
+    try:
+        page = 1
+        while True:
+            result = service.query(brand=brand, search=search, page=page,
+                                   **filters)
+            for rec in result["records"]:
+                rows.append([_json_safe(getattr(rec, k, "")) for k in col_keys])
+            if not result.get("has_next"):
+                break
+            page += 1
+            if page > 2000:
+                break
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    return _rows_to_xlsx_response(col_labels, rows, "vrachi")
 
 
 
