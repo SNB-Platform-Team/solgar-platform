@@ -1,0 +1,1 @@
+import{b as e}from"./index-Czfq51i1.js";var t=e;export{t as component};
