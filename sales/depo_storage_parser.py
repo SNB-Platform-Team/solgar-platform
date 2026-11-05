@@ -194,6 +194,11 @@ class DepoStorageParser:
                     continue
                 city = self._apply_mapping(cfg, city_raw)
                 product = self._read(sheet, product_column, i)
+                # Footer/toplam satirini atla (ör. Катрен'de son satir "Итого").
+                # Aksi halde "Итого" bir urun gibi islenip marka toplamina
+                # eklenir ve adet ikiye katlanir (SOLGAR 40042 -> 85584 hatasi).
+                if self._is_total_row(product):
+                    continue
                 count = self._read(sheet, col, i)
                 if not self._not_empty(count):
                     count = cfg.default_count
@@ -306,6 +311,19 @@ class DepoStorageParser:
             if not r.split and r.remap_city is not None and r.matches(city_raw):
                 return r.remap_city
         return city_raw
+
+    # Pivot/footer: urun adi bir genel-toplam satirina isaret ediyor mu?
+    # Depo pivot dosyalarinin son satiri genelde "Итого"/"Всего"/"Total"dur ve
+    # urun degildir; sayilirsa marka toplami sisirir. Tam eslesme (trim+lower)
+    # ile atlanir — gercek urun adlarinin icinde bu kelimeler gecse de (nadir)
+    # yanlis atlanmamasi icin sadece satirin TAMAMI bu kelimeyse atlanir.
+    _TOTAL_ROW_WORDS = {"итого", "всего", "total", "итого:", "всего:"}
+
+    def _is_total_row(self, product) -> bool:
+        if product is None:
+            return False
+        p = str(product).strip().lower().replace("ё", "е")
+        return p in self._TOTAL_ROW_WORDS
 
     def _matching_split(self, cfg, city_raw):
         if city_raw is None:
