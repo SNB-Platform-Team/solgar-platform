@@ -2817,9 +2817,15 @@ def pharmacy_upload_save_api(request):
         sd = d.report_date
         sd_dt = _d.datetime.combine(sd, _d.time.min) if sd else None
 
+        # sub_group: Rusya setlerinde sub_group = main_group = chain_name
+        # (ornek SAMSON_PHARMA/SAMSON_PHARMA, RIGLA/RIGLA). KZ setlerinde
+        # parser'a main_group parametresi bos geldiginde SUBGROUP bos kalip
+        # sub_group NULL oluyordu. Bu yuzden subgroup bossa chain_name'e
+        # (main_group ile ayni kaynak) geri duseriz -> sub_group hep dolu.
+        _sub_group = (d.subgroup or "").strip() or (d.chain_name or "").strip()
         rows.append((
             (d.chain_name or "")[:100],           # main_group (NOT NULL)
-            (d.subgroup or "")[:100] or None,      # sub_group
+            (_sub_group or "")[:100] or None,      # sub_group
             (d.pharmacy or "")[:255] or None,      # pharmacy_address
             (d.product_name or "")[:255] or None,  # product_Name
             (d.aptekno or "")[:100] or None,       # pharmacy_no
