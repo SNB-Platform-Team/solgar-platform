@@ -19,7 +19,7 @@ def _g(name, c):
         last_column=c.get("lastColumn",""))
 
 _g('AVE', {'product': 'Наименование товара', 'pharmacy': 'Наименование аптеки', 'count': 'Количество уп/Расход', 'amount': 'Сумма закуп без НДС/Расход', 'pharmacyNo': 'Код аптеки', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма закуп без НДС/Расход'})
-_g('AVESTOCK', {'product': 'Наименование товара', 'pharmacy': 'Наименование аптеки', 'count': '', 'amount': '', 'pharmacyNo': 'Код аптеки', 'city': '', 'remCount': 'Количество уп/Расход', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество уп/Расход'})
+_g('AVESTOCK', {'product': 'SKU Наименование', 'pharmacy': 'Адрес аптеки', 'count': '', 'amount': '', 'pharmacyNo': 'ID аптеки', 'city': '', 'remCount': 'Количество, уп', 'remAmount': 'Сумма ЗЦ, руб. без НДС', 'subgroup': '', 'lastColumn': 'Сумма ЗЦ, руб. без НДС'})
 _g('RADUGAKARISIK', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('URAZMANOV', {'product': 'Наименование', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Наименование'})
 _g('A5', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': '', 'amount': 'ПродажиД Кол-во упак с учетом разбивок', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'ПродажиД Кол-во упак с учетом разбивок'})
@@ -69,6 +69,17 @@ _g('APTEKA245', {'product': 'Препарат', 'pharmacy': '', 'count': '', 'am
 _g('APTEKA245STOCK', {'product': 'Товар', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Товар'})
 _g('PILULI', {'product': 'Товар', 'pharmacy': 'Склад', 'count': 'Кол-во', 'amount': 'Себестоимость', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Себестоимость'})
 _g('OTHERS', {'product': 'Product', 'pharmacy': 'PharmacyAddress', 'count': 'Count', 'amount': 'Amount', 'pharmacyNo': 'AptekaNo', 'city': 'City', 'remCount': '', 'remAmount': '', 'subgroup': 'SubGroup', 'lastColumn': 'City'})
+
+# ===== STOCK vertical config'leri — gercek STOCK dosyalariyla dogrulanmis
+# degerlerle DUZELTILDI. remCount/remAmount alanlari stok kolonunu tutar;
+# GenericParser bunlari REMAINING_COUNT/REMAINING_AMOUNT'a yazar. is_stock
+# secimi get_config'te '<CHAIN>STOCK' key'ini tercih ederek yapilir.
+# (Eski AVESTOCK/NEOPHARMSTOCK/APRELSTOCK/ZHIVIKASTOCK/VITASAMARASTOCK
+#  satirlari asagida gercek degerlerle guncellendi/duzeltildi.)
+_g('ZDOROVRUSTOCK', {'product': 'Наименование товара', 'pharmacy': 'Наименование аптеки', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': 'Кол-во', 'remAmount': 'Сумма (оптовые цены) без НДС', 'subgroup': '', 'lastColumn': 'Адрес аптеки'})
+_g('NEVISSTOCK', {'product': 'Номенклатура', 'pharmacy': 'Склад.Аптека', 'count': '', 'amount': '', 'pharmacyNo': 'Склад.Аптека.Номер аптеки', 'city': '', 'remCount': 'Количество Остаток', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество Остаток'})
+# RIGLA .xlsb; pharmacy='ЦФО', pharmacyNo='Код АП'; basliklarda bastaki bosluk contains ile onemsiz.
+_g('RIGLASTOCK', {'product': 'Наименование', 'pharmacy': 'ЦФО', 'count': '', 'amount': '', 'pharmacyNo': 'Код АП', 'city': 'РК', 'remCount': 'Остаток на конец, уп', 'remAmount': 'Остаток на конец, закуп', 'subgroup': '', 'lastColumn': 'Остаток на конец, закуп'})
 _g('SHEKSNA', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('KLASSIKA', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('OAS', {'product': 'Коммерческое наименование Список', 'pharmacy': 'Адрес', 'count': 'Адрес', 'amount': '', 'pharmacyNo': '', 'city': 'Город', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Адрес'})
@@ -90,7 +101,7 @@ _g('ZDOROVOE', {'product': 'Наименование', 'pharmacy': '', 'count': 
 _g('KZTSETNAYA', {'product': 'Товар', 'pharmacy': 'Названия строк', 'count': 'Товар', 'amount': '', 'pharmacyNo': '', 'city': 'Город', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Товар'})
 _g('KZFARMAKOM', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': 'Продажи (шт', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Продажи (шт'})
 _g('NEOPHARM', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': 'Количество', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество'})
-_g('NEOPHARMSTOCK', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': 'Количество', 'remAmount': 'Сумма закупки', 'subgroup': '', 'lastColumn': 'Сумма закупки'})
+_g('NEOPHARMSTOCK', {'product': 'Номенклатура', 'pharmacy': 'Подразделение', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': 'Количество', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Количество'})
 _g('SOLNYSHKO', {'product': 'Название товара', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Название товара'})
 _g('VEKFARMA', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': 'Кол-во', 'amount': 'Сумма закупки с НДС', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Сумма закупки с НДС'})
 _g('VEKJIVI', {'product': 'Наименование', 'pharmacy': 'Аптека', 'count': 'Продажи кол-во упак.', 'amount': 'Продажи в Розн с НДС', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Продажи в Розн с НДС'})
@@ -211,6 +222,28 @@ MATRIX_CONFIGS = {
     "SKANDINAVIYA": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 4, "data_start_col": 1},
 }
 
+# ---- STOCK matrix/pivot config'leri (is_stock=True iken MATRIX_CONFIGS'ten
+#      ONCE denenir). Satis layout'undan FARKLI index'ler olabilir, bu yuzden
+#      ayri tutuluyor; gercek STOCK dosyalariyla test edildi (0-based). ----
+STOCK_MATRIX_CONFIGS = {
+    # ALOE: sheet 'остаток'. col0=Номенклатура (urun asagi), row6=eczane basliklari
+    # (col1..598), col599=Итого(SKIP), son satir=Итого(SKIP). Hucre=stok adet.
+    # header_marker ile DINAMIK baslik: ALOE'nin aylik dosyalarinda baslik
+    # satiri kayabiliyor (08: row6, 09: row7 + 'Кон. ост' alt-basligi). Sabit
+    # index yerine 'Номенклатура' hucresi bulunur; veri urun sutunu dolu ilk
+    # satirdan baslar. col599=Итого ve son satir=Итого skip_last ile atlanir.
+    "ALOE": {"product_axis": "col", "header_marker": "Номенклатура",
+             "skip_last_col": True, "skip_last_row": True, "sheet": "остаток"},
+    # ZHIVIKA: TRANSPOSED. row3=urun adlari (col2+), col0=eczane adresi,
+    # col1=eczane kodu. Veri row5+, col2+. Son satir='Все'(SKIP).
+    "ZHIVIKA": {"product_axis": "row", "product_index": 3, "aptek_index": 0,
+                "data_start_row": 5, "data_start_col": 2, "skip_last_row": True},
+    # VITA_SAMARA: header row1, product=col2, eczane kolonlari col9'dan
+    # (col7/8 = Остаток toplamlari, atlanir). Brand DOSYADAN (SOLGAR/BOUNTY).
+    "VITA_SAMARA": {"product_axis": "col", "product_index": 2, "aptek_index": 1,
+                    "data_start_row": 2, "data_start_col": 9},
+}
+
 KG_CONFIGS = {
     "NEMAN": {"mode": "product_header", "aptek_marker": "Неман", "data_start": 2, "count_col": 1, "name_col": 0},
     "PHARMAMIR": {"mode": "pharmacy_header", "aptek_marker": "Аптека", "data_start": 2, "count_col": 1, "name_col": 0},
@@ -256,13 +289,35 @@ def _norm_key(s):
     return _re_getcfg.sub(r"[^A-Z0-9]", "", (s or "").upper())
 
 
-def get_config(chain_or_file, country=""):
+def get_config(chain_or_file, country="", is_stock=False):
     """Zincir/dosya adindan (config, motor_tipi) dondur.
     Eslesme ayirici-duyarsiz (NEMAN == KG_NEMAN degil ama VITA_SAMARA == VITASAMARA).
-    Her motor icinde EN UZUN anahtar once denenir (VITASAMARA, VITA'dan once)."""
+    Her motor icinde EN UZUN anahtar once denenir (VITASAMARA, VITA'dan once).
+
+    is_stock=True ise STOCK'a ozel config'ler ONCELIKLE denenir:
+      1) STOCK_MATRIX_CONFIGS (ALOE/ZHIVIKA/VITA_SAMARA pivot stok layout'u)
+      2) GENERIC'teki '<CHAIN>_STOCK' / '<CHAIN>STOCK' vertical config'i
+      3) FARMAIMPEKS -> ozel 'farmaimpeks_stock' motoru (eczanesiz roll-up)
+    Hicbiri yoksa normal (satis) akisina duser."""
     if not chain_or_file:
         return None, None
     nhay = _norm_key(chain_or_file)
+
+    if is_stock:
+        # FARMAIMPEKS: eczanesiz urun-bazli roll-up (ozel motor)
+        if "FARMAIMPEKS" in nhay or "FARMIMPEKS" in nhay:
+            return None, "farmaimpeks_stock"
+        # 1) STOCK matrix/pivot
+        for _sk in sorted(STOCK_MATRIX_CONFIGS, key=lambda k: len(_norm_key(k)), reverse=True):
+            if _norm_key(_sk) in nhay:
+                return STOCK_MATRIX_CONFIGS[_sk], "matrix"
+        # 2) GENERIC '<CHAIN>STOCK' (ornegin APREL_STOCK -> APRELSTOCK)
+        want = nhay + "STOCK"
+        for key, cfg in sorted(GENERIC.items(), key=lambda kv: len(_norm_key(kv[0])), reverse=True):
+            nk = _norm_key(key)
+            if nk.endswith("STOCK") and _norm_key(nk[:-5]) and _norm_key(nk[:-5]) in nhay:
+                return cfg, "generic"
+        # STOCK'a ozel bir sey bulunamadi -> normal akisa dus (asagisi)
     # --- Ulke-bazli cakisma cozumu ---
     _cu = (country or "").strip().lower()
     _is_ru = _cu in ("russia", "россия", "rusya")
@@ -324,6 +379,23 @@ def get_config(chain_or_file, country=""):
     return None, None
 
 
+def get_stock_sheet(chain_or_file):
+    """STOK modunda okunmasi gereken SABIT sayfa adini dondurur (yoksa None).
+    Cok-sayfali dosyalarda (ALOE -> 'остаток', FARMAIMPEKS -> 'Лист2') ilk
+    sayfa (ws.active) yanlis olabilir; bu sayfa adi _ph_open_sheet'e verilir."""
+    if not chain_or_file:
+        return None
+    nhay = _norm_key(chain_or_file)
+    # FARMAIMPEKS: stok 'Лист2' sayfasinda
+    if "FARMAIMPEKS" in nhay or "FARMIMPEKS" in nhay:
+        return "Лист2"
+    # STOCK_MATRIX_CONFIGS icinde 'sheet' tanimli olanlar (ALOE -> остаток)
+    for _sk in sorted(STOCK_MATRIX_CONFIGS, key=lambda k: len(_norm_key(k)), reverse=True):
+        if _norm_key(_sk) in nhay:
+            return STOCK_MATRIX_CONFIGS[_sk].get("sheet")
+    return None
+
+
 def all_chains():
     """Tum zincir adlari (dropdown icin)."""
     s = set()
@@ -333,9 +405,17 @@ def all_chains():
     return sorted(s)
 
 
-def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit, country=""):
-    """Zinciri dogru motorla parse et. list[dict] doner (bulunamzsa None)."""
-    cfg, typ = get_config(chain_or_file, country)
+def parse_chain(sheet, chain_or_file, main_group, v_limit, h_limit, country="", is_stock=False):
+    """Zinciri dogru motorla parse et. list[dict] doner (bulunamzsa None).
+
+    is_stock=True: STOCK config'i secilir. Dondurulen kayitlarda miktar yine
+    COUNT/AMOUNT alanlarinda gelir; stok->remaining tasimasi CAGIRAN tarafta
+    (pharmacy_upload_preview_api) yapilir. 'farmaimpeks_stock' motoru eczanesiz
+    urun-bazli roll-up uretir."""
+    cfg, typ = get_config(chain_or_file, country, is_stock=is_stock)
+    if typ == "farmaimpeks_stock":
+        from .pharmacy_parser import FarmaimpeksStockParser
+        return FarmaimpeksStockParser().parse(sheet, None, main_group, v_limit, h_limit)
     if cfg is None:
         return None
     if typ == "simple":
