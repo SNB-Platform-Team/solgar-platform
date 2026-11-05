@@ -269,6 +269,68 @@ def pharm_managerial_api(request):
     })
 
 
+@api_view(["GET"])
+@permission_classes([HasScreen("PHARM_MGR")])
+def pharm_managerial_export_api(request):
+    """Аптеки Обзор raporunu (ekrandaki ayni filtrelerle) .xlsx indirir."""
+    from .views import PharmManagerialService
+
+    service = PharmManagerialService()
+    g = request.GET.get
+    try:
+        result = service.run(
+            brand=(g("brand") or "SOLGAR").strip(),
+            rep_type=(g("rep_type") or "REGIONS").strip(),
+            parameter=(g("parameter") or "TOTAL_QUANTITY").strip(),
+            country=(g("country") or "").strip(), region=(g("region") or "").strip(),
+            city=(g("city") or "").strip(), chain=(g("chain") or "").strip(),
+            medrep=(g("medrep") or "").strip(),
+            activeness=(g("activeness") or "").strip(),
+            district=(g("district") or "").strip(),
+            subchain=(g("subchain") or "").strip(),
+            assortiment=(g("assortiment") or "").strip(),
+            pharmacy_type=(g("pharmacy_type") or "").strip(),
+            promo=(g("promo") or "").strip(),
+            begin=(g("begin") or "").strip().replace("-", ""),
+            end=(g("end") or "").strip().replace("-", ""),
+        )
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+    return _rows_to_xlsx_response(result["columns"], rows, "apteki_obzor")
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("DOCTOR_MGR")])
+def doctor_managerial_export_api(request):
+    """Врачи Обзор raporunu (ekrandaki ayni filtrelerle) .xlsx indirir."""
+    from .views import DoctorManagerialService
+
+    service = DoctorManagerialService()
+    g = request.GET.get
+    try:
+        result = service.run(
+            brand=(g("brand") or "").strip(),
+            rep_type=(g("rep_type") or "REGIONS").strip(),
+            parameter=(g("parameter") or "TOTAL_QUANTITY").strip(),
+            country=(g("country") or "").strip(),
+            district=(g("district") or "").strip(),
+            region=(g("region") or "").strip(), city=(g("city") or "").strip(),
+            speciality=(g("speciality") or "").strip(),
+            sub_speciality=(g("sub_speciality") or "").strip(),
+            clinic=(g("clinic") or "").strip(), medrep=(g("medrep") or "").strip(),
+            activeness=(g("activeness") or "").strip(),
+            begin=(g("begin") or "").strip().replace("-", ""),
+            end=(g("end") or "").strip().replace("-", ""),
+        )
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+    return _rows_to_xlsx_response(result["columns"], rows, "vrachi_obzor")
+
+
 
 # Tabloda gosterilecek kolonlar (entry ekranindaki ana alanlar).
 # match_key bir @property (DB kolonu degil), o yuzden liste disinda.
@@ -811,6 +873,74 @@ def chain_report_api(request):
     })
 
 
+@api_view(["GET"])
+@permission_classes([HasScreen("CHAIN_REPORT")])
+def chain_report_export_api(request):
+    """Просмотр АС (zincir satis raporu) ekrandaki filtrelerle .xlsx indirir.
+
+    chain_report_api ile AYNI filtreler; sayfalama YOK (tum sayfalar birlesir).
+    Tarih araligi zorunlu — secilmemisse bos dosya doner."""
+    from .services import SalesViewService
+
+    service = SalesViewService()
+    filters = {}
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    for key, dstr in (("date_from", date_from), ("date_to", date_to)):
+        if dstr:
+            try:
+                filters[key] = _dt.datetime.strptime(dstr, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+    for key in ("chain_name", "country", "brand", "city"):
+        val = (request.GET.get(key) or "").strip()
+        if val:
+            filters[key] = val
+    search = (request.GET.get("q") or request.GET.get("search") or "").strip()
+    if search:
+        filters["search"] = search
+    main_group = (request.GET.get("main_group") or "").strip()
+    sub_group = (request.GET.get("sub_group") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    district = (request.GET.get("district") or "").strip()
+
+    columns = ["Компания", "Наименование", "Сеть", "Дата", "Город",
+               "Аптека", "Кол-во", "Сумма"]
+    rows = []
+    try:
+        page = 1
+        while True:
+            result = service.chain_report(
+                main_group=main_group, sub_group=sub_group,
+                region=region, district=district,
+                page=page, page_size=_CHAIN_REPORT_PAGE_SIZE, **filters
+            )
+            if result.get("needs_date_range"):
+                # Tarih araligi yoksa bos dosya (ekranla tutarli).
+                return _rows_to_xlsx_response(columns, [], "prosmotr_as")
+            for r in result["rows"]:
+                rd = r.get("report_date")
+                rows.append([
+                    _json_safe(r.get("brand_label", "")),
+                    _json_safe(r.get("product_name", "")),
+                    _json_safe(r.get("chain_name", "")),
+                    rd.strftime("%d.%m.%Y") if rd else "",
+                    _json_safe(r.get("city", "") or ""),
+                    _json_safe(r.get("pharmacy", "") or ""),
+                    _json_safe(r.get("count", 0)),
+                    _json_safe(r.get("amount", 0)),
+                ])
+            if not result.get("has_next"):
+                break
+            page += 1
+            if page > 5000:
+                break
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    return _rows_to_xlsx_response(columns, rows, "prosmotr_as")
+
+
 
 SALES_OBS_COMP_TYPES_API = [
     {"value": "SL", "label": "SOLGAR"},
@@ -905,6 +1035,47 @@ def sales_obs_api(request):
               "main_group": main_group, "sub_group": sub_group,
               "product_name": product_name},
     })
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("SALES_OBS")])
+def sales_obs_export_api(request):
+    """Просмотр Дистр (aylik pivot raporu) ekrandaki filtrelerle .xlsx indirir.
+
+    sales_obs_api ile AYNI filtreler. Tarih araligi (begin+end) zorunlu —
+    yoksa bos dosya doner."""
+    from .services import ReportService
+
+    service = ReportService()
+    g = request.GET.get
+    comp_type = (g("comp_type") or "SL").strip()
+    begin = (g("begin") or "").strip()
+    end = (g("end") or "").strip()
+
+    if not (begin and end):
+        return _rows_to_xlsx_response([], [], "prosmotr_distr")
+
+    b = begin.replace("-", "")
+    e = end.replace("-", "")
+    _rng_err = _date_range_error(begin, end, 3)
+    if _rng_err or not (len(b) == 8 and len(e) == 8 and b.isdigit() and e.isdigit()):
+        return _rows_to_xlsx_response([], [], "prosmotr_distr")
+
+    try:
+        result = service.run_chain_sales(
+            comp_type, b, e,
+            chain=(g("chain") or "").strip(), country=(g("country") or "").strip(),
+            area=(g("area") or "").strip(), region=(g("region") or "").strip(),
+            city=(g("city") or "").strip(), medrep=(g("medrep") or "").strip(),
+            main_group=(g("main_group") or "").strip(),
+            sub_group=(g("sub_group") or "").strip(),
+            product_name=(g("product_name") or "").strip(),
+        )
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+
+    rows = [[_json_safe(v) for v in r] for r in result["rows"]]
+    return _rows_to_xlsx_response(result["columns"], rows, "prosmotr_distr")
 
 
 # ==================== Sales Obs Filter Options API (cascading geo) ====================
