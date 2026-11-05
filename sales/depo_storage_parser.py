@@ -128,6 +128,14 @@ class DepoStorageParser:
             if not self._not_empty(self._read(sheet, gate_col, i)):
                 continue
 
+            # Footer/toplam satirini atla (ör. ЭМИТИ'de her sehrin sonundaki
+            # "Общий итог"). Urun kolonu bu kelimelerden biriyse satir urun
+            # degildir; sayilirsa marka toplami sisirir (ЭМИТИ: 8931 -> 35724).
+            prod_col = col_index.get("PRODUCT")
+            if prod_col is not None and self._is_total_row(
+                    self._read(sheet, prod_col, i)):
+                continue
+
             city_raw = (self._read(sheet, col_index["CITY"], i).strip()
                         if "CITY" in col_index else None)
             city = self._apply_mapping(cfg, city_raw)
@@ -317,13 +325,18 @@ class DepoStorageParser:
     # urun degildir; sayilirsa marka toplami sisirir. Tam eslesme (trim+lower)
     # ile atlanir — gercek urun adlarinin icinde bu kelimeler gecse de (nadir)
     # yanlis atlanmamasi icin sadece satirin TAMAMI bu kelimeyse atlanir.
-    _TOTAL_ROW_WORDS = {"итого", "всего", "total", "итого:", "всего:"}
+    _TOTAL_ROW_WORDS = {
+        "итого", "всего", "total", "итого:", "всего:",
+        "общий итог", "общий итог:", "общий", "итог", "итог:",
+        "grand total", "общий итого",
+    }
 
     def _is_total_row(self, product) -> bool:
         if product is None:
             return False
         p = str(product).strip().lower().replace("ё", "е")
-        return p in self._TOTAL_ROW_WORDS
+        p = p.rstrip(".: ").strip()
+        return p in {w.rstrip(".: ").strip() for w in self._TOTAL_ROW_WORDS}
 
     def _matching_split(self, cfg, city_raw):
         if city_raw is None:
