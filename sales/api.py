@@ -2352,6 +2352,13 @@ def _ph_open_sheet(excel_file, sheet_name=None):
     """xlsx (openpyxl) / xls (xlrd) oku. sheet_name verilirse o sayfa, yoksa ilk sayfa.
     (sheet, err) doner."""
     import io
+    # Stream'i basa sar: ayni dosya cok-sayfali akista birden cok kez okunur
+    # (_ph_sheet_names + her sayfa icin _ph_open_sheet). seek olmadan ikinci
+    # read() bos doner.
+    try:
+        excel_file.seek(0)
+    except Exception:
+        pass
     data = excel_file.read()
     try:
         import openpyxl
@@ -2392,6 +2399,10 @@ def _ph_open_sheet(excel_file, sheet_name=None):
 def _ph_sheet_names(excel_file):
     """Yuklenen Excel'deki sayfa (sheet) isimlerini dondurur. (names, err)."""
     import io
+    try:
+        excel_file.seek(0)
+    except Exception:
+        pass
     data = excel_file.read()
     try:
         import openpyxl
@@ -2497,14 +2508,45 @@ def pharmacy_upload_preview_api(request):
             if _stock_sheet:
                 _open_sheet = _stock_sheet
 
-        sheet, err = _ph_open_sheet(excel_file, _open_sheet)
-        if err:
-            return Response({"error": err}, status=400)
-
         from .pharmacy_all_configs import parse_chain
-        parsed = parse_chain(sheet, chain_name or file_name, main_group,
-                             sheet.max_row, sheet.max_column, country,
-                             is_stock=is_stock)
+
+        # ÇOK SAYFALI dosyalar: bazi KZ distributor/aptek dosyalari markaya
+        # gore AYRI sayfalara bolunmus ('Солгар' + 'Баунти'); ikisinde de veri
+        # var ve marka urun adindan belirlenir. Kullanici bir sayfa SECMEDIYSE
+        # (ve stok sabit-sayfasi yoksa) TUM sayfalari parse edip birlestiririz;
+        # aksi halde (secili ya da tek sayfa) eski davranis. Marka her satirda
+        # urun adindan cozuldugu icin birlestirme guvenli.
+        parsed = None
+        if _open_sheet is None:
+            try:
+                _all_names, _nerr = _ph_sheet_names(excel_file)
+            except Exception:
+                _all_names, _nerr = None, "x"
+            if not _nerr and _all_names and len(_all_names) > 1:
+                parsed = []
+                _any_ok = False
+                for _sn in _all_names:
+                    _sh, _serr = _ph_open_sheet(excel_file, _sn)
+                    if _serr or _sh is None:
+                        continue
+                    _p = parse_chain(sheet := _sh, chain_name or file_name,
+                                     main_group, _sh.max_row, _sh.max_column,
+                                     country, is_stock=is_stock)
+                    if _p:
+                        parsed.extend(_p)
+                        _any_ok = True
+                # Hicbir sayfa parse olmazsa (config yok vb.) -> None, asagida hata.
+                if not _any_ok:
+                    parsed = None
+
+        # Tek sayfa / secili sayfa / cok-sayfa basarisiz -> klasik tek-sayfa akis.
+        if parsed is None:
+            sheet, err = _ph_open_sheet(excel_file, _open_sheet)
+            if err:
+                return Response({"error": err}, status=400)
+            parsed = parse_chain(sheet, chain_name or file_name, main_group,
+                                 sheet.max_row, sheet.max_column, country,
+                                 is_stock=is_stock)
         if parsed is None:
             return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
         if not parsed:
