@@ -517,13 +517,17 @@ def _report_export_via(report_api_fn, request, filename):
     report.rows'u .xlsx'e cevirir. Boylece export, EKRANDAKI raporun BIREBIR
     aynisini uretir — rapor mantigi kopyalanmaz. 'run=1' garanti edilir."""
     # Ayni GET parametreleriyle ama run=1 zorunlu: query'i kopyalayip set et.
+    # report_api_fn de @api_view — DRF Request degil, alttaki HttpRequest'i
+    # bekler (yoksa AssertionError -> her zaman 500). GET'i de onun uzerinde
+    # degistiriyoruz ki ic Request run=1'i gorsun.
+    http_req = getattr(request, "_request", request)
     try:
-        request.GET = request.GET.copy()
-        request.GET["run"] = "1"
+        http_req.GET = http_req.GET.copy()
+        http_req.GET["run"] = "1"
     except Exception:
         pass
     try:
-        resp = report_api_fn(request)
+        resp = report_api_fn(http_req)
         data = getattr(resp, "data", None) or {}
     except Exception as exc:
         return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
