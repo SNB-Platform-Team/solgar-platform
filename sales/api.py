@@ -511,6 +511,50 @@ def _rows_to_xlsx_response(columns, rows, filename):
     return resp
 
 
+def _report_export_via(report_api_fn, request, filename):
+    """Bir rapor API fonksiyonunu (chain_sales_report_api / distributor_report_api
+    gibi, DRF Response donen) ic cagiriyla calistirip dondugu report.columns +
+    report.rows'u .xlsx'e cevirir. Boylece export, EKRANDAKI raporun BIREBIR
+    aynisini uretir — rapor mantigi kopyalanmaz. 'run=1' garanti edilir."""
+    # Ayni GET parametreleriyle ama run=1 zorunlu: query'i kopyalayip set et.
+    try:
+        request.GET = request.GET.copy()
+        request.GET["run"] = "1"
+    except Exception:
+        pass
+    try:
+        resp = report_api_fn(request)
+        data = getattr(resp, "data", None) or {}
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+    if data.get("error"):
+        return Response({"error": data["error"]}, status=400)
+    report = data.get("report") or {}
+    columns = report.get("columns", []) or []
+    rows = report.get("rows", []) or []
+    return _rows_to_xlsx_response(columns, rows, filename)
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("CHAIN_REPORT")])
+def chain_sales_report_export_api(request):
+    """Просмотр АС (chain_sales_report_api) ekrandaki raporu .xlsx indirir.
+
+    Sayfanin GERCEKTE kullandigi rapor (chain_sales_report_api, ay-ay matris)
+    ic cagiriyla uretilir; ekrandakiyle birebir."""
+    return _report_export_via(chain_sales_report_api, request, "prosmotr_as")
+
+
+@api_view(["GET"])
+@permission_classes([HasScreen("SALES_OBS")])
+def distributor_report_export_api(request):
+    """Просмотр Дистр (distributor_report_api) ekrandaki raporu .xlsx indirir.
+
+    Sayfanin GERCEKTE kullandigi distributor raporu (haftalik pivot) ic
+    cagiriyla uretilir; ekrandakiyle birebir."""
+    return _report_export_via(distributor_report_api, request, "prosmotr_distr")
+
+
 @api_view(["GET"])
 @permission_classes([HasScreen("PHARMACY")])
 def pharmacy_export_api(request):

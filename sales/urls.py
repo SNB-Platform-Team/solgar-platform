@@ -86,8 +86,10 @@ urlpatterns = [
     path("api/blob-selftest/", api.blob_selftest_api, name="blob_selftest_api"),
     path("api/doctor/bulk-save/", api.doctor_bulk_save_api, name="doctor_bulk_save_api"),      
     path("api/pharmacy/bulk-save/", api.pharmacy_bulk_save_api, name="pharmacy_bulk_save_api"),    
-    path("api/distributor-report/", api.distributor_report_api, name="distributor_report_api"),   
+    path("api/distributor-report/", api.distributor_report_api, name="distributor_report_api"),
+    path("api/distributor-report/export/", api.distributor_report_export_api, name="distributor_report_export_api"),
     path("api/chain-sales-report/", api.chain_sales_report_api, name="chain_sales_report_api"),
+    path("api/chain-sales-report/export/", api.chain_sales_report_export_api, name="chain_sales_report_export_api"),
 ]      
 
 
