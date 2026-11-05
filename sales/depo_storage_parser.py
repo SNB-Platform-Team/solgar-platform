@@ -128,12 +128,20 @@ class DepoStorageParser:
             if not self._not_empty(self._read(sheet, gate_col, i)):
                 continue
 
-            # Footer/toplam satirini atla (ör. ЭМИТИ'de her sehrin sonundaki
-            # "Общий итог"). Urun kolonu bu kelimelerden biriyse satir urun
-            # degildir; sayilirsa marka toplami sisirir (ЭМИТИ: 8931 -> 35724).
+            # Footer/toplam satirini atla. Iki sekilde gelebilir:
+            #  1) Urun kolonu bir toplam kelimesi (ЭМИТИ: her sehrin sonundaki
+            #     "Общий итог"; MEDSERVIS: "Итого по Solgar ...").
+            #  2) Urun kolonu BOS ama gate (Филиал/CITY) kolonunda "ИТОГО"
+            #     yaziyor (MEDSERVIS STOCK genel-toplam satiri: col0=ИТОГО,
+            #     col1(urun)=bos, Конечный остаток=10632). Bu satir gate dolu
+            #     oldugu icin islenir ve genel toplami adede ekler (2x).
+            # Her ikisinde de satir urun degildir; sayilirsa marka toplami
+            # sisirir. Bu yuzden hem PRODUCT hem gate degerini kontrol ederiz.
             prod_col = col_index.get("PRODUCT")
             if prod_col is not None and self._is_total_row(
                     self._read(sheet, prod_col, i)):
+                continue
+            if self._is_total_row(self._read(sheet, gate_col, i)):
                 continue
 
             city_raw = (self._read(sheet, col_index["CITY"], i).strip()
@@ -337,13 +345,21 @@ class DepoStorageParser:
         "общий итог", "общий итог:", "общий", "итог", "итог:",
         "grand total", "общий итого",
     }
+    # Ara-toplam PREFIX'leri: "Итого по <grup>" / "Всего по <grup>" gibi
+    # satirlar urun DEGIL, bir grup ara-toplamidir (ornek MEDSERVIS STOCK:
+    # "Итого по Solgar Эстер-С..."). Sayilirsa gercek urunlerin ~2 kati sisirir.
+    # Bu kalip cok spesifik oldugu icin gercek urun adlariyla cakismaz.
+    _TOTAL_ROW_PREFIXES = ("итого по", "всего по", "итог по")
 
     def _is_total_row(self, product) -> bool:
         if product is None:
             return False
         p = str(product).strip().lower().replace("ё", "е")
         p = p.rstrip(".: ").strip()
-        return p in {w.rstrip(".: ").strip() for w in self._TOTAL_ROW_WORDS}
+        if p in {w.rstrip(".: ").strip() for w in self._TOTAL_ROW_WORDS}:
+            return True
+        # "Итого по ..." / "Всего по ..." ara-toplamlari.
+        return any(p.startswith(pre) for pre in self._TOTAL_ROW_PREFIXES)
 
     def _matching_split(self, cfg, city_raw):
         if city_raw is None:
