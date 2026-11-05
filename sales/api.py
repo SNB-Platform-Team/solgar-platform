@@ -3306,6 +3306,17 @@ def _pharmacy_apply_fields(obj, data):
                 except (ValueError, TypeError):
                     val = None
             obj.__setattr__(f, val)
+    # "Адрес аптеки" (pharmacy_address) kutusu formdan kaldirildi; adres artik
+    # tek yerden, geocode'lu "Полный адрес" (full_address) ile giriliyor.
+    # Liste tablosu PHARMACY ADDRESS kolonu bos kalmasin diye pharmacy_address
+    # bossa full_address'ten doldururuz (eski dolu degerlere dokunmayiz).
+    try:
+        cur_addr = (getattr(obj, "pharmacy_address", "") or "").strip()
+        full_addr = (getattr(obj, "full_address", "") or "").strip()
+        if not cur_addr and full_addr:
+            obj.pharmacy_address = full_addr
+    except Exception:
+        pass
 
 
 @api_view(["POST"])
