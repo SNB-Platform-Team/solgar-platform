@@ -2983,6 +2983,18 @@ def _doctor_apply_fields(doc, data):
                 except (ValueError, TypeError):
                     val = None
             doc.__setattr__(f, val)
+    # "Адрес клиники" (clinic_address) kutusu formdan kaldirildi; adres artik
+    # tek yerden, geocode'lu "Полный адрес" (full_address) ile giriliyor
+    # (apteka formundaki pharmacy_address ile ayni mantik). Liste tablosu
+    # Clinic Address kolonu bos kalmasin diye clinic_address bossa
+    # full_address'ten dolduruz (eski dolu degerlere dokunmayiz).
+    try:
+        cur_addr = (getattr(doc, "clinic_address", "") or "").strip()
+        full_addr = (getattr(doc, "full_address", "") or "").strip()
+        if not cur_addr and full_addr:
+            doc.clinic_address = full_addr
+    except Exception:
+        pass
 
 
 @api_view(["POST"])
