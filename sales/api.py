@@ -2,7 +2,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from authorization.permissions import HasScreen
+from authorization.permissions import HasScreen, IsSuperOrStaff
 from .views import OneCService
 
 
@@ -3587,7 +3587,7 @@ def _fetch_corner_rows(pharmacy_id, brand):
 
 
 @api_view(["GET"])
-@permission_classes([HasScreen("PHARMACY")])
+@permission_classes([IsSuperOrStaff])  # Оборудование gecici: sadece admin/menecer
 def pharmacy_corner_log_api(request):
     """Bir aptek'in promo kayitlari + status'lari. ?brand=&id=[&promo=&subtype=]
 
@@ -3647,7 +3647,7 @@ def pharmacy_corner_log_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([HasScreen("PHARMACY")])
+@permission_classes([IsSuperOrStaff])  # Оборудование gecici: sadece admin/menecer
 def pharmacy_equipment_save_api(request):
     """
     Yeni ekipman kaydi olustur (multipart). Fotograflar Azure Blob'a yuklenir,
@@ -3720,7 +3720,7 @@ def pharmacy_equipment_save_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([HasScreen("PHARMACY")])
+@permission_classes([IsSuperOrStaff])  # Оборудование gecici: sadece admin/menecer
 def pharmacy_equipment_delete_api(request):
     """
     Yeni ekipman kaydini sil (SADECE bizim tablo; corner_info salt-okunur).

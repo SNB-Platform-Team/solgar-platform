@@ -60,3 +60,20 @@ def HasScreen(screen_code: str):
 
     _HasScreen.__name__ = f"HasScreen_{screen_code}"
     return _HasScreen
+
+
+class IsSuperOrStaff(BasePermission):
+    """Sadece superuser ya da is_staff (admin/menecer) erisebilir.
+
+    Henuz hazir olmayan/gelistirilmekte olan bolumleri (ornek: Оборудование)
+    gecici olarak yalniz yoneticilere acmak icin. Ekran yetkisi (HasScreen)
+    yetmez; acikca is_staff/is_superuser gerekir."""
+
+    message = "Этот раздел временно доступен только администраторам."
+
+    def has_permission(self, request, view) -> bool:
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        return bool(getattr(user, "is_superuser", False)
+                    or getattr(user, "is_staff", False))
