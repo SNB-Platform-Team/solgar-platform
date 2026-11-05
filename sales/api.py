@@ -2374,6 +2374,17 @@ def _ph_open_sheet(excel_file, sheet_name=None):
             s = book.sheet_by_index(0)
         grid = [[s.cell_value(r, c) for c in range(s.ncols)] for r in range(s.nrows)]
         return _GridSheet(grid), None
+    except Exception:
+        pass
+    # 3) calamine (python-calamine): openpyxl'in acamadigi bozuk-stylesheet'li
+    #    xlsx'leri (ornek: AVE STOCK) ve xlsb'leri (ornek: RIGLA STOCK) acar.
+    try:
+        from python_calamine import CalamineWorkbook
+        cwb = CalamineWorkbook.from_filelike(io.BytesIO(data))
+        names = cwb.sheet_names
+        pick = sheet_name if (sheet_name and sheet_name in names) else names[0]
+        grid = cwb.get_sheet_by_name(pick).to_python()
+        return _GridSheet(grid), None
     except Exception as exc:
         return None, f"Excel okunamadi: {exc}"
 
@@ -2394,6 +2405,12 @@ def _ph_sheet_names(excel_file):
         import xlrd
         book = xlrd.open_workbook(file_contents=data)
         return list(book.sheet_names()), None
+    except Exception:
+        pass
+    try:
+        from python_calamine import CalamineWorkbook
+        cwb = CalamineWorkbook.from_filelike(io.BytesIO(data))
+        return list(cwb.sheet_names), None
     except Exception as exc:
         return None, f"Excel okunamadi: {exc}"
 
@@ -2444,6 +2461,22 @@ def pharmacy_upload_preview_api(request):
 
     file_name = getattr(excel_file, "name", "") or ""
 
+    # STOK modu: dosya adinda '_STOCK' (ya da 'СТОК') geciyorsa stok yuklemesi.
+    # Miktar sales_pharmacy.remaining_count/remaining_amount'a yazilir;
+    # sales_count/sales_amount = 0 olur (Olga: 'sales_count > 0' kosulu YOK).
+    _fn_up = (file_name or "").upper()
+    is_stock = ("_STOCK" in _fn_up) or ("STOCK" in _fn_up) or ("СТОК" in _fn_up)
+
+    # Bazi stok dosyalari TEK markaya aittir ve urun adi markayi icermez
+    # (ornek: VITA_SAMARA'nin ayri '..._STOCK_SOLGAR' / '..._STOCK_BOUNTY'
+    # dosyalari). SADECE dosya adinda acik '_SOLGAR' / '_BOUNTY' son-eki varsa
+    # markayi zorla; aksi halde her zamanki gibi urun adindan belirle.
+    _file_brand = None
+    if "_BOUNTY" in _fn_up:
+        _file_brand = "BOUNTY"
+    elif "_SOLGAR" in _fn_up:
+        _file_brand = "SOLGAR"
+
     # --- Dosya ac + parse + kayit: hepsini try/except'e sar (depo ile ayni
     # desen). Hata olursa kullaniciya ANLASILIR Rusca mesaj + tip doner;
     # tam traceback sunucu log'una yazilir (yonetici 'problemleri gorebilsin').
@@ -2451,19 +2484,35 @@ def pharmacy_upload_preview_api(request):
     import logging as _logging
     _log = _logging.getLogger("sales.pharmacy_upload")
     try:
-        sheet, err = _ph_open_sheet(excel_file, sheet_name or None)
+        # STOK modunda bazi zincirlerin stok verisi SABIT bir sayfadadir
+        # (ALOE -> 'остаток', FARMAIMPEKS -> 'Лист2') ve bu ilk sayfa DEGILDIR.
+        # Frontend genelde ilk sayfayi (ornek ALOE'de 'закуп') secip gonderir,
+        # bu da yanlis sayfadan 0 satir dondururdu. Bu yuzden config bir stok
+        # sayfasi tanimliyorsa kullanicinin secimini EZERIZ; tanimli degilse
+        # kullanicinin (ya da ilk) sayfasi kullanilir.
+        _open_sheet = sheet_name or None
+        if is_stock:
+            from .pharmacy_all_configs import get_stock_sheet
+            _stock_sheet = get_stock_sheet(chain_name or file_name)
+            if _stock_sheet:
+                _open_sheet = _stock_sheet
+
+        sheet, err = _ph_open_sheet(excel_file, _open_sheet)
         if err:
             return Response({"error": err}, status=400)
 
         from .pharmacy_all_configs import parse_chain
         parsed = parse_chain(sheet, chain_name or file_name, main_group,
-                             sheet.max_row, sheet.max_column, country)
+                             sheet.max_row, sheet.max_column, country,
+                             is_stock=is_stock)
         if parsed is None:
             return Response({"error": f"'{chain_name}' için parse konfigürasyonu bulunamadı."}, status=400)
         if not parsed:
             return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
 
         def _brand(product):
+            if _file_brand:
+                return _file_brand
             p = (product or "").upper()
             if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
                 return "BOUNTY"
@@ -2486,18 +2535,36 @@ def pharmacy_upload_preview_api(request):
         objs = []
         for r in parsed:
             brand = _brand(r.get("PRODUCT"))
-            cnt = _int(r.get("COUNT"))
-            if brand == "BOUNTY":
-                total_bounty_c += cnt
+            if is_stock:
+                # STOK: parse edilen miktar COUNT/AMOUNT'ta gelir -> REMAINING'e
+                # tasi, satis alanlarini 0 yap. (Vertical config'leri miktari
+                # dogrudan REMAINING_*'a koymus olabilir; COUNT bossa oradan al.)
+                rc = _int(r.get("COUNT"))
+                ra = _dec(r.get("AMOUNT"))
+                if rc == 0 and _int(r.get("REMAINING_COUNT")):
+                    rc = _int(r.get("REMAINING_COUNT"))
+                if ra == 0 and _dec(r.get("REMAINING_AMOUNT")):
+                    ra = _dec(r.get("REMAINING_AMOUNT"))
+                sale_c = 0
+                sale_a = _Dec("0")
+                disp_c = rc
             else:
-                total_solgar_c += cnt
+                sale_c = _int(r.get("COUNT"))
+                sale_a = _dec(r.get("AMOUNT"))
+                rc = _int(r.get("REMAINING_COUNT"))
+                ra = _dec(r.get("REMAINING_AMOUNT"))
+                disp_c = sale_c
+            if brand == "BOUNTY":
+                total_bounty_c += disp_c
+            else:
+                total_solgar_c += disp_c
             objs.append(SalesRecord(
                 report_date=report_date, chain_name=chain_name, country=country,
                 product_name=(r.get("PRODUCT") or "")[:300], brand=brand,
                 pharmacy=(r.get("PHARMACY") or "")[:400], city=(r.get("CITY") or "")[:150],
-                count=cnt, amount=_dec(r.get("AMOUNT")),
-                remaining_count=_int(r.get("REMAINING_COUNT")),
-                remaining_amount=_dec(r.get("REMAINING_AMOUNT")),
+                count=sale_c, amount=sale_a,
+                remaining_count=rc,
+                remaining_amount=ra,
                 aptekno=(r.get("APTEKNO") or "")[:120],
                 salesreader=(r.get("SALESREADER") or "")[:400],
                 subgroup=(r.get("SUBGROUP") or "")[:150],
@@ -2505,9 +2572,18 @@ def pharmacy_upload_preview_api(request):
                 uploaded_by=request.user, batch_id=batch_id, is_confirmed=False,
             ))
 
+        # Eski taslaklari sil + yenilerini yaz. Delete ve insert'i AYRI kisa
+        # transaction'larda yapiyoruz: tek buyuk atomic blok (ozellikle ALOE
+        # gibi ~18 bin satirlik stok dosyalarinda) delete+insert kilitlerini
+        # uzun sure tutup ust uste/yarim kalan isteklerde 'Lock wait timeout'
+        # (1205) veriyordu. Once eski taslaklari commit'leyerek sil (kilit
+        # hemen birakilir), sonra yeni batch'i yaz.
         with _txn.atomic():
-            SalesRecord.objects.filter(uploaded_by=request.user, is_confirmed=False).delete()
-            SalesRecord.objects.bulk_create(objs, batch_size=5000)
+            SalesRecord.objects.filter(
+                uploaded_by=request.user, is_confirmed=False
+            ).delete()
+        with _txn.atomic():
+            SalesRecord.objects.bulk_create(objs, batch_size=2000)
     except MemoryError as exc:
         return _upload_error_response(
             _log, exc,
@@ -3091,10 +3167,51 @@ def _geocode_yandex(address, out):
             return out
         geo = members[0]["GeoObject"]
         pos = geo["Point"]["pos"].split()
+        # Yandex: pos = "lon lat" -> point_x=lon, point_y=lat (DaData ile ayni).
         out["point_x"] = pos[0]
         out["point_y"] = pos[1]
-        out["full_address"] = geo.get("metaDataProperty", {}).get(
-            "GeocoderMetaData", {}).get("text", "")
+
+        meta = geo.get("metaDataProperty", {}).get("GeocoderMetaData", {})
+        out["full_address"] = meta.get("text", "")
+        # kind: "house"/"street"/"locality"/... -> bina tipi (DaData house_type gibi)
+        out["building_type"] = meta.get("kind", "")
+
+        addr = meta.get("Address", {}) or {}
+        out["country_code"] = addr.get("country_code", "") or ""
+
+        # Address.Components: [{kind, name}, ...] — ayristirilmis adres bilesenleri.
+        # province iki kez gelebilir (federal okrug + область); SONuncusu asil
+        # idari bolge (область), bu yuzden ustune yazilmasina izin veririz.
+        comps = addr.get("Components", []) or []
+        c = {}
+        province_names = []
+        for comp in comps:
+            kind = (comp.get("kind") or "").lower()
+            name = comp.get("name") or ""
+            if not kind:
+                continue
+            if kind == "province":
+                province_names.append(name)
+            else:
+                c[kind] = name
+
+        # Область (administrative): son province (varsa), yoksa ilk.
+        if province_names:
+            out["administrative_area_name"] = province_names[-1]
+        # Подрайон (sub-administrative): rayon/area.
+        if c.get("area"):
+            out["sub_administrative_area_name"] = c["area"]
+        # Шехир.
+        if c.get("locality"):
+            out["city"] = c["locality"]
+            if not out.get("sub_administrative_area_name"):
+                out["sub_administrative_area_name"] = c["locality"]
+        # Улица.
+        if c.get("street"):
+            out["street"] = c["street"]
+        # Дом.
+        if c.get("house"):
+            out["home_number"] = c["house"]
     except (KeyError, IndexError):
         out["error"] = "Не удалось разобрать ответ Yandex."
     return out
