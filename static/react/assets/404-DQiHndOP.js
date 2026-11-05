@@ -1,1 +1,0 @@
-import{y as e}from"./index-D-1Tlmgn.js";var t=e;export{t as component};
