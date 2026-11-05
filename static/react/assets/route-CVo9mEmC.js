@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-Ddene72i.js";var t=e;export{t as component};
