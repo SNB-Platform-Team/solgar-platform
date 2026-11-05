@@ -1,1 +1,0 @@
-import{t as e}from"./authenticated-layout-DVJp-d6n.js";var t=e;export{t as component};
