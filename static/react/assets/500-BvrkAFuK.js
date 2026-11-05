@@ -1,1 +1,0 @@
-import{b as e}from"./index-7mvGDw22.js";var t=e;export{t as component};
