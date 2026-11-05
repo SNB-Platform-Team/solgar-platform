@@ -23,17 +23,27 @@ from . import depo_configs  # her distributor'un hazir config'i (Java DepoParser
 
 # ---- Java parseCount / parseAmount karsiligi ----
 def parse_count(count_str: Optional[str]) -> int:
-    """Count'u int'e cevir (ilk ondalik/virgulden kes, bosluklari sil)."""
+    """Count'u int'e cevir (ilk ondalik/virgulden kes, bosluklari sil).
+
+    Muhasebe negatifi: bazi depo dosyalari (MEDSERVIS 'Конечный остаток')
+    negatif stogu SONDAKI eksi ile yazar ('1.000-' = -1 / strip sonrasi
+    '1000-'). Bu eksiyi tanir ve negatif dondururuz; stok toplami ИТОГО ile
+    tutsun diye negatif degerler KIRPILMAZ (eskiden max(0,...) ile 0 olup
+    toplam 1-2 adet sisiyordu)."""
     if not count_str:
         return 0
-    clean = re.split(r"[.,]", count_str)[0]
+    s = str(count_str).strip()
+    neg = s.endswith("-") or s.startswith("-")
+    s = s.strip("-").strip()
+    clean = re.split(r"[.,]", s)[0]
     clean = re.sub(r"\s+", "", clean)
     if not clean:
         return 0
     try:
-        return max(0, int(clean))
+        v = int(clean)
     except ValueError:
         return 0
+    return -v if neg else v
 
 
 def parse_amount(amount_str: Optional[str]) -> float:

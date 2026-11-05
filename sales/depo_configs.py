@@ -282,7 +282,11 @@ def medservis_stock() -> DepoParserConfig:
     c.columns.append(DepoColumnSpec.anchor_spec("PRODUCT", "Товар", 0, 4))
     c.columns.append(DepoColumnSpec.of("CITY", "Филиал"))
     spec = DepoColumnSpec.of("COUNT", "Конечный остаток")
-    spec.strip_separators = True
+    # NOT: strip_separators KAPALI. 'Конечный остаток' degerleri ondalik
+    # noktali ('1.000' = 1) ve bazen negatif/muhasebe-eksili ('1.000-' = -1)
+    # gelir. strip_separators noktayi binlik sanip '1.000'->'1000' yapiyordu
+    # (sisme). parse_count zaten noktadan keser ve sondaki eksiyi negatif okur,
+    # bu yuzden strip'e gerek yok ve zararli. Boylece stok ИТОГО ile tutar.
     c.columns.append(spec)
     return c
 

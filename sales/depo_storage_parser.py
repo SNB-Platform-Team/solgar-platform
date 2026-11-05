@@ -70,18 +70,27 @@ class DepoStorageParser:
         if not s:
             return 0
         s = s.strip()
+        # Muhasebe negatifi: sondaki eksi ('1.000-' = -1).
+        neg = s.endswith("-")
+        if neg:
+            s = s[:-1].strip()
         dot = s.find(".")
         if dot >= 0:
             s = s[:dot]
         comma = s.find(",")
         if comma >= 0:
             s = s[:comma]
+        # basta eksi de olabilir (zaten negatif yazilmis).
+        if s.startswith("-"):
+            neg = True
+            s = s[1:]
         if not s:
             return 0
         try:
-            return int(s)
+            v = int(s)
         except ValueError:
             return 0
+        return -v if neg else v
 
     # ==================================================================
     def parse(self, sheet, cfg: DepoParserConfig, main_group: str,
