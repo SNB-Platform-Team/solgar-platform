@@ -242,6 +242,12 @@ STOCK_MATRIX_CONFIGS = {
     # (col7/8 = Остаток toplamlari, atlanir). Brand DOSYADAN (SOLGAR/BOUNTY).
     "VITA_SAMARA": {"product_axis": "col", "product_index": 2, "aptek_index": 1,
                     "data_start_row": 2, "data_start_col": 9},
+    # ЭМИТИ (KZ): PIVOT. col0=urun (asagi), row3=sehir basliklari (col1..6),
+    # col7=Итого(satir toplami, SKIP), son satir='Общий итог'(SKIP). Veri row4+,
+    # col1+. Hucre=stok adet. Gercek dosyayla test: toplam 8931 (footer haric).
+    "ЭМИТИ": {"product_axis": "col", "product_index": 0, "aptek_index": 3,
+              "data_start_row": 4, "data_start_col": 1,
+              "skip_last_col": True, "skip_last_row": True},
 }
 
 KG_CONFIGS = {
@@ -285,8 +291,15 @@ SPECIAL = {"AVE": _ave(), "NEVIS": _nevis()}
 import re as _re_getcfg
 
 def _norm_key(s):
-    """Ayiricilari (_ - boslik . vb.) at, buyuk harfe cevir."""
-    return _re_getcfg.sub(r"[^A-Z0-9]", "", (s or "").upper())
+    """Ayiricilari (_ - boslik . vb.) at, buyuk harfe cevir.
+
+    Latin + KIRIL harfleri + rakam KORUNUR. Onceden sadece [A-Z0-9] tutuluyordu,
+    bu yuzden Kiril adli zincirler (ornek 'ЭМИТИ') normalize'da bos string'e
+    duser ve hicbir config'e eslesmezdi (yanlislikla dosya adindaki 'STOCK'
+    kelimesine eslesirdi). Mevcut config anahtarlarinin tamami Latin oldugundan
+    bu degisiklik eski eslesmeleri etkilemez; sadece Kiril adlari calisir yapar.
+    'Ё' -> 'Е' normalize edilir."""
+    return _re_getcfg.sub(r"[^A-ZА-ЯЁ0-9]", "", (s or "").upper()).replace("Ё", "Е")
 
 
 def get_config(chain_or_file, country="", is_stock=False):
