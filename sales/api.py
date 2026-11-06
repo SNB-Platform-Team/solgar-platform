@@ -1922,6 +1922,47 @@ def _medrep_name_from_email(email: str) -> str:
     return str(row[0]).strip() if row and row[0] else ""
 
 
+def _entry_user_name(user) -> str:
+    """Kayit 'entry_user' adi: giris yapan kullanicinin mailinden
+    solgar_org.employees.employee_name. Boylece apteka/doktor kaydinda
+    'Entry User' kolonu employees tablosundaki resmi isimle dolar.
+
+    Once ACTIVE calisan aranir (_medrep_name_from_email); bulunamazsa
+    aktiflik sarti olmadan maile gore tekrar denenir; o da yoksa Django
+    kullanicisinin adi/kullanici adina geri dusulur (isim bos kalmasin)."""
+    email = (getattr(user, "email", "") or "").strip()
+    # 1) ACTIVE calisan (mevcut yardimci).
+    try:
+        name = _medrep_name_from_email(email)
+        if name:
+            return name
+    except Exception:
+        pass
+    # 2) Aktiflik sarti olmadan maile gore (ornek: kayit giren ama ACTIVE
+    #    isaretlenmemis calisan) — kullanicinin SQL'iyle ayni mantik.
+    if email and "@" in email:
+        try:
+            from django.db import connections
+            with connections["refdb"].cursor() as cur:
+                cur.execute(
+                    "SELECT EMPLOYEE_NAME FROM solgar_org.employees "
+                    "WHERE LOWER(TRIM(EMPLOYEE_EMAIL)) = %s "
+                    "AND EMPLOYEE_NAME IS NOT NULL AND EMPLOYEE_NAME <> '' "
+                    "ORDER BY id LIMIT 1",
+                    [email.lower()],
+                )
+                row = cur.fetchone()
+            if row and row[0]:
+                return str(row[0]).strip()
+        except Exception:
+            pass
+    # 3) Fallback: Django kullanici adi (eski davranis) — isim bos kalmasin.
+    try:
+        return user.get_full_name() or user.username
+    except Exception:
+        return ""
+
+
 def _is_row_restricted(user, manager_screen: str) -> bool:
     """Bu kullanici apteka/doktor listesinde satir-kisitina tabi mi?
 
@@ -3374,7 +3415,7 @@ def doctor_create_api(request):
 
     doc = Doctor(status=1)
     _doctor_apply_fields(doc, data)
-    doc.entry_user = request.user.get_full_name() or request.user.username
+    doc.entry_user = _entry_user_name(request.user)
     doc.entry_date = timezone.now()
 
     try:
@@ -3402,7 +3443,7 @@ def doctor_update_api(request):
         return Response({"error": "Доктор не найден."}, status=404)
 
     _doctor_apply_fields(doc, data)
-    doc.entry_user = request.user.get_full_name() or request.user.username
+    doc.entry_user = _entry_user_name(request.user)
 
     try:
         doc.save(using="refdb")
@@ -3707,7 +3748,7 @@ def pharmacy_create_api(request):
     # Номер аптеки artik zorunlu degil (Olga: "не всегда есть").
     obj = Model(status=1)
     _pharmacy_apply_fields(obj, data)
-    obj.entry_user = request.user.get_full_name() or request.user.username
+    obj.entry_user = _entry_user_name(request.user)
     obj.entry_date = timezone.now()
 
     try:
@@ -3734,7 +3775,7 @@ def pharmacy_update_api(request):
         return Response({"error": "Аптека не найдена."}, status=404)
 
     _pharmacy_apply_fields(obj, data)
-    obj.entry_user = request.user.get_full_name() or request.user.username
+    obj.entry_user = _entry_user_name(request.user)
     try:
         obj.save(using="refdb")
     except Exception as exc:
@@ -4217,7 +4258,7 @@ def pharmacy_bulk_save_api(request):
     if not rows:
         return Response({"error": "Нет строк для сохранения."}, status=400)
 
-    entry_user = request.user.get_full_name() or request.user.username
+    entry_user = _entry_user_name(request.user)
     now = timezone.now()
 
     created, updated = 0, 0
@@ -4273,7 +4314,7 @@ def doctor_bulk_save_api(request):
     if not rows:
         return Response({"error": "Нет строк для сохранения."}, status=400)
 
-    entry_user = request.user.get_full_name() or request.user.username
+    entry_user = _entry_user_name(request.user)
     now = timezone.now()
 
     created, updated = 0, 0
