@@ -1,0 +1,1 @@
+import{t as e}from"./analytics-1c-D9hiWPRv.js";var t=e;export{t as component};
