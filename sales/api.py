@@ -3735,17 +3735,105 @@ def _pharmacy_apply_fields(obj, data):
         pass
 
 
+def _norm_dup(val) -> str:
+    """Mukerrer karsilastirmasi icin normalize: trim + lower + ic bosluk sadelestir."""
+    import re
+    s = "" if val is None else str(val)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+
+def _pharmacy_duplicate_qs(Model, group_company, subgroup_company, full_address):
+    """group_company + subgroup_company + full_address ucu de ayni olan aktif
+    eczane kayitlarini dondur (normalize edilmis, buyuk/kucuk ve bosluk
+    farklarini yok sayarak). status<>0 (silinmemis) kayitlar."""
+    from django.db.models import Q
+    g = _norm_dup(group_company)
+    s = _norm_dup(subgroup_company)
+    a = _norm_dup(full_address)
+    # Adres bos ise mukerrer kontrolu yapmayiz (anlamli bir eslesme olmaz).
+    if not a:
+        return None
+    qs = Model.objects.using("refdb").exclude(status=0)
+    # Python tarafinda normalize ederek karsilastiracagiz (DB-bagimsiz, collation
+    # farklarindan etkilenmez). Aday kumeyi daraltmak icin once adres LIKE ile suz.
+    needle = (full_address or "").strip()
+    if needle:
+        qs = qs.filter(full_address__icontains=needle[:40])
+    matches = []
+    for row in qs.only(
+        "id", "group_company", "subgroup_company", "full_address", "pharmacy_no"
+    ):
+        if (_norm_dup(row.group_company) == g
+                and _norm_dup(row.subgroup_company) == s
+                and _norm_dup(row.full_address) == a):
+            matches.append(row)
+    return matches
+
+
 @api_view(["POST"])
 @permission_classes([HasScreen("PHARMACY")])
 def pharmacy_create_api(request):
-    """Yeni eczane ekle (brand'e gore tabloya INSERT)."""
+    """Yeni eczane ekle (brand'e gore tabloya INSERT).
+
+    Mukerrer kontrolu (sadece create):
+      group_company + subgroup_company + full_address ucu de mevcut aktif bir
+      kayitla ayni ise, varsayilan olarak kaydi engeller ve
+      {duplicate: true} doner (frontend "Да/Нет" sorar). Kullanici "Да" derse
+      force=true gelir; o zaman номер аптеки (pharmacy_no) zorunludur VE ayni
+      adres icin essiz olmalidir (ayni adres + ayni no ikinci kez kaydedilemez).
+    """
     from django.utils import timezone
 
     data = request.data or {}
     brand = (data.get("brand") or "SOLGAR").strip()
     Model = _pharmacy_model(brand)
 
-    # Номер аптеки artik zorunlu degil (Olga: "не всегда есть").
+    force = bool(data.get("force") or data.get("force_save"))
+    group_company = data.get("group_company")
+    subgroup_company = data.get("subgroup_company")
+    full_address = data.get("full_address")
+    pharmacy_no = (data.get("pharmacy_no") or "").strip()
+
+    dupes = _pharmacy_duplicate_qs(
+        Model, group_company, subgroup_company, full_address
+    )
+
+    if dupes:
+        if not force:
+            # Henuz onay yok: engelle, frontend Да/Нет sorsun.
+            return Response(
+                {
+                    "duplicate": True,
+                    "pharmacy_no_required": True,
+                    "message": "аптека с таким адресом уже сохранена в базе",
+                    "error": "аптека с таким адресом уже сохранена в базе",
+                },
+                status=409,
+            )
+        # Да secildi: номер аптеки zorunlu.
+        if not pharmacy_no:
+            return Response(
+                {
+                    "duplicate": True,
+                    "pharmacy_no_required": True,
+                    "error": "Введите «Номер аптеки» — он обязателен для сохранения дубликата.",
+                },
+                status=400,
+            )
+        # Essizlik: ayni adres icin ayni номер zaten varsa engelle.
+        no_norm = _norm_dup(pharmacy_no)
+        for row in dupes:
+            if _norm_dup(row.pharmacy_no) == no_norm:
+                return Response(
+                    {
+                        "duplicate": True,
+                        "pharmacy_no_required": True,
+                        "error": "Аптека с таким адресом и номером уже существует. Укажите другой номер.",
+                    },
+                    status=400,
+                )
+
     obj = Model(status=1)
     _pharmacy_apply_fields(obj, data)
     obj.entry_user = _entry_user_name(request.user)
