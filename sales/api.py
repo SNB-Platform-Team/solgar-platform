@@ -4618,7 +4618,27 @@ def distributor_report_api(request):
             if product:
                 where.append("product = %s")
                 params.append(product)
-            # country: stock_sales_table'da yok -> atlanir.
+            # country: legacy stock_sales_table'da country kolonu YOK. Ulke
+            # filtresi legacy tarafinda distributor adina gore uygulanir.
+            # Kazakistan'in distributorleri sabit (Olga): ЭМИТИ, MedServis,
+            # Vtime. Yazim legacy'de buyuk harf (MEDSERVIS / VTIME), yeni
+            # platformda karisik (MedServis / Vtime) oldugundan eslesme
+            # BUYUK/KUCUK HARF DUYARSIZ (UPPER(distributor)) yapilir.
+            #   - country == Kazakhistan  -> SADECE bu 3 distributor
+            #   - country dolu & != KZ     -> bu 3 KZ distributorunu DISLA
+            #     (yoksa Rusya raporunda KZ distributorleri gorunur)
+            #   - country bos              -> legacy eskisi gibi tam kalir
+            _KZ_DISTRIBUTORS = ["ЭМИТИ", "MEDSERVIS", "VTIME"]
+            if country:
+                _ph = ", ".join(["%s"] * len(_KZ_DISTRIBUTORS))
+                _kz_upper = [d.upper() for d in _KZ_DISTRIBUTORS]
+                if country.strip().lower() in ("kazakhistan", "kazakhstan",
+                                               "казахстан"):
+                    where.append("UPPER(distributor) IN (%s)" % _ph)
+                    params.extend(_kz_upper)
+                else:
+                    where.append("UPPER(distributor) NOT IN (%s)" % _ph)
+                    params.extend(_kz_upper)
 
             group_cols = [_LEG_COL[g] for g in group]
             # Her hafta icin bir SUM(CASE ...) sutunu.
