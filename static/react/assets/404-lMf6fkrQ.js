@@ -1,1 +1,0 @@
-import{y as e}from"./index-DQ_3r2_O.js";var t=e;export{t as component};
