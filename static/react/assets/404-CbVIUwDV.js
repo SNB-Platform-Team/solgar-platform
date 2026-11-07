@@ -1,1 +1,0 @@
-import{y as e}from"./index-Crm0h0pk.js";var t=e;export{t as component};
