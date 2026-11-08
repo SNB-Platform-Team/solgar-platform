@@ -26,16 +26,42 @@ from .models import LoginLog, ActivityLog
 
 @admin.register(LoginLog)
 class LoginLogAdmin(admin.ModelAdmin):
-    """Read-only view of login/logout audit records."""
+    """Read-only view of login / logout / failed-login audit records."""
 
-    list_display = ("user", "event_type", "ip_address", "timestamp")
+    list_display = (
+        "timestamp", "event_type", "who", "ip_address", "short_agent",
+    )
     list_filter = ("event_type", "timestamp")
-    search_fields = ("user__username", "ip_address")
-    readonly_fields = ("user", "event_type", "ip_address", "user_agent", "timestamp")
+    search_fields = ("user__username", "username_tried", "ip_address")
+    readonly_fields = (
+        "user", "username_tried", "event_type", "ip_address",
+        "user_agent", "timestamp",
+    )
     ordering = ("-timestamp",)
+    list_per_page = 50
+    date_hierarchy = "timestamp"
+
+    @admin.display(description="Пользователь / попытка")
+    def who(self, obj):
+        """Basarili girislerde kullanici; basarisizda denenen kullanici adi.
+
+        Yanlis kullanici adi girildiginde user bos kalir; o zaman girilen adi
+        gosteririz ki 'kim denedi' gorunur olsun."""
+        if obj.user_id and obj.user:
+            return obj.user.get_username()
+        return obj.username_tried or "—"
+
+    @admin.display(description="User agent")
+    def short_agent(self, obj):
+        ua = obj.user_agent or ""
+        return (ua[:60] + "…") if len(ua) > 60 else ua
 
     def has_add_permission(self, request):
         """Logs are created by the system, not manually."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Loglar degistirilemez (salt-okunur)."""
         return False
 
 @admin.register(ActivityLog)
