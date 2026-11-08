@@ -90,6 +90,7 @@ urlpatterns = [
     path("api/distributor-report/export/", api.distributor_report_export_api, name="distributor_report_export_api"),
     path("api/chain-sales-report/", api.chain_sales_report_api, name="chain_sales_report_api"),
     path("api/chain-sales-report/export/", api.chain_sales_report_export_api, name="chain_sales_report_export_api"),
+    path("api/security-dashboard/", api.security_dashboard_api, name="security_dashboard_api"),
 ]      
 
 

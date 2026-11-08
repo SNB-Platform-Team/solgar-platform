@@ -93,12 +93,21 @@ class LoginLog(models.Model):
 
         LOGIN = "LOGIN", "Вход"
         LOGOUT = "LOGOUT", "Выход"
+        LOGIN_FAILED = "FAILED", "Неудачный вход"
 
+    # Basarisiz girislerde dogru kullanici bilinmeyebilir (yanlis kullanici
+    # adi girildiginde user=None). Bu yuzden user null olabilir ve denenen
+    # kullanici adi ayrica username_tried alaninda metin olarak tutulur.
     user = models.ForeignKey(
         "accounts.User",
         on_delete=models.CASCADE,
         related_name="login_logs",
         verbose_name="User",
+        null=True,
+        blank=True,
+    )
+    username_tried = models.CharField(
+        "Denenen kullanici adi", max_length=254, blank=True
     )
     event_type = models.CharField(
         "Event type", max_length=10, choices=EventType.choices

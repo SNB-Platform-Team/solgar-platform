@@ -5191,3 +5191,171 @@ def chain_sales_report_api(request):
         "report": report,
         "error": error,
     })
+
+
+# ==================== Güvenlik Paneli (Security Dashboard) ====================
+# Sadece superuser/is_staff erisebilir (IsSuperOrStaff). Verinin kaynagi:
+#   - accounts.LoginLog  -> giris / cikis / BASARISIZ giris olaylari
+#   - accounts.ActivityLog -> kim neyi degistirdi/sildi/yukledi
+# Panel salt-okunur; hicbir sey degistirmez.
+
+@api_view(["GET"])
+@permission_classes([IsSuperOrStaff])
+def security_dashboard_api(request):
+    """Guvenlik paneli verisi.
+
+    Query params (opsiyonel):
+      hours   : son kac saatlik pencere (varsayilan 24)
+      fail_window_min : ayni IP/kullanici icin "coklu basarisiz deneme"
+                        penceresi, dakika (varsayilan 15)
+      fail_threshold  : o pencerede kac basarisiz deneme uyari sayilir
+                        (varsayilan 5)
+      limit   : her listede en fazla kac satir (varsayilan 50)
+
+    Response:
+      {
+        summary: {failed_24h, logins_24h, suspicious_count, window_hours},
+        suspicious: [{key, kind, username, ip, count, last_ts}],
+        recent_failed: [{username, ip, user_agent, ts}],
+        recent_logins: [{username, ip, user_agent, ts}],
+        recent_activity: [{username, action, action_label, screen, path, detail, ip, ts}],
+        error: ""
+      }
+    """
+    import datetime as _d
+    from collections import defaultdict
+    from django.utils import timezone
+    from accounts.models import LoginLog, ActivityLog
+
+    def _int(name, default):
+        try:
+            return int(request.GET.get(name) or default)
+        except (TypeError, ValueError):
+            return default
+
+    hours = max(1, min(_int("hours", 24), 24 * 30))       # 1 saat .. 30 gun
+    fail_window_min = max(1, min(_int("fail_window_min", 15), 24 * 60))
+    fail_threshold = max(2, min(_int("fail_threshold", 5), 1000))
+    limit = max(1, min(_int("limit", 50), 500))
+
+    now = timezone.now()
+    since = now - _d.timedelta(hours=hours)
+    fail_since = now - _d.timedelta(minutes=fail_window_min)
+
+    def _uname(log):
+        # Basarili girislerde user dolu; basarisizda user bos olabilir ->
+        # denenen kullanici adini goster.
+        if getattr(log, "user_id", None) and log.user:
+            return log.user.get_username()
+        return log.username_tried or "—"
+
+    def _ts(dt):
+        try:
+            return timezone.localtime(dt).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return str(dt)
+
+    error = ""
+    summary = {
+        "failed_24h": 0, "logins_24h": 0,
+        "suspicious_count": 0, "window_hours": hours,
+    }
+    suspicious = []
+    recent_failed = []
+    recent_logins = []
+    recent_activity = []
+
+    try:
+        FAILED = LoginLog.EventType.LOGIN_FAILED
+        LOGIN = LoginLog.EventType.LOGIN
+
+        # ---- Ozet sayilar ----
+        summary["failed_24h"] = LoginLog.objects.filter(
+            event_type=FAILED, timestamp__gte=since
+        ).count()
+        summary["logins_24h"] = LoginLog.objects.filter(
+            event_type=LOGIN, timestamp__gte=since
+        ).count()
+
+        # ---- Coklu basarisiz deneme (son fail_window_min dakika) ----
+        # Hem IP hem denenen kullanici adina gore grupla; esigi asanlar uyari.
+        by_ip = defaultdict(lambda: [0, None])        # ip -> [count, last_ts]
+        by_user = defaultdict(lambda: [0, None])      # uname -> [count, last_ts]
+        fail_qs = LoginLog.objects.filter(
+            event_type=FAILED, timestamp__gte=fail_since
+        ).order_by("-timestamp")
+        for lg in fail_qs.select_related("user")[:5000]:
+            ipk = lg.ip_address or "—"
+            uk = _uname(lg)
+            if by_ip[ipk][1] is None:
+                by_ip[ipk][1] = lg.timestamp
+            by_ip[ipk][0] += 1
+            if by_user[uk][1] is None:
+                by_user[uk][1] = lg.timestamp
+            by_user[uk][0] += 1
+
+        for ipk, (cnt, last_ts) in by_ip.items():
+            if cnt >= fail_threshold and ipk != "—":
+                suspicious.append({
+                    "key": f"ip:{ipk}", "kind": "ip",
+                    "username": "", "ip": ipk,
+                    "count": cnt, "last_ts": _ts(last_ts),
+                })
+        for uk, (cnt, last_ts) in by_user.items():
+            if cnt >= fail_threshold and uk != "—":
+                suspicious.append({
+                    "key": f"user:{uk}", "kind": "user",
+                    "username": uk, "ip": "",
+                    "count": cnt, "last_ts": _ts(last_ts),
+                })
+        suspicious.sort(key=lambda r: r["count"], reverse=True)
+        summary["suspicious_count"] = len(suspicious)
+
+        # ---- Son basarisiz girisler ----
+        for lg in LoginLog.objects.filter(
+            event_type=FAILED, timestamp__gte=since
+        ).select_related("user").order_by("-timestamp")[:limit]:
+            recent_failed.append({
+                "username": _uname(lg),
+                "ip": lg.ip_address or "—",
+                "user_agent": lg.user_agent or "",
+                "ts": _ts(lg.timestamp),
+            })
+
+        # ---- Son basarili girisler ----
+        for lg in LoginLog.objects.filter(
+            event_type=LOGIN, timestamp__gte=since
+        ).select_related("user").order_by("-timestamp")[:limit]:
+            recent_logins.append({
+                "username": _uname(lg),
+                "ip": lg.ip_address or "—",
+                "user_agent": lg.user_agent or "",
+                "ts": _ts(lg.timestamp),
+            })
+
+        # ---- Son kritik aktiviteler (degistirme / silme) ----
+        action_labels = dict(ActivityLog.ACTION_CHOICES)
+        for ac in ActivityLog.objects.filter(
+            action_type__in=["UPDATE", "DELETE"], timestamp__gte=since
+        ).select_related("user").order_by("-timestamp")[:limit]:
+            recent_activity.append({
+                "username": ac.user.get_username() if ac.user_id else "—",
+                "action": ac.action_type,
+                "action_label": action_labels.get(ac.action_type, ac.action_type),
+                "screen": ac.screen or "",
+                "path": ac.path or "",
+                "detail": ac.detail or "",
+                "ip": ac.ip_address or "—",
+                "ts": _ts(ac.timestamp),
+            })
+    except Exception as exc:
+        error = f"Ошибка панели безопасности: {exc}"
+
+    return Response({
+        "summary": summary,
+        "suspicious": suspicious,
+        "recent_failed": recent_failed,
+        "recent_logins": recent_logins,
+        "recent_activity": recent_activity,
+        "error": error,
+    })
