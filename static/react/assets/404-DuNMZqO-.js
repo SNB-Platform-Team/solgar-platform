@@ -1,1 +1,0 @@
-import{y as e}from"./index-CRsQStuu.js";var t=e;export{t as component};
