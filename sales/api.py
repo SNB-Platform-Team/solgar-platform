@@ -3442,6 +3442,8 @@ def doctor_update_api(request):
     except Doctor.DoesNotExist:
         return Response({"error": "Доктор не найден."}, status=404)
 
+    # Degisiklik ozeti icin save ONCESI degerleri yakala.
+    _before = _snapshot_fields(doc, _DOCTOR_FIELD_LABELS_RU)
     _doctor_apply_fields(doc, data)
     doc.entry_user = _entry_user_name(request.user)
 
@@ -3450,7 +3452,10 @@ def doctor_update_api(request):
     except Exception as exc:
         return Response({"error": f"Ошибка обновления: {exc}"}, status=500)
 
-    return Response({"id": doc.id, "error": ""})
+    changes = _changed_fields_summary(
+        _before, doc, data, _DOCTOR_FIELD_LABELS_RU
+    )
+    return Response({"id": doc.id, "error": "", "changes": changes})
 
 
 @api_view(["POST"])
@@ -3704,6 +3709,78 @@ _PHARMACY_INT_FIELDS = {
     "processed", "status", "pharmacy_id",
 }
 
+# "Карточка обновлена" bildiriminde hangi alanin degistigini Rusca gostermek
+# icin alan -> formdaki Rusca basligi eslemesi. Burada OLMAYAN alanlar
+# (entry_user, pharmacy_address fallback, koordinatlar vb.) degisiklik
+# ozetinde gosterilmez — kullanicinin gercekten elle degistirdigi alanlar
+# listelenir.
+_PHARMACY_FIELD_LABELS_RU = {
+    "country": "Страна", "area": "Область", "region": "Регион",
+    "city": "Город", "city_region": "Район города", "district": "Округ",
+    "metro": "Метро", "group_company": "Группа компаний",
+    "subgroup_company": "Подгруппа", "pharmacy_no": "Номер аптеки",
+    "pharmacy_category": "Категория", "assortiment": "Ассортимент",
+    "pharmacy_type": "Тип аптеки", "promo": "Промо",
+    "marketing_staff": "Мед. представитель",
+    "pharmacy_response_person": "ФИО Заведующей",
+    "pharmacy_tel": "Телефон аптеки", "pharmacy_email": "Эл. адрес",
+    "pharmacy_activeness": "Активность",
+    "pharmacy_activation_date": "Дата активации", "comments": "Комментарии",
+    "full_address": "Полный адрес", "building_type": "Тип здания",
+    "pharmacist_name_1": "Фармацевт 1", "pharmacy_home_tel": "Фармацевт Моб",
+    "pharmacist_name_2": "Фармацевт 2", "pharmacy_work_tel": "Фармацевт Раб",
+    "sku": "SKU", "cornerNo": "Корнер номер",
+}
+
+_DOCTOR_FIELD_LABELS_RU = {
+    "brand": "Бренд", "country": "Страна", "area": "Область",
+    "region": "Регион", "district": "Округ", "city": "Город",
+    "activeness": "Активность", "medrep": "Мед. представитель",
+    "doctor_date": "Дата активации", "doctor_name": "ФИО доктора",
+    "unified_specialty": "Специальность (общая)", "specialty": "Специальность",
+    "position_regalia": "Должность / регалии", "category": "Категория",
+    "clinic_name": "Клиника", "clinic_name1": "Клиника (текст)",
+    "clinic_status": "Статус клиники", "clinic_count": "Кол-во клиник",
+    "key_person": "Ключевое лицо", "doctor_tel": "Телефон",
+    "doctor_email": "Эл. адрес", "full_address": "Полный адрес",
+    "building_type": "Тип здания",
+}
+
+
+def _changed_fields_summary(before: dict, obj, data, labels: dict):
+    """Guncelleme sonrasi degisen alanlarin Rusca ozetini uretir.
+
+    Sadece:
+      - istekte GONDERILEN (data icinde olan) alanlar — kullanicinin elle
+        dokundugu alanlar,
+      - ve `labels` eslemesinde olan alanlar (entry_user, koordinat, fallback
+        gibi alanlar dista kalir)
+    karsilastirilir. before = save oncesi degerler, obj = save sonrasi nesne.
+
+    Donus: [{"field","label","old","new"}, ...] (degismeyenler atlanir).
+    """
+    out = []
+    for f, label in labels.items():
+        if f not in data:
+            continue
+        old_v = before.get(f)
+        new_v = getattr(obj, f, None)
+        old_s = "" if old_v is None else str(old_v).strip()
+        new_s = "" if new_v is None else str(new_v).strip()
+        if old_s != new_s:
+            out.append({
+                "field": f,
+                "label": label,
+                "old": old_s,
+                "new": new_s,
+            })
+    return out
+
+
+def _snapshot_fields(obj, labels: dict) -> dict:
+    """obj'nin labels'taki alanlarinin save oncesi degerlerini kopyala."""
+    return {f: getattr(obj, f, None) for f in labels}
+
 
 def _pharmacy_model(brand):
     """brand -> PharmacySolgar / PharmacyBounty."""
@@ -3862,13 +3939,18 @@ def pharmacy_update_api(request):
     except Model.DoesNotExist:
         return Response({"error": "Аптека не найдена."}, status=404)
 
+    # Degisiklik ozeti icin save ONCESI degerleri yakala.
+    _before = _snapshot_fields(obj, _PHARMACY_FIELD_LABELS_RU)
     _pharmacy_apply_fields(obj, data)
     obj.entry_user = _entry_user_name(request.user)
     try:
         obj.save(using="refdb")
     except Exception as exc:
         return Response({"error": f"Ошибка обновления: {exc}"}, status=500)
-    return Response({"id": obj.id, "error": ""})
+    changes = _changed_fields_summary(
+        _before, obj, data, _PHARMACY_FIELD_LABELS_RU
+    )
+    return Response({"id": obj.id, "error": "", "changes": changes})
 
 
 @api_view(["POST"])
