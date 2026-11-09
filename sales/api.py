@@ -1818,6 +1818,10 @@ def pharmacy_filter_options_api(request):
         except Exception:
             return []
 
+    # Hiyerarsisiz filtre (Olga): kullanici ust dropbox'u secmeden de dogrudan
+    # Область/Регион/Город/Метро ile filtreleyebilsin diye bu listeleri
+    # level-siz TAM (kaskadsiz) olarak dondururuz. country verilmisse (medrep
+    # kendi ulkesi) o ulkeye gore, verilmemisse tum ulkeler icin distinct.
     result = {
         "countries": _safe(repo.countries, brand),
         "chains": _safe(repo.chains, brand, country=country),
@@ -1828,6 +1832,12 @@ def pharmacy_filter_options_api(request):
         "assortiments": _safe(repo.assortiments, brand),
         "skus": _safe(repo.skus, brand),
         "statuses": _safe(repo.pharmacy_statuses, brand, country=country),
+        # Kaskadsiz tam cografi listeler (ust secime bagli degil):
+        # metros() country/area/region almaz (prm_sales_district tam liste).
+        "areas": _safe(repo.areas, brand, country=country),
+        "regions": _safe(repo.regions, brand, country=country),
+        "cities": _safe(repo.cities, brand, country=country),
+        "metros": _safe(repo.metros, brand),
     }
     cache.set(cache_key, result, 900)
     return Response(result)
@@ -1885,12 +1895,20 @@ def doctor_filter_options_api(request):
         except Exception:
             return []
 
+    # Hiyerarsisiz filtre (Olga): ust dropbox secilmeden de dogrudan
+    # Область/Регион/Город/Округ ile filtrelenebilsin diye bu cografi
+    # listeleri level-siz TAM (kaskadsiz) dondururuz.
     result = {
         "countries": _safe(repo.countries),
         "specialties": _safe(repo.specialties),
         "unified_specialties": _safe(repo.unified_specialties),
         "medreps": _safe(repo.medreps),
         "clinics": _safe(repo.clinic_names),
+        # Kaskadsiz tam cografi listeler (ust secime bagli degil):
+        "areas": _safe(repo.areas),
+        "regions": _safe(repo.regions),
+        "cities": _safe(repo.cities),
+        "metros": _safe(repo.metros),
     }
     cache.set("doctor_filter_opts", result, 900)
     return Response(result)
