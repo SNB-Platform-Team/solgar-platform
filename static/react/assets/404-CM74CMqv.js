@@ -1,1 +1,0 @@
-import{y as e}from"./index-eTB2OJmQ.js";var t=e;export{t as component};
