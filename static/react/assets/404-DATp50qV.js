@@ -1,0 +1,1 @@
+import{y as e}from"./index-CRkgJPJU.js";var t=e;export{t as component};
