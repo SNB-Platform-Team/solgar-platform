@@ -2926,10 +2926,34 @@ def pharmacy_upload_preview_api(request):
                 _all_names, _nerr = _ph_sheet_names(excel_file)
             except Exception:
                 _all_names, _nerr = None, "x"
-            if not _nerr and _all_names and len(_all_names) > 1:
+            # Cok-sayfali dosyalarda SADECE marka-bazli bolunmus satis
+            # sayfalarini (Солгар + Баунти) birlestirmek isteriz. Bazi
+            # distributor dosyalari (ornek FARMADOM) ise ayni satis verisinin
+            # YEDEK/HAM kopyasini ikinci bir sayfada tutar ('Продажи (исходн)')
+            # ya da satis disi sayfalar icerir (Закупки, Остатки, Приход...).
+            # Bunlar birlestirmeye girerse ayni satirlar iki kez sayilir
+            # (FARMADOM: Солгар 291 -> 582, Баунти 85 -> 170). Bu yuzden
+            # yardimci/yinelenen sayfa adlarini birlestirmeden HARIC tutariz.
+            # 'is_stock' modunda stok sayfasi zaten _open_sheet ile tek tek
+            # secildigi icin bu dalda degiliz; burasi satis birlestirmesidir.
+            _SKIP_SHEET_TOKENS = (
+                "исходн",        # ham/orijinal yedek kopya (dubliCate)
+                "копия", "copy",  # kopya
+                "закуп",          # Закупки (alimlar) - satis degil
+                "остат",          # Остатки / Остаток (stok) - satis degil
+                "приход", "поставк",  # giris/teslimat - satis degil
+            )
+
+            def _is_aux_sheet(name: str) -> bool:
+                n = (name or "").strip().lower()
+                return any(tok in n for tok in _SKIP_SHEET_TOKENS)
+
+            _sales_names = [n for n in _all_names if not _is_aux_sheet(n)]
+            # Filtreden sonra tek sayfa kaldiysa klasik tek-sayfa akisa birak.
+            if not _nerr and _sales_names and len(_sales_names) > 1:
                 parsed = []
                 _any_ok = False
-                for _sn in _all_names:
+                for _sn in _sales_names:
                     _sh, _serr = _ph_open_sheet(excel_file, _sn)
                     if _serr or _sh is None:
                         continue
@@ -2942,6 +2966,10 @@ def pharmacy_upload_preview_api(request):
                 # Hicbir sayfa parse olmazsa (config yok vb.) -> None, asagida hata.
                 if not _any_ok:
                     parsed = None
+            elif not _nerr and _sales_names and len(_sales_names) == 1:
+                # Filtre sonrasi tek satis sayfasi: onu acikca sec ki klasik
+                # akis ilk (yanlis) sayfayi degil, dogru satis sayfasini okusun.
+                _open_sheet = _sales_names[0]
 
         # Tek sayfa / secili sayfa / cok-sayfa basarisiz -> klasik tek-sayfa akis.
         if parsed is None:
