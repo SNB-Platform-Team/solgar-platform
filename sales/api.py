@@ -3848,30 +3848,62 @@ def _norm_dup(val) -> str:
     return s
 
 
-def _pharmacy_duplicate_qs(Model, group_company, subgroup_company, full_address):
-    """group_company + subgroup_company + full_address ucu de ayni olan aktif
-    eczane kayitlarini dondur (normalize edilmis, buyuk/kucuk ve bosluk
-    farklarini yok sayarak). status<>0 (silinmemis) kayitlar."""
-    from django.db.models import Q
-    g = _norm_dup(group_company)
-    s = _norm_dup(subgroup_company)
-    a = _norm_dup(full_address)
-    # Adres bos ise mukerrer kontrolu yapmayiz (anlamli bir eslesme olmaz).
-    if not a:
+def _pharmacy_duplicate_qs(Model, group_company, street, homenumber,
+                           point_x, point_y):
+    """STANDARTLASTIRILMIS adrese gore mukerrer aktif eczane kayitlarini dondur.
+
+    Olga'nin tam kurali (SQL ile verdi):
+        b.status = 1
+        AND a.group_company = b.group_company
+        AND a.street = b.street
+        AND a.homenumber = b.homenumber
+        AND a.point_y BETWEEN b.point_y - 0.001 AND b.point_y + 0.001
+        AND a.point_x BETWEEN b.point_x - 0.001 AND b.point_x + 0.001
+
+    (Olga 'a.main_group' yazdi; eczane tablosunda main_group kolonu yok,
+    karsilastirilan iki kayit da ayni eczane tablosundan oldugu icin bunu
+    'group_company = group_company' olarak yorumladik.)
+
+    Kullanicinin yazdigi serbest 'full_address' metnine DEGIL, geocode'un
+    urettigi standart adrese (street, homenumber, koordinat) bakilir. Sokak,
+    bina no ya da koordinat eksikse (geocode yapilmamis) anlamli kiyas olmaz
+    -> mukerrer kontrolu yapilmaz (None)."""
+    st = (str(street) if street is not None else "").strip()
+    hn = (str(homenumber) if homenumber is not None else "").strip()
+
+    def _f(v):
+        try:
+            return float(str(v).replace(",", ".").strip())
+        except (TypeError, ValueError):
+            return None
+
+    px, py = _f(point_x), _f(point_y)
+    # Standart adres bilesenlerinden biri bile yoksa kontrol yapma.
+    if not st or not hn or px is None or py is None:
         return None
-    qs = Model.objects.using("refdb").exclude(status=0)
-    # Python tarafinda normalize ederek karsilastiracagiz (DB-bagimsiz, collation
-    # farklarindan etkilenmez). Aday kumeyi daraltmak icin once adres LIKE ile suz.
-    needle = (full_address or "").strip()
-    if needle:
-        qs = qs.filter(full_address__icontains=needle[:40])
+
+    tol = 0.001
+    qs = (
+        Model.objects.using("refdb")
+        .filter(status=1)
+        .filter(group_company=group_company)
+        .filter(street=st)
+        .filter(homenumber=hn)
+        .filter(point_y__isnull=False, point_x__isnull=False)
+    )
+
+    # Koordinat BETWEEN kiyasi: point_x/point_y DB'de CharField olabilir, bu
+    # yuzden sayisal karsilastirmayi Python tarafinda yapariz (string BETWEEN
+    # yaniltir). Aday kume street+homenumber+group ile zaten cok dar.
     matches = []
     for row in qs.only(
-        "id", "group_company", "subgroup_company", "full_address", "pharmacy_no"
+        "id", "group_company", "subgroup_company", "full_address",
+        "pharmacy_no", "street", "homenumber", "point_x", "point_y",
     ):
-        if (_norm_dup(row.group_company) == g
-                and _norm_dup(row.subgroup_company) == s
-                and _norm_dup(row.full_address) == a):
+        rx, ry = _f(row.point_x), _f(row.point_y)
+        if rx is None or ry is None:
+            continue
+        if abs(px - rx) <= tol and abs(py - ry) <= tol:
             matches.append(row)
     return matches
 
@@ -3881,9 +3913,12 @@ def _pharmacy_duplicate_qs(Model, group_company, subgroup_company, full_address)
 def pharmacy_create_api(request):
     """Yeni eczane ekle (brand'e gore tabloya INSERT).
 
-    Mukerrer kontrolu (sadece create):
-      group_company + subgroup_company + full_address ucu de mevcut aktif bir
-      kayitla ayni ise, varsayilan olarak kaydi engeller ve
+    Mukerrer kontrolu (sadece create) — STANDARTLASTIRILMIS adrese gore:
+      Ayni sokak (street) + ayni bina no (homenumber) + koordinatlar 0.001
+      derece araliginda ise mevcut bir kayitla mukerrer sayilir. Kullanicinin
+      yazdigi serbest 'full_address' metnine DEGIL, geocode'un urettigi
+      standart adrese bakilir (Olga: "сравнивать надо стандартизированный
+      адрес"). Mukerrer bulunursa varsayilan olarak kaydi engeller ve
       {duplicate: true} doner (frontend "Да/Нет" sorar). Kullanici "Да" derse
       force=true gelir; o zaman номер аптеки (pharmacy_no) zorunludur VE ayni
       adres icin essiz olmalidir (ayni adres + ayni no ikinci kez kaydedilemez).
@@ -3895,13 +3930,15 @@ def pharmacy_create_api(request):
     Model = _pharmacy_model(brand)
 
     force = bool(data.get("force") or data.get("force_save"))
-    group_company = data.get("group_company")
-    subgroup_company = data.get("subgroup_company")
-    full_address = data.get("full_address")
     pharmacy_no = (data.get("pharmacy_no") or "").strip()
 
     dupes = _pharmacy_duplicate_qs(
-        Model, group_company, subgroup_company, full_address
+        Model,
+        data.get("group_company"),
+        data.get("street"),
+        data.get("homenumber"),
+        data.get("point_x"),
+        data.get("point_y"),
     )
 
     if dupes:
