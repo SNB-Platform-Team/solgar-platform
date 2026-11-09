@@ -182,8 +182,14 @@ C1_CONFIGS = {
     "EUROPHARMA": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 8,
         "product_markers": ["Солгар","СОЛГАР","Нэйчес","SOLGAR","Solgar","НБ "], "aptek_markers": ["Аптека"],
         "count_offset": 3, "remaining_offset": 4, "mode": "product_header"},
+    # ZERDE: 1C ic ice (Подразделение/Номенклатура) — eczane satiri "Аптека №..",
+    # altinda urunler girintili. Miktar sutunu +1 (C). NATURES BOUNTY dosyasinda
+    # urunler "Натуре Баунти ..." yaziliyor (Rusca); Солгар dosyasi da ayni
+    # layout. Bu yuzden product_markers hem Солгар hem Натуре/Баунти/Nature
+    # kapsar. (Olga: Zerde по NATURES BOUNTY.)
     "ZERDE": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 1,
-        "product_markers": ["Nature","Солгар"], "aptek_markers": ["Аптека"],
+        "product_markers": ["Натуре","Баунти","Nature","Солгар","Solgar","СОЛГАР"],
+        "aptek_markers": ["Аптека"],
         "count_offset": 1, "mode": "product_records"},
     "VITA": {"header_marker": "Номенклатура, Базовая", "header_row_offset": 1, "min_len": 1,
         "product_markers": ["Nature","Solgar"], "aptek_markers": ["Аптека"],
@@ -191,10 +197,10 @@ C1_CONFIGS = {
     "SADYKHAN": {"header_marker": "Склад", "header_row_offset": 1, "min_len": 1,
         "product_markers": ["Nature","Solgar"], "aptek_markers": ["Склад №"],
         "count_offset": 2, "remaining_offset": 3, "mode": "product_header"},
-    "HIPPOKRAT": {"header_marker": "Номенклатура", "header_row_offset": 1, "min_len": 8,
-        "product_markers": ["Солгар","СОЛГАР","Нэйчес","SOLGAR","Solgar","Natures Bounty","НБ "],
-        "aptek_markers": ["Аптека","склад","Склад"],
-        "count_offset": 5, "remaining_offset": 6, "mode": "product_header"},
+    # HIPPOKRAT eski 1C ic-ice formati DEGISTI (Olga 09.11.2026): artik duz
+    # tablo (Аптека | Товар | Приход | Расход | Месяц). Bu yuzden NESTED'den
+    # cikarilip SIMPLE_CONFIGS'e tasindi (bkz. pharmacy_simple_configs.py).
+    # SIMPLE, get_config'de NESTED'den ONCE denendigi icin yeni config kazanir.
     # APTEKA 25: tek sutunda aptek ('Аптека ') + urun (Солгар/Нэйчес) ic ice; sayac 'Расход, шт.' sutunu
     "APTEKA 25": {"header_marker": "Товар", "header_row_offset": 1, "min_len": 1,
         "product_markers": ["Солгар","СОЛГАР","Нэйчес","Нэйчес Баунти","НЭЙЧЕС"],

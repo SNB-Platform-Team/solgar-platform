@@ -123,4 +123,9 @@ SIMPLE_CONFIGS = {
     "PODOROZHNIK": _sv("PODOROZHNIK", 'Товар', 'Підрозділ', 'Розх ксть уп', 'Розх сума закуп', '', '', '', '', 'Кінц сума закуп'),
     "ZDOROVA RODYNA": _sv("ZDOROVA RODYNA", 'Товар', 'Филиал', 'Расход-чеки', 'Расход чеки сумма с НДС (зак.)', '', 'Область', '', '', 'Область'),
     "ZDRAVITSA": _sv("ZDRAVITSA", 'Товар', 'Филиал', 'Количество расход', 'Сумма зак расход', '', '', '', '', 'Сумма закупочная с НДС Конечный остаток'),
+    # HIPPOKRAT (KZ) formati 09.11.2026'da degisti: duz tablo
+    # Аптека | Товар | Приход | Расход | Месяц. Satis = Расход (cikis);
+    # Приход (giris/alim) satis degil, dahil edilmez. Stok kolonu yok.
+    # (Eskiden NESTED 1C ic-ice formatindaydi; NESTED'den cikarildi.)
+    "HIPPOKRAT": _sv("HIPPOKRAT", 'Товар', 'Аптека', 'Расход', '', '', '', '', '', 'Расход'),
 }
