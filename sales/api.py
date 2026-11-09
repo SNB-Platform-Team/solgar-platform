@@ -3415,18 +3415,10 @@ def _doctor_apply_fields(doc, data):
                 except (ValueError, TypeError):
                     val = None
             doc.__setattr__(f, val)
-    # "Адрес клиники" (clinic_address) kutusu formdan kaldirildi; adres artik
-    # tek yerden, geocode'lu "Полный адрес" (full_address) ile giriliyor
-    # (apteka formundaki pharmacy_address ile ayni mantik). Liste tablosu
-    # Clinic Address kolonu bos kalmasin diye clinic_address bossa
-    # full_address'ten dolduruz (eski dolu degerlere dokunmayiz).
-    try:
-        cur_addr = (getattr(doc, "clinic_address", "") or "").strip()
-        full_addr = (getattr(doc, "full_address", "") or "").strip()
-        if not cur_addr and full_addr:
-            doc.clinic_address = full_addr
-    except Exception:
-        pass
+    # Adres ayrimi (Olga): clinic_address = МП (медреп) kendi yazdigi adres
+    # (serbest, elle), full_address = Yandex geocode sonucu. Ikisi AYRI ve
+    # birbirine kopyalanmaz. (Onceki "clinic_address bossa full_address'ten
+    # doldur" fallback'i KALDIRILDI; medrep adresi bos birakirsa bos kalir.)
 
 
 @api_view(["POST"])
@@ -3827,17 +3819,10 @@ def _pharmacy_apply_fields(obj, data):
                 except (ValueError, TypeError):
                     val = None
             obj.__setattr__(f, val)
-    # "Адрес аптеки" (pharmacy_address) kutusu formdan kaldirildi; adres artik
-    # tek yerden, geocode'lu "Полный адрес" (full_address) ile giriliyor.
-    # Liste tablosu PHARMACY ADDRESS kolonu bos kalmasin diye pharmacy_address
-    # bossa full_address'ten doldururuz (eski dolu degerlere dokunmayiz).
-    try:
-        cur_addr = (getattr(obj, "pharmacy_address", "") or "").strip()
-        full_addr = (getattr(obj, "full_address", "") or "").strip()
-        if not cur_addr and full_addr:
-            obj.pharmacy_address = full_addr
-    except Exception:
-        pass
+    # Adres ayrimi (Olga): pharmacy_address = МП (медреп) kendi yazdigi adres
+    # (serbest, elle), full_address = Yandex geocode sonucu. Ikisi AYRI ve
+    # birbirine kopyalanmaz. (Onceki "pharmacy_address bossa full_address'ten
+    # doldur" fallback'i KALDIRILDI; medrep adresi bos birakirsa bos kalir.)
 
 
 def _norm_dup(val) -> str:
