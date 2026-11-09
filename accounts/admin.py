@@ -10,14 +10,27 @@ from .models import User
 class UserAdmin(BaseUserAdmin):
     """Admin configuration for the custom User model."""
 
-    list_display = ("username", "email", "user_type", "access_level", "country", "department", "is_enabled", "is_staff")
-    list_filter = ("user_type", "country", "is_enabled", "is_staff", "is_active")
+    list_display = ("username", "email", "user_type", "access_level", "country", "country_mode", "department", "is_enabled", "is_staff")
+    list_filter = ("user_type", "country", "country_mode", "is_enabled", "is_staff", "is_active")
     search_fields = ("username", "email", "first_name", "last_name")
 
     fieldsets = BaseUserAdmin.fieldsets + (
         (
             "Solgar Platform",
-            {"fields": ("user_type", "access_level", "manager", "country", "azure_object_id", "department", "phone", "is_enabled")},
+            {"fields": ("user_type", "access_level", "manager", "azure_object_id", "department", "phone", "is_enabled")},
+        ),
+        (
+            "Ограничение по странам",
+            {
+                "fields": ("country", "country_mode", "allowed_countries"),
+                "description": (
+                    "Один страна: заполните «country», оставьте «Режим стран» = "
+                    "«Нет». Несколько/кроме: «Режим стран» = «Только…»/«Все, "
+                    "кроме…» и впишите список в «Разрешённые страны» (JSON-массив, "
+                    "напр. [\"Belarusian\",\"Russia\",\"Ukraine\"]). is_staff "
+                    "видит все страны."
+                ),
+            },
         ),
     )
 

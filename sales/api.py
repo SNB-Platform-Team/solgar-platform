@@ -437,8 +437,18 @@ def pharmacy_api(request):
             name = ""
         filters["marketing_staff"] = name or "\x00__no_medrep_match__"
 
+    # Kullanici-bazli ulke kisiti (coklu): service'e country_in/country_not_in
+    # olarak gecir (is_staff/superuser -> kisit yok).
+    _cmode, _ccountries = _user_country_filter(user)
+    _country_kw = {}
+    if _cmode == "only":
+        _country_kw["country_in"] = _ccountries
+    elif _cmode == "except":
+        _country_kw["country_not_in"] = _ccountries
+
     try:
-        result = service.query(brand=brand, search=search, page=page, **filters)
+        result = service.query(brand=brand, search=search, page=page,
+                               **_country_kw, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -709,8 +719,17 @@ def doctor_api(request):
         # Eslesme yoksa: eslesmeyecek bir sentinel -> bos liste (guvenli taraf).
         filters["medrep"] = name or "\x00__no_medrep_match__"
 
+    # Kullanici-bazli ulke kisiti (coklu).
+    _cmode, _ccountries = _user_country_filter(user)
+    _country_kw = {}
+    if _cmode == "only":
+        _country_kw["country_in"] = _ccountries
+    elif _cmode == "except":
+        _country_kw["country_not_in"] = _ccountries
+
     try:
-        result = service.query(brand=brand, search=search, page=page, **filters)
+        result = service.query(brand=brand, search=search, page=page,
+                               **_country_kw, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -1981,6 +2000,85 @@ def _entry_user_name(user) -> str:
         return ""
 
 
+def _user_country_filter(user):
+    """Kullanicinin ulke kisitini TEK yerden coz.
+
+    Donus: (mode, countries)
+      mode == "all"    -> ulke kisiti YOK (countries bos). is_staff ya da
+                          hicbir kisit tanimli degilse.
+      mode == "only"   -> SADECE `countries` icindeki ulkeler gorunur.
+                          (coklu 'only', ya da tek alan 'country' dolu.)
+      mode == "except" -> `countries` HARIC tum ulkeler gorunur.
+
+    Oncelik: is_staff -> all. Sonra country_mode (only/except) +
+    allowed_countries. O da yoksa eski tek alan 'country' (only tek eleman).
+
+    Cagiran taraf mode'a gore qs.filter(country__in=countries) ya da
+    qs.exclude(country__in=countries) uygular; "all"'da hic filtre koymaz.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        # Guvenli taraf: oturumsuz hicbir ulke gormesin.
+        return ("only", [])
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return ("all", [])
+
+    mode = (getattr(user, "country_mode", "") or "none").strip().lower()
+    allowed = getattr(user, "allowed_countries", None) or []
+    # JSON alani liste degilse (bozuk veri) guvenli sekilde yok say.
+    if not isinstance(allowed, (list, tuple)):
+        allowed = []
+    allowed = [str(c).strip() for c in allowed if str(c).strip()]
+
+    if mode in ("only", "except") and allowed:
+        return (mode, allowed)
+
+    # Coklu kisit yok -> eski tek alan 'country'.
+    single = (getattr(user, "country", "") or "").strip()
+    if single:
+        return ("only", [single])
+
+    # Hicbir kisit yok -> tum ulkeler.
+    return ("all", [])
+
+
+def _apply_country_filter(qs, user, field: str = "country"):
+    """_user_country_filter sonucunu bir QuerySet'e uygula (ORM).
+    field: filtrelenecek ulke kolonu adi (varsayilan 'country')."""
+    mode, countries = _user_country_filter(user)
+    if mode == "all":
+        return qs
+    if mode == "except":
+        return qs.exclude(**{f"{field}__in": countries})
+    # "only"
+    return qs.filter(**{f"{field}__in": countries})
+
+
+def _user_may_see_country(user, country: str) -> bool:
+    """Kullanici bu ulkeyi gorebiliyor mu? (upload/rapor icin tek ulke kontrol)
+    country bos ise True (ulke secilmemis; cagiran taraf ayrica ele alir)."""
+    c = (country or "").strip()
+    if not c:
+        return True
+    mode, countries = _user_country_filter(user)
+    if mode == "all":
+        return True
+    cl = c.lower()
+    inset = any(cl == str(x).strip().lower() for x in countries)
+    return inset if mode == "only" else (not inset)
+
+
+def _country_sql_clause(user, column: str = "country"):
+    """Kullanici ulke kisitini raw SQL WHERE parcasina cevir.
+    Donus: (sql_or_None, params_list). is_staff/kisitsiz -> (None, [])."""
+    mode, countries = _user_country_filter(user)
+    if mode == "all" or not countries:
+        return (None, [])
+    ph = ", ".join(["%s"] * len(countries))
+    if mode == "except":
+        return (f"{column} NOT IN ({ph})", list(countries))
+    return (f"{column} IN ({ph})", list(countries))
+
+
 def _is_row_restricted(user, manager_screen: str) -> bool:
     """Bu kullanici apteka/doktor listesinde satir-kisitina tabi mi?
 
@@ -2042,6 +2140,9 @@ def me_api(request):
             except Exception:
                 medrep_name = ""
 
+        # Coklu ulke kisiti bilgisi (frontend ulke dropdown'unu buna gore
+        # kilitler/sinirlar). mode: all/only/except; countries: ilgili liste.
+        _cmode, _ccountries = _user_country_filter(request.user)
         return Response({
             "authenticated": True,
             "username": request.user.username,
@@ -2049,6 +2150,8 @@ def me_api(request):
             "is_staff": request.user.is_staff,
             "is_superuser": request.user.is_superuser,
             "country": getattr(request.user, "country", "") or "",
+            "country_mode": _cmode,              # all / only / except
+            "allowed_countries": _ccountries,    # only/except'te ilgili liste
             "medrep_name": medrep_name,
             "screens": screens,
         })
@@ -2257,8 +2360,11 @@ def country_options_api(request):
     except Exception:
         all_countries = []
 
-    # Admin/staff -> all countries, not locked.
-    if is_staff or not user_country:
+    # Kullanici ulke kisitini TEK yerden coz (coklu destekli).
+    mode, countries = _user_country_filter(user)
+
+    # Kisitsiz (is_staff ya da hic kisit yok) -> tum ulkeler, kilitsiz.
+    if mode == "all":
         return Response({
             "countries": all_countries,
             "locked": False,
@@ -2266,11 +2372,21 @@ def country_options_api(request):
             "is_staff": is_staff,
         })
 
-    # Regular user with a country -> only that country, locked.
-    allowed = [c for c in all_countries if c == user_country] or [user_country]
+    cset = {str(c).strip().lower() for c in countries}
+    if mode == "except":
+        allowed = [c for c in all_countries if str(c).strip().lower() not in cset]
+    else:  # only
+        allowed = [c for c in all_countries if str(c).strip().lower() in cset]
+        # Liste prm'de bulunamazsa en azindan tanimli ulkeleri goster.
+        if not allowed:
+            allowed = list(countries)
+
+    # Kilit: SADECE tek bir ulkeye kisitliysa (secim yok) dropdown kilitli;
+    # coklu izinde kullanici izinliler arasindan secebilsin diye kilitsiz.
+    locked = (mode == "only" and len(allowed) == 1)
     return Response({
         "countries": allowed,
-        "locked": True,
+        "locked": locked,
         "user_country": user_country,
         "is_staff": is_staff,
     })
@@ -2300,13 +2416,21 @@ def storage_options_api(request):
 
     user = request.user
     requested = (request.GET.get("country") or "").strip()
-    user_country = (getattr(user, "country", "") or "").strip()
 
-    # Country-restricted user: force their own country.
-    if not user.is_staff and user_country:
-        country = user_country
-    else:
-        country = requested
+    # Ulke kisiti (coklu). Tek-ulke kisitliysa o ulkeye ez. Coklu/haric
+    # kisitta: secili ulke izinliyse onu kullan; secim yoksa/izinsizse
+    # izinli ulkelerin HEPSININ depolari listelenir (WHERE country IN/NOT IN).
+    mode, countries = _user_country_filter(user)
+    country = requested
+    use_restriction = False
+    if mode == "only" and len(countries) == 1:
+        country = countries[0]
+    elif mode in ("only", "except"):
+        if requested and _user_may_see_country(user, requested):
+            country = requested
+        else:
+            country = ""           # tek ulke secimi yok -> kisit set'ini kullan
+            use_restriction = True
 
     storages = []
     try:
@@ -2316,6 +2440,14 @@ def storage_options_api(request):
                     "SELECT storage FROM solgar_prm.prm_storages "
                     "WHERE country = %s ORDER BY storage",
                     [country],
+                )
+            elif use_restriction and countries:
+                ph = ", ".join(["%s"] * len(countries))
+                op = "NOT IN" if mode == "except" else "IN"
+                cur.execute(
+                    f"SELECT DISTINCT storage FROM solgar_prm.prm_storages "
+                    f"WHERE country {op} ({ph}) ORDER BY storage",
+                    list(countries),
                 )
             else:
                 cur.execute(
@@ -2518,10 +2650,17 @@ def depo_upload_preview_api(request):
     end_date_str = (request.POST.get("end_date") or "").strip()
     excel_file = request.FILES.get("excel_file")
 
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
+    # Ulke kisiti (coklu): tek-ulke kisitliysa o ulkeye EZ; coklu/haric
+    # kisitliysa secili ulke izin disindaysa yuklemeyi ENGELLE.
+    _cmode, _ccountries = _user_country_filter(request.user)
+    if _cmode == "only" and len(_ccountries) == 1:
+        country = _ccountries[0]
+    elif _cmode in ("only", "except"):
+        if not _user_may_see_country(request.user, country):
+            return Response(
+                {"error": "У вас нет доступа к данным по выбранной стране."},
+                status=403,
+            )
 
     if not excel_file:
         return Response({"error": "Выберите файл Excel."}, status=400)
@@ -2877,10 +3016,17 @@ def pharmacy_upload_preview_api(request):
     sheet_name = (request.POST.get("sheet_name") or "").strip()
     excel_file = request.FILES.get("excel_file")
 
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
+    # Ulke kisiti (coklu): tek-ulke -> ez; coklu/haric -> secili ulke izin
+    # disindaysa engelle.
+    _cmode, _ccountries = _user_country_filter(request.user)
+    if _cmode == "only" and len(_ccountries) == 1:
+        country = _ccountries[0]
+    elif _cmode in ("only", "except"):
+        if not _user_may_see_country(request.user, country):
+            return Response(
+                {"error": "У вас нет доступа к данным по выбранной стране."},
+                status=403,
+            )
 
     if not excel_file:
         return Response({"error": "Выберите файл Excel."}, status=400)
@@ -3358,10 +3504,14 @@ def pharmacy_chains_api(request):
     from .pharmacy_country_chains import country_chains_for
 
     country = (request.GET.get("country") or "").strip()
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
+    # Ulke kisiti (coklu): tek-ulke -> ez; coklu/haric -> secili ulke izin
+    # disindaysa zincir listesi bos (o ulkeye erisim yok).
+    _cmode, _ccountries = _user_country_filter(request.user)
+    if _cmode == "only" and len(_ccountries) == 1:
+        country = _ccountries[0]
+    elif _cmode in ("only", "except"):
+        if not _user_may_see_country(request.user, country):
+            return Response({"chains": [], "country": country})
 
     chains = country_chains_for(country)
     return Response({"chains": chains, "country": country})
@@ -4681,11 +4831,23 @@ def distributor_report_api(request):
     begin = (request.GET.get("begin") or "").strip()
     end = (request.GET.get("end") or "").strip()
 
-    # Kullaniciya gore ulke kilidi (staff disinda kendi ulkesi)
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
+    # Kullaniciya gore ulke kisiti (coklu). Tek-ulke kisitliysa secili ulkeyi
+    # o ulkeye ez. Coklu/haric kisitta: secili ulke izin disindaysa raporu
+    # bos dondur; secili ulke yoksa downstream'e country_in/not_in kisiti
+    # uygulanir (asagida _user_country_filter tekrar okunur).
+    _cmode, _ccountries = _user_country_filter(request.user)
+    if _cmode == "only" and len(_ccountries) == 1:
+        country = _ccountries[0]
+    elif _cmode in ("only", "except") and country:
+        if not _user_may_see_country(request.user, country):
+            return Response({
+                "options": {"rep_types": _DIST_REPORT_TYPES, "operations": [
+                    {"value": "STOCK", "label": "STOCK"},
+                    {"value": "SALE", "label": "SALES"},
+                ]},
+                "report": {"columns": [], "rows": [], "total_rows": 0},
+                "error": "У вас нет доступа к данным по выбранной стране.",
+            })
 
     report = None
     error = ""
@@ -4763,6 +4925,9 @@ def distributor_report_api(request):
                 qs = qs.filter(brand=brand)
             if country:
                 qs = qs.filter(country=country)
+            else:
+                # Secili ulke yoksa kullanici-bazli coklu ulke kisitini uygula.
+                qs = _apply_country_filter(qs, request.user, "country")
             if product:
                 qs = qs.filter(product_name=product)
             qs = qs.filter(begin_date__gte=d_begin, begin_date__lte=d_end)
@@ -5121,10 +5286,22 @@ def chain_sales_report_api(request):
     begin = (request.GET.get("begin") or "").strip()
     end = (request.GET.get("end") or "").strip()
 
-    if not request.user.is_staff:
-        uc = (getattr(request.user, "country", "") or "").strip()
-        if uc:
-            country = uc
+    # Ulke kisiti (coklu): tek-ulke -> ez; coklu/haric + secili ulke izin
+    # disindaysa raporu bos dondur.
+    _cmode, _ccountries = _user_country_filter(request.user)
+    if _cmode == "only" and len(_ccountries) == 1:
+        country = _ccountries[0]
+    elif _cmode in ("only", "except") and country:
+        if not _user_may_see_country(request.user, country):
+            return Response({
+                "options": {"rep_types": _CHAIN_REPORT_TYPES, "brands": [
+                    {"value": "SOLGAR", "label": "SOLGAR"},
+                    {"value": "BOUNTY", "label": "NATURES BOUNTY"},
+                    {"value": "OTHER", "label": "OTHER"},
+                ]},
+                "report": {"columns": [], "rows": [], "total_rows": 0},
+                "error": "У вас нет доступа к данным по выбранной стране.",
+            })
 
     report = None
     error = ""
@@ -5237,6 +5414,12 @@ def chain_sales_report_api(request):
                 if country:
                     where.append("country = %s")
                     params.append(country)
+                else:
+                    # Secili ulke yoksa kullanici-bazli coklu ulke kisiti.
+                    _csql, _cparams = _country_sql_clause(request.user, "country")
+                    if _csql:
+                        where.append(_csql)
+                        params.extend(_cparams)
                 if chain:
                     where.append("main_group = %s")
                     params.append(chain)

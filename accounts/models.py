@@ -64,7 +64,38 @@ class User(AbstractUser):
         "Country",
         max_length=45,
         blank=True,
-        help_text="Kullanicinin ulkesi (bos = kisit yok). is_staff ise tum ulkeler.",
+        help_text="Tek ulke kisiti (eski alan, geriye uyumlu). Bos = tek-ulke "
+                  "kisiti yok. is_staff ise tum ulkeler. Coklu kisit icin "
+                  "allowed_countries + country_mode kullanin.",
+    )
+    # Coklu ulke kisiti (Olga: "su ulkeler haric" / "sadece su ulkeler").
+    # allowed_countries = ulke adlari listesi (JSON); country_mode bunun
+    # nasil yorumlanacagini soyler:
+    #   "only"   -> SADECE listedeki ulkeler gorunur (ornek: sadece Kazakhistan)
+    #   "except" -> listedeki ulkeler HARIC hepsi gorunur (ornek: BY/RU/UA haric)
+    # allowed_countries bos VEYA country_mode "none" ise bu katman devre disi
+    # ve eski tek-ulke 'country' alani (varsa) gecerli olur. is_staff her zaman
+    # tum ulkeleri gorur (hicbir ulke kisiti uygulanmaz).
+    class CountryMode(models.TextChoices):
+        NONE = "none", "Нет (один country ниже)"
+        ONLY = "only", "Только эти страны"
+        EXCEPT = "except", "Все, кроме этих стран"
+
+    allowed_countries = models.JSONField(
+        "Разрешённые страны (список)",
+        default=list,
+        blank=True,
+        help_text="Список названий стран (как в данных, напр. "
+                  "['Belarusian','Russia','Ukraine']). Работает вместе с "
+                  "country_mode.",
+    )
+    country_mode = models.CharField(
+        "Режим стран",
+        max_length=10,
+        choices=CountryMode.choices,
+        default=CountryMode.NONE,
+        help_text="only = только allowed_countries; except = все, кроме "
+                  "allowed_countries; none = использовать одно поле country.",
     )
     is_enabled = models.BooleanField(
         "Is enabled",

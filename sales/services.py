@@ -713,16 +713,25 @@ class DoctorViewService:
         city: str = "", medrep: str = "", specialty: str = "",
         unified_specialty: str = "", category: str = "", activeness: str = "",
         doctor_name: str = "", clinic_status: str = "", search: str = "",
+        country_in=None, country_not_in=None,
         page: int = 1,
     ) -> dict:
         """
         Return doctor rows matching the given filters (all optional, empty
         ignored). Mirrors the Java getDoctorInfo query. Only active rows
         (status=1) are listed.
+
+        country_in / country_not_in: kullanici-bazli ulke kisiti (coklu).
         """
         from .models import Doctor
 
         qs = Doctor.objects.filter(status=1)
+
+        # Kullanici-bazli ulke kisiti (coklu) — dropdown country'den once.
+        if country_in:
+            qs = qs.filter(country__in=list(country_in))
+        if country_not_in:
+            qs = qs.exclude(country__in=list(country_not_in))
 
         if brand:
             qs = qs.filter(brand=brand)
@@ -786,7 +795,7 @@ class DoctorViewService:
         has_filter = any([
             brand, country, area, region, city, medrep, specialty,
             unified_specialty, category, activeness, doctor_name,
-            clinic_status, search,
+            clinic_status, search, country_in, country_not_in,
         ])
         total = self._paged_count_doctor(qs, has_filter)
         return self._paginate(qs, page, total)
@@ -937,13 +946,26 @@ class PharmacyViewService:
               pharmacy_category: str = "", pharmacy_type: str = "", promo: str = "",
               marketing_staff: str = "", pharmacy_activeness: str = "",
               pharmacy_address: str = "", search: str = "",
+              country_in=None, country_not_in=None,
               page: int = 1) -> dict:
         """
         Return pharmacy rows for a brand matching the filters (empty ignored).
         Mirrors the Java getPharmInfo query. Only active rows (status=1).
+
+        country_in / country_not_in: kullanici-bazli ulke kisiti (coklu).
+          country_in     -> SADECE bu ulkeler (liste).
+          country_not_in -> bu ulkeler HARIC (liste).
+        Bunlar dropdown 'country' filtresinden ayridir ve onunla birlikte
+        uygulanir (ikisi de daraltir).
         """
         model = self.repository._model_for(brand)
         qs = model.objects.filter(status=1)
+
+        # Kullanici-bazli ulke kisiti (coklu) — dropdown country'den once.
+        if country_in:
+            qs = qs.filter(country__in=list(country_in))
+        if country_not_in:
+            qs = qs.exclude(country__in=list(country_not_in))
 
         if country:
             qs = qs.filter(country=country)
@@ -1012,6 +1034,7 @@ class PharmacyViewService:
             country, area, region, city, group_company, subgroup_company,
             pharmacy_category, pharmacy_type, promo, marketing_staff,
             pharmacy_activeness, pharmacy_address, search,
+            country_in, country_not_in,
         ])
         total = self._paged_count(qs, model, has_filter, brand)
         return self._paginate(qs, page, total)
