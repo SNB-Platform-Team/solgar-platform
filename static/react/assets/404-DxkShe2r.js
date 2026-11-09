@@ -1,0 +1,1 @@
+import{y as e}from"./index-CYiPAW_Q.js";var t=e;export{t as component};
