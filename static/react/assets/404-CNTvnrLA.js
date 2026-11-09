@@ -1,0 +1,1 @@
+import{y as e}from"./index-wC_l93Vy.js";var t=e;export{t as component};
