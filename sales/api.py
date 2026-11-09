@@ -3397,7 +3397,7 @@ _DOCTOR_WRITABLE = [
     "activeness", "medrep", "doctor_date", "doctor_name",
     "unified_specialty", "specialty", "position_regalia", "category",
     "clinic_name", "clinic_name1", "clinic_status", "clinic_address",
-    "clinic_count", "key_person", "doctor_tel", "doctor_email",
+    "clinic_count", "key_person", "doctor_tel", "doctor_email", "clinic_tel",
     "full_address", "requested", "building_type", "country_code",
     "administrative_area_name", "sub_administrative_area_name",
     "street", "homenumber", "point_y", "point_x",
@@ -3770,8 +3770,8 @@ _DOCTOR_FIELD_LABELS_RU = {
     "clinic_name": "Клиника", "clinic_name1": "Клиника (текст)",
     "clinic_status": "Статус клиники", "clinic_count": "Кол-во клиник",
     "key_person": "Ключевое лицо", "doctor_tel": "Телефон",
-    "doctor_email": "Эл. адрес", "full_address": "Полный адрес",
-    "building_type": "Тип здания",
+    "doctor_email": "Эл. адрес", "clinic_tel": "Телефон клиники",
+    "full_address": "Полный адрес", "building_type": "Тип здания",
 }
 
 

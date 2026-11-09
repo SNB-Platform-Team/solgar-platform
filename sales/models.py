@@ -343,6 +343,10 @@ class Doctor(models.Model):
 
     doctor_tel = models.CharField("Doctor tel", max_length=100, blank=True, null=True)
     doctor_email = models.CharField("Doctor email", max_length=45, blank=True, null=True)
+    # Olga solgar_tst.doctor_data'ya 'clinic_tel' kolonunu elle ekledi
+    # (ALTER TABLE). managed=False oldugu icin Django bu tabloyu migrate etmez;
+    # kolon zaten DB'de var. Alan adi = kolon adi (clinic_tel).
+    clinic_tel = models.CharField("Clinic tel", max_length=100, blank=True, null=True)
 
     full_address = models.CharField("Full address", max_length=255, blank=True, null=True)
     requested = models.CharField("Requested address", max_length=255, blank=True, null=True)
