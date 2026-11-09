@@ -749,14 +749,37 @@ class DoctorViewService:
         if clinic_status:
             qs = qs.filter(clinic_status=clinic_status)
 
-        # Genis arama: isim + sehir + klinik (tek kutu)
+        # Genis arama (tek kutu): tabloda gorunen TUM sutunlari kapsar.
+        # ID sayisal oldugu icin ayrica tam esitlikle aranir.
         if search:
             from django.db.models import Q
-            qs = qs.filter(
+            cond = (
                 Q(doctor_name__icontains=search)
                 | Q(city__icontains=search)
                 | Q(clinic_name__icontains=search)
+                | Q(clinic_name1__icontains=search)
+                | Q(clinic_address__icontains=search)
+                | Q(full_address__icontains=search)
+                | Q(medrep__icontains=search)
+                | Q(specialty__icontains=search)
+                | Q(unified_specialty__icontains=search)
+                | Q(position_regalia__icontains=search)
+                | Q(category__icontains=search)
+                | Q(region__icontains=search)
+                | Q(area__icontains=search)
+                | Q(country__icontains=search)
+                | Q(district__icontains=search)
+                | Q(clinic_status__icontains=search)
+                | Q(key_person__icontains=search)
+                | Q(doctor_tel__icontains=search)
+                | Q(doctor_email__icontains=search)
+                | Q(clinic_tel__icontains=search)
+                | Q(activeness__icontains=search)
             )
+            _s = search.strip()
+            if _s.isdigit():
+                cond = cond | Q(id=int(_s)) | Q(doctor_id=int(_s))
+            qs = qs.filter(cond)
 
         qs = qs.order_by("country", "area", "region", "city", "doctor_name")
 
@@ -947,18 +970,37 @@ class PharmacyViewService:
         if pharmacy_address:
             qs = qs.filter(pharmacy_address__icontains=pharmacy_address)
 
-        # Genis arama (tek kutu, cok-kullanici dostu).
-        # Not: apteka tablosunda ayri 'pharmacy_name' kolonu YOK; apteka
-        # group_company (zincir) + adres + sehir + no + metro ile tanimlanir.
+        # Genis arama (tek kutu): tabloda gorunen TUM sutunlari kapsar.
+        # ID sayisal oldugu icin __icontains yerine tam esitlik (search sayi
+        # ise) ayrica eklenir — Olga: "herhangi bir id yazinca aramiyor".
         if search:
             from django.db.models import Q
-            qs = qs.filter(
+            cond = (
                 Q(group_company__icontains=search)
+                | Q(subgroup_company__icontains=search)
+                | Q(marketing_staff__icontains=search)
                 | Q(pharmacy_address__icontains=search)
+                | Q(full_address__icontains=search)
                 | Q(city__icontains=search)
+                | Q(region__icontains=search)
+                | Q(area__icontains=search)
+                | Q(country__icontains=search)
+                | Q(district__icontains=search)
                 | Q(pharmacy_no__icontains=search)
                 | Q(metro__icontains=search)
+                | Q(pharmacy_response_person__icontains=search)
+                | Q(pharmacy_tel__icontains=search)
+                | Q(pharmacy_email__icontains=search)
+                | Q(pharmacy_category__icontains=search)
+                | Q(pharmacy_type__icontains=search)
+                | Q(promo__icontains=search)
+                | Q(pharmacy_activeness__icontains=search)
             )
+            # ID / sayisal alanlar: search tam sayi ise esitlikle de ara.
+            _s = search.strip()
+            if _s.isdigit():
+                cond = cond | Q(id=int(_s)) | Q(pharmacy_id=int(_s))
+            qs = qs.filter(cond)
 
         qs = qs.order_by("country", "area", "region", "city", "group_company")
 
