@@ -3852,7 +3852,7 @@ def _pharmacy_duplicate_qs(Model, group_company, street, homenumber,
                            point_x, point_y):
     """STANDARTLASTIRILMIS adrese gore mukerrer aktif eczane kayitlarini dondur.
 
-    Olga'nin tam kurali (SQL ile verdi):
+    Olga'nin kurali (SQL ile verdi):
         b.status = 1
         AND a.group_company = b.group_company
         AND a.street = b.street
@@ -3864,12 +3864,41 @@ def _pharmacy_duplicate_qs(Model, group_company, street, homenumber,
     karsilastirilan iki kayit da ayni eczane tablosundan oldugu icin bunu
     'group_company = group_company' olarak yorumladik.)
 
+    GERCEK VERI NOTU: Yandex ayni sokagi farkli kelime SIRASIYLA dondurebiliyor
+    ('улица Рылеевская' vs 'Рылеевская улица'), bu yuzden Olga'nin düz
+    'street = street' esitligi gercekte kacirir. Bu yuzden street'i BIREBIR
+    degil, NORMALIZE ederek (kelimeleri sirala + 'улица/ул' gibi sokak-tipi
+    kelimelerini yok say) karsilastiririz; group + bina no + koordinat(±0.001)
+    kosullari aynen korunur. Boylece ayni adresin farkli yazimlari mukerrer
+    sayilir.
+
     Kullanicinin yazdigi serbest 'full_address' metnine DEGIL, geocode'un
     urettigi standart adrese (street, homenumber, koordinat) bakilir. Sokak,
     bina no ya da koordinat eksikse (geocode yapilmamis) anlamli kiyas olmaz
     -> mukerrer kontrolu yapilmaz (None)."""
-    st = (str(street) if street is not None else "").strip()
-    hn = (str(homenumber) if homenumber is not None else "").strip()
+    import re
+
+    _ST_TOKENS = {
+        "ул", "улица", "пр", "пр-т", "проспект", "пер", "переулок",
+        "б-р", "бульвар", "ш", "шоссе", "наб", "набережная", "пл",
+        "площадь", "проезд", "туп", "тупик", "аллея", "кв-л", "квартал",
+        "г", "город", "обл", "область", "р-н", "район", "д", "дом",
+    }
+
+    def _norm_street(txt):
+        """Sokak adini kelime-sirasindan ve tip-kelimesinden bagimsiz hale
+        getir: kucuk harf, nokta/virgul temizle, sokak-tipi kelimelerini at,
+        kalan kelimeleri alfabetik sirala. 'улица Рылеевская' ve 'Рылеевская
+        улица' ayni stringe iner."""
+        t = (str(txt) if txt is not None else "").lower()
+        t = t.replace(".", " ").replace(",", " ")
+        t = re.sub(r"\s+", " ", t).strip()
+        words = sorted(w for w in t.split(" ") if w and w not in _ST_TOKENS)
+        return " ".join(words)
+
+    def _norm_house(txt):
+        t = (str(txt) if txt is not None else "").lower()
+        return re.sub(r"\s+", "", t.replace(".", "").replace(",", "")).strip()
 
     def _f(v):
         try:
@@ -3877,29 +3906,34 @@ def _pharmacy_duplicate_qs(Model, group_company, street, homenumber,
         except (TypeError, ValueError):
             return None
 
+    st = _norm_street(street)
+    hn = _norm_house(homenumber)
     px, py = _f(point_x), _f(point_y)
     # Standart adres bilesenlerinden biri bile yoksa kontrol yapma.
     if not st or not hn or px is None or py is None:
         return None
 
     tol = 0.001
+    # DB tarafinda aday kumeyi group + bina no ile daralt (street birebir
+    # tutmadigi icin DB'de street filtresi YAPILMAZ; koordinat+normalize street
+    # Python'da kiyaslanir). Aday kume genelde cok kucuk.
     qs = (
         Model.objects.using("refdb")
         .filter(status=1)
         .filter(group_company=group_company)
-        .filter(street=st)
-        .filter(homenumber=hn)
+        .filter(homenumber=homenumber)
         .filter(point_y__isnull=False, point_x__isnull=False)
     )
 
-    # Koordinat BETWEEN kiyasi: point_x/point_y DB'de CharField olabilir, bu
-    # yuzden sayisal karsilastirmayi Python tarafinda yapariz (string BETWEEN
-    # yaniltir). Aday kume street+homenumber+group ile zaten cok dar.
     matches = []
     for row in qs.only(
         "id", "group_company", "subgroup_company", "full_address",
         "pharmacy_no", "street", "homenumber", "point_x", "point_y",
     ):
+        if _norm_street(row.street) != st:
+            continue
+        if _norm_house(row.homenumber) != hn:
+            continue
         rx, ry = _f(row.point_x), _f(row.point_y)
         if rx is None or ry is None:
             continue
