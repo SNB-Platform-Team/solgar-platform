@@ -2765,7 +2765,7 @@ def depo_upload_page_api(request):
         return Response({"error": "batch_id gerekli."}, status=400)
 
     qs = DistributorRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).order_by("id")
     total = qs.count()
     offset = (page - 1) * _DEPO_PAGE_SIZE
@@ -2817,7 +2817,7 @@ def depo_upload_save_api(request):
         return Response({"error": "batch_id gerekli."}, status=400)
 
     drafts = list(DistributorRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).order_by("id"))
     if not drafts:
         return Response({"error": "Onaylanacak taslak bulunamadi (suresi dolmus olabilir)."}, status=400)
@@ -2893,7 +2893,7 @@ def depo_upload_save_api(request):
 
     # Basarili -> taslaklari sil
     DistributorRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).delete()
 
     return Response({"created": len(rows), "error": ""})
@@ -3289,7 +3289,7 @@ def pharmacy_upload_page_api(request):
     if not batch_id:
         return Response({"error": "batch_id gerekli."}, status=400)
     qs = SalesRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).order_by("id")
     total = qs.count()
     offset = (page - 1) * _PHARM_PAGE_SIZE
@@ -3350,7 +3350,7 @@ def pharmacy_upload_save_api(request):
         return Response({"error": "batch_id gerekli."}, status=400)
 
     drafts = list(SalesRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).order_by("id"))
     if not drafts:
         return Response({"error": "Onaylanacak taslak bulunamadi."}, status=400)
@@ -3473,7 +3473,7 @@ def pharmacy_upload_save_api(request):
 
     # Basarili -> taslaklari sil (artik sales_record kalici degil)
     SalesRecord.objects.filter(
-        batch_id=batch_id, uploaded_by=request.user, is_confirmed=False
+        batch_id=batch_id, is_confirmed=False
     ).delete()
 
     return Response({"created": len(rows), "error": ""})
