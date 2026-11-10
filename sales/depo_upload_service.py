@@ -100,16 +100,16 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
 
 def classify_brand(product: str) -> str:
     """
-    Urun adindan marka/tip belirle (Java'daki mantik):
+    Urun adindan marka/tip belirle:
       БАУНТИ/BOUNTY/НЭЙЧЕС -> BN
-      ОСТЕО/OSTEO          -> OS
+      ОСТЕО/OSTEO          -> BN  (Olga: Остео Би-Флекс her zaman Natures
+                                   Bounty sayilir; eskiden ayri 'OS' idi)
       diger                -> SL (Solgar)
     """
     p = (product or "").upper()
-    if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
+    if ("БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p
+            or "ОСТЕО" in p or "OSTEO" in p):
         return "BN"
-    if "ОСТЕО" in p or "OSTEO" in p:
-        return "OS"
     return "SL"
 
 

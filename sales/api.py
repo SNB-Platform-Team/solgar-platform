@@ -3152,7 +3152,11 @@ def pharmacy_upload_preview_api(request):
             if _file_brand:
                 return _file_brand
             p = (product or "").upper()
-            if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
+            # Остео Би-Флекс (Osteo Bi-Flex) her zaman Natures Bounty sayilir
+            # (Olga). Urun adinda "Солгар" gecmedigi icin eskiden Solgar'a
+            # dusuyordu; marka olarak BOUNTY'e aittir.
+            if ("БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p
+                    or "ОСТЕО" in p or "OSTEO" in p):
                 return "BOUNTY"
             return "SOLGAR"
 
