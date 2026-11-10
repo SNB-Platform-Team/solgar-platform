@@ -3112,7 +3112,14 @@ def pharmacy_upload_preview_api(request):
                 n = (name or "").strip().lower()
                 return any(tok in n for tok in _SKIP_SHEET_TOKENS)
 
-            _sales_names = [n for n in _all_names if not _is_aux_sheet(n)]
+            # _ph_sheet_names basarisiz olursa (_nerr set / _all_names None)
+            # iterate etme — aksi halde 'NoneType is not iterable' (ornek: AVE
+            # STOCK'un bozuk-stylesheet'li xlsx'inde sheet adlari okunamazsa).
+            # Bu durumda multi-sheet birlestirme atlanir, asagidaki klasik
+            # tek-sayfa akisi (_ph_open_sheet) calamine fallback'i ile acar.
+            _sales_names = []
+            if not _nerr and _all_names:
+                _sales_names = [n for n in _all_names if not _is_aux_sheet(n)]
             # Filtreden sonra tek sayfa kaldiysa klasik tek-sayfa akisa birak.
             if not _nerr and _sales_names and len(_sales_names) > 1:
                 parsed = []
