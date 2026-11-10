@@ -3250,12 +3250,29 @@ def pharmacy_upload_preview_api(request):
 
 
 def _ph_row(rec, idx):
+    # STOK dosyalarinda satis kolonlari (count/amount) kasten 0; miktar
+    # remaining_count/remaining_amount'ta tutulur. Onizleme tablosu "Кол-во"
+    # kolonunda count'u gosterdigi icin stok dosyasinda her satir 0 goruluyordu
+    # (Olga). Bu yuzden gosterim degerini burada normalize ederiz: satis 0 ama
+    # stok > 0 ise "Кол-во"/"Сумма"ya stok degerini koyariz. Kaydedilen asil
+    # veri (DB) degismiyor; bu yalniz onizleme gosterimi. Ayrica acik
+    # display_count/display_amount alanlari da veririz (frontend isterse onlari
+    # kullanabilir).
+    _sale_c = rec.count or 0
+    _sale_a = float(rec.amount or 0)
+    _rem_c = rec.remaining_count or 0
+    _rem_a = float(rec.remaining_amount or 0)
+    _is_stock_row = (_sale_c == 0 and _rem_c)
+    disp_c = _rem_c if _is_stock_row else _sale_c
+    disp_a = _rem_a if (_sale_a == 0 and _rem_a) else _sale_a
     return {
         "index": idx, "product": rec.product_name, "brand": rec.brand,
         "pharmacy": rec.pharmacy, "aptekno": rec.aptekno, "city": rec.city,
-        "count": rec.count, "amount": float(rec.amount or 0),
+        "count": disp_c, "amount": disp_a,
+        "display_count": disp_c, "display_amount": disp_a,
+        "sale_count": _sale_c, "sale_amount": _sale_a,
         "subgroup": rec.subgroup, "main_group": rec.main_group,
-        "remaining_count": rec.remaining_count,
+        "remaining_count": _rem_c, "remaining_amount": _rem_a,
     }
 
 
