@@ -3168,8 +3168,14 @@ def pharmacy_upload_preview_api(request):
             return "SOLGAR"
 
         def _int(v):
+            # ABS (по модулю): miktar (COUNT) ve stok (REMAINING_COUNT) her zaman
+            # MUTLAK deger alinir. Olga: kullanicilar raporu olustururken bazen
+            # yanlislikla '-' koyuyor; negatif degerler cikarma gibi hesaplanip
+            # toplami bozuyordu. Artik negatif de pozitif sayilir. (Yalniz bu
+            # upload-preview'de, count+remaining icin; amount _dec ile ayri ve
+            # dokunulmuyor.)
             try:
-                return int(str(v).split(".")[0].replace(" ", "")) if v else 0
+                return abs(int(str(v).split(".")[0].replace(" ", ""))) if v else 0
             except (ValueError, TypeError):
                 return 0
 
