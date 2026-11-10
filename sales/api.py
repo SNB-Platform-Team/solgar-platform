@@ -3359,19 +3359,47 @@ def pharmacy_upload_save_api(request):
     chain_name = drafts[0].chain_name or ""
     report_dates = sorted({d.report_date for d in drafts if d.report_date})
 
-    # --- re-upload kontrolu: ayni sebeke+tarih sales_pharmacy'de var mi? ---
+    # Bu batch STOK mu SATIS mi? Stok taslaklarinda satis (count) 0, miktar
+    # remaining_count'ta. En az bir taslakta count>0 varsa satistir; aksi
+    # halde (hepsi count=0 ve bir remaining>0) stoktur. Stok ve satis AYRI
+    # veridir: ayni sebeke+tarih icin satis yuklenmis olmasi, STOK yuklemesini
+    # engellememeli (ve tersi). Bu yuzden re-upload kontrolu bu moda gore
+    # sales_count / remaining_count'a bakar.
+    _batch_is_stock = (
+        not any((d.count or 0) > 0 for d in drafts)
+        and any((d.remaining_count or 0) > 0 for d in drafts)
+    )
+
+    # --- re-upload kontrolu: ayni sebeke+tarih + ayni TUR (satis/stok)
+    # sales_pharmacy'de zaten var mi? ---
     try:
         with connections["refdb"].cursor() as cur:
             for rd in report_dates:
-                cur.execute(
-                    "SELECT 1 FROM solgar_tst.sales_pharmacy "
-                    "WHERE main_group = %s AND DATE(sales_date) = %s LIMIT 1",
-                    [chain_name, str(rd)],
-                )
+                if _batch_is_stock:
+                    # Stok yuklemesi: ayni sebeke+tarih icin STOK (remaining>0)
+                    # kaydi var mi? Satis kayitlari (remaining=0) bloklamaz.
+                    cur.execute(
+                        "SELECT 1 FROM solgar_tst.sales_pharmacy "
+                        "WHERE main_group = %s AND DATE(sales_date) = %s "
+                        "  AND remaining_count > 0 LIMIT 1",
+                        [chain_name, str(rd)],
+                    )
+                    _kind = "остатки"
+                else:
+                    # Satis yuklemesi: ayni sebeke+tarih icin SATIS (count>0)
+                    # kaydi var mi? Stok kayitlari bloklamaz.
+                    cur.execute(
+                        "SELECT 1 FROM solgar_tst.sales_pharmacy "
+                        "WHERE main_group = %s AND DATE(sales_date) = %s "
+                        "  AND sales_count > 0 LIMIT 1",
+                        [chain_name, str(rd)],
+                    )
+                    _kind = "продажи"
                 if cur.fetchone():
                     return Response({"error": (
-                        f"Загрузка заблокирована: данные по сети «{chain_name}» "
-                        f"за {rd} уже есть в базе. Повторная загрузка не допускается."
+                        f"Загрузка заблокирована: данные ({_kind}) по сети "
+                        f"«{chain_name}» за {rd} уже есть в базе. "
+                        f"Повторная загрузка не допускается."
                     )}, status=400)
     except Exception as exc:
         return Response({"error": f"Ошибка проверки дублей: {exc}"}, status=500)
