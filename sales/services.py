@@ -407,6 +407,7 @@ class SalesViewService:
     _BRAND_API_TO_LEGACY = {"SL": "SL", "BN": "BN"}
 
     def chain_report(self, main_group="", sub_group="", region="", district="",
+                     stock_sales="SALES",
                      page: int = 1, page_size: int = 200, **filters) -> dict:
         """
         Date-range chain-sales report combining BOTH sources:
@@ -424,6 +425,12 @@ class SalesViewService:
         """
         from django.db.models import Sum
         from django.db.models.functions import Lower
+
+        # SALES (default) / STOCK. STOCK modunda count/amount yerine
+        # remaining_count/remaining_amount kullanilir ve stok=0 satirlar elenir.
+        is_stock = (str(stock_sales or "SALES").strip().upper() == "STOCK")
+        _cnt_field = "remaining_count" if is_stock else "count"
+        _amt_field = "remaining_amount" if is_stock else "amount"
 
         date_from = filters.get("date_from")
         date_to = filters.get("date_to")
@@ -462,6 +469,10 @@ class SalesViewService:
 
         records = self.repository.filter_by_range(**sr_filters)
 
+        # STOCK modu: yalnizca stok > 0 satirlar (SALES modunda degismez).
+        if is_stock:
+            records = records.filter(remaining_count__gt=0)
+
         # Product-category filter (via ProductGroup product names).
         product_names = None
         if main_group or sub_group:
@@ -484,9 +495,9 @@ class SalesViewService:
             records = records.filter(id__in=matching_ids)
 
         sr_solgar = records.filter(brand=SalesRecord.Brand.SOLGAR).aggregate(
-            c=Sum("count"), a=Sum("amount"))
+            c=Sum(_cnt_field), a=Sum(_amt_field))
         sr_bounty = records.filter(brand=SalesRecord.Brand.BOUNTY).aggregate(
-            c=Sum("count"), a=Sum("amount"))
+            c=Sum(_cnt_field), a=Sum(_amt_field))
         sr_count = records.count()
 
         # ================= legacy sales_pharmacy side =================
@@ -499,6 +510,7 @@ class SalesViewService:
             "search": filters.get("search", ""),
             "product_names": product_names,   # None = filtre yok
             "cities": city_keys,              # None = filtre yok
+            "is_stock": is_stock,             # STOCK modu: remaining kolonlari
         }
         legacy_count = self.repository.legacy_count(**legacy_filters)
         legacy_tot = self.repository.legacy_totals(**legacy_filters)
@@ -533,8 +545,8 @@ class SalesViewService:
                         "report_date": rec.report_date,
                         "city": rec.city or "",
                         "pharmacy": rec.pharmacy or "",
-                        "count": rec.count or 0,
-                        "amount": rec.amount or 0,
+                        "count": (rec.remaining_count if is_stock else rec.count) or 0,
+                        "amount": (rec.remaining_amount if is_stock else rec.amount) or 0,
                     })
 
         return {

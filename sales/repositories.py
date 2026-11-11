@@ -286,12 +286,14 @@ class SalesRepository:
 
     def _legacy_where(self, date_from, date_to, chain_name="", country="",
                       brand_code="", city="", search="",
-                      product_names=None, cities=None):
+                      product_names=None, cities=None, is_stock=False):
         """Build the shared WHERE clause + params for sales_pharmacy reads.
 
         product_names / cities: iterables for product-category / geographic
         filters (lowercased), applied as IN(...) when given. brand_code is the
         legacy code ('SL'/'BN'), passed straight to product_type.
+        is_stock: STOCK modunda sadece stok>0 satirlar gelsin diye WHERE'e
+        remaining_count > 0 eklenir (SALES modunda hicbir sey degismez).
         Returns (where_sql, params). Date range is assumed present (caller
         guarantees it)."""
         clauses = ["sales_date >= %s", "sales_date < %s"]
@@ -331,6 +333,9 @@ class SalesRepository:
             else:
                 # Geo filtre verildi ama eslesen sehir yok -> hic satir.
                 clauses.append("1 = 0")
+        if is_stock:
+            # STOCK modu: yalnizca stok > 0 satirlar.
+            clauses.append("remaining_count > 0")
         return " AND ".join(clauses), params
 
     def legacy_count(self, **filters) -> int:
@@ -343,13 +348,19 @@ class SalesRepository:
             return int(cur.fetchone()[0] or 0)
 
     def legacy_totals(self, **filters) -> dict:
-        """Per-brand SUM(count)/SUM(amount) over the filtered legacy set."""
+        """Per-brand SUM(count)/SUM(amount) over the filtered legacy set.
+
+        STOCK modunda (is_stock=True) satis kolonlari yerine stok (remaining)
+        kolonlari toplanir."""
         from django.db import connections
+        is_stock = bool(filters.get("is_stock"))
+        cnt_col = "remaining_count" if is_stock else "sales_count"
+        amt_col = "remaining_amount" if is_stock else "sales_amount"
         where, params = self._legacy_where(**filters)
         sql = (
             "SELECT product_type, "
-            "COALESCE(SUM(sales_count), 0), "
-            "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))), 0) "
+            f"COALESCE(SUM({cnt_col}), 0), "
+            f"COALESCE(SUM(CAST({amt_col} AS DECIMAL(14,2))), 0) "
             f"FROM solgar_tst.sales_pharmacy WHERE {where} "
             "GROUP BY product_type"
         )
@@ -367,13 +378,20 @@ class SalesRepository:
         return out
 
     def legacy_page(self, *, limit, offset, **filters) -> list[dict]:
-        """One ordered page of legacy rows as normalized dicts."""
+        """One ordered page of legacy rows as normalized dicts.
+
+        STOCK modunda (is_stock=True) count/amount kolonlarina satis yerine
+        stok (remaining) degerleri konur; donen dict anahtarlari ("count"/
+        "amount") degismez, sadece kaynak kolon degisir."""
         from django.db import connections
+        is_stock = bool(filters.get("is_stock"))
+        cnt_col = "remaining_count" if is_stock else "sales_count"
+        amt_col = "remaining_amount" if is_stock else "sales_amount"
         where, params = self._legacy_where(**filters)
         sql = (
-            "SELECT product_type, product_Name, main_group, sales_date, "
-            "city, pharmacy_address, sales_count, "
-            "CAST(sales_amount AS DECIMAL(14,2)) "
+            f"SELECT product_type, product_Name, main_group, sales_date, "
+            f"city, pharmacy_address, {cnt_col}, "
+            f"CAST({amt_col} AS DECIMAL(14,2)) "
             f"FROM solgar_tst.sales_pharmacy WHERE {where} "
             "ORDER BY main_group, product_Name "
             "LIMIT %s OFFSET %s"

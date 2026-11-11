@@ -863,6 +863,12 @@ def chain_report_api(request):
     region = (request.GET.get("region") or "").strip()
     district = (request.GET.get("district") or "").strip()
 
+    # SALES (default) / STOCK. STOCK secilince rapor stok (remaining)
+    # degerlerini gosterir.
+    stock_sales = (request.GET.get("stock_sales") or "SALES").strip().upper()
+    if stock_sales not in ("SALES", "STOCK"):
+        stock_sales = "SALES"
+
     try:
         page = int(request.GET.get("page", "1"))
     except (TypeError, ValueError):
@@ -873,7 +879,7 @@ def chain_report_api(request):
     try:
         result = service.chain_report(
             main_group=main_group, sub_group=sub_group,
-            region=region, district=district,
+            region=region, district=district, stock_sales=stock_sales,
             page=page, page_size=_CHAIN_REPORT_PAGE_SIZE, **filters
         )
     except Exception as exc:
@@ -899,6 +905,7 @@ def chain_report_api(request):
                 "brand": request.GET.get("brand", ""), "chain_name": request.GET.get("chain_name", ""),
                 "country": request.GET.get("country", ""), "city": request.GET.get("city", ""),
                 "date_from": date_from, "date_to": date_to, "search": search,
+                "stock_sales": stock_sales,
             },
         })
 
@@ -936,6 +943,7 @@ def chain_report_api(request):
             "brand": request.GET.get("brand", ""), "chain_name": request.GET.get("chain_name", ""),
             "country": request.GET.get("country", ""), "city": request.GET.get("city", ""),
             "date_from": date_from, "date_to": date_to, "search": search,
+            "stock_sales": stock_sales,
         },
     })
 
@@ -971,6 +979,11 @@ def chain_report_export_api(request):
     region = (request.GET.get("region") or "").strip()
     district = (request.GET.get("district") or "").strip()
 
+    # SALES (default) / STOCK — ekrandaki secimle tutarli dis aktarim.
+    stock_sales = (request.GET.get("stock_sales") or "SALES").strip().upper()
+    if stock_sales not in ("SALES", "STOCK"):
+        stock_sales = "SALES"
+
     columns = ["Компания", "Наименование", "Сеть", "Дата", "Город",
                "Аптека", "Кол-во", "Сумма"]
     rows = []
@@ -979,7 +992,7 @@ def chain_report_export_api(request):
         while True:
             result = service.chain_report(
                 main_group=main_group, sub_group=sub_group,
-                region=region, district=district,
+                region=region, district=district, stock_sales=stock_sales,
                 page=page, page_size=_CHAIN_REPORT_PAGE_SIZE, **filters
             )
             if result.get("needs_date_range"):
