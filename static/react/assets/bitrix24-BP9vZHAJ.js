@@ -1,0 +1,1 @@
+import{a as e,t}from"./jsx-runtime-B-hcVAMW.js";import{ct as n}from"./search-provider-B9wRg_si.js";import{t as r}from"./placeholder-vPfvloXR.js";var i=e(t()),a=()=>(0,i.jsx)(r,{title:`Битрикс24`,description:`Интеграция с внешней системой Битрикс24 пока не подключена.`,icon:n});export{a as component};
