@@ -5208,12 +5208,20 @@ _CHAIN_MONTHLY_BRAND_LABEL = {"SL": "SOLGAR", "BN": "NATURES BOUNTY", "OB": "OTH
 
 
 def _chain_sales_monthly_report(*, rep_type="CHAIN_SALES", brand, country, chain,
-                                city, product, medrep, begin, end):
+                                city, product, medrep, begin, end,
+                                stock_sales="SALES"):
     """
     Aptek raporu — ay-ay (aylik) matris. {columns, rows, total_rows} dondurur.
     rows: her grup degeri (zincir/urun/adres/brand) bir satir; her ay icin
     [kol, сумма]; sonda Итого. Grup alani rep_type'a gore secilir.
+
+    stock_sales: 'SALES' (varsayilan) satis kolonlarini (sales_count/
+    sales_amount) toplar; 'STOCK' stok kolonlarini (remaining_count/
+    remaining_amount) toplar ve yalnizca stok>0 satirlari sayar.
     """
+    is_stock = (str(stock_sales or "SALES").strip().upper() == "STOCK")
+    cnt_col = "remaining_count" if is_stock else "sales_count"
+    amt_col = "remaining_amount" if is_stock else "sales_amount"
     group_col, group_title = _CHAIN_MONTHLY_COL.get(
         rep_type, _CHAIN_MONTHLY_COL["CHAIN_SALES"])
     months = _month_span(begin, end)  # [(y, m), ...]
@@ -5251,12 +5259,15 @@ def _chain_sales_monthly_report(*, rep_type="CHAIN_SALES", brand, country, chain
         where.append("product_Name = %s"); params.append(product)
     if medrep:
         where.append("sales_reader = %s"); params.append(medrep)
+    if is_stock:
+        # STOCK modu: yalnizca stok > 0 satirlar.
+        where.append("remaining_count > 0")
 
     sql = (
         f"SELECT {group_col} AS ch, "
         "YEAR(sales_date) AS y, MONTH(sales_date) AS m, "
-        "COALESCE(SUM(sales_count),0) AS c, "
-        "COALESCE(SUM(CAST(sales_amount AS DECIMAL(14,2))),0) AS a "
+        f"COALESCE(SUM({cnt_col}),0) AS c, "
+        f"COALESCE(SUM(CAST({amt_col} AS DECIMAL(14,2))),0) AS a "
         f"FROM solgar_tst.sales_pharmacy WHERE {' AND '.join(where)} "
         f"GROUP BY {group_col}, YEAR(sales_date), MONTH(sales_date)"
     )
@@ -5360,6 +5371,10 @@ def chain_sales_report_api(request):
     medrep = (request.GET.get("medrep") or "").strip()
     begin = (request.GET.get("begin") or "").strip()
     end = (request.GET.get("end") or "").strip()
+    # SALES (default) / STOCK. STOCK secilince rapor stok (remaining) toplar.
+    stock_sales = (request.GET.get("stock_sales") or "SALES").strip().upper()
+    if stock_sales not in ("SALES", "STOCK"):
+        stock_sales = "SALES"
 
     # Ulke kisiti (coklu): tek-ulke -> ez; coklu/haric + secili ulke izin
     # disindaysa raporu bos dondur.
@@ -5412,6 +5427,7 @@ def chain_sales_report_api(request):
                 rep_type=rep_type,
                 brand=brand, country=country, chain=chain, city=city,
                 product=product, medrep=medrep, begin=begin, end=end,
+                stock_sales=stock_sales,
             )
             return Response({
                 "options": {"rep_types": _CHAIN_REPORT_TYPES, "brands": _brands_opt},
