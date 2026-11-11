@@ -3400,29 +3400,42 @@ def pharmacy_upload_save_api(request):
         and any((d.remaining_count or 0) > 0 for d in drafts)
     )
 
+    # Bu batch hangi marka(lar)i iceriyor? Solgar ve Bounty AYRI veridir:
+    # ayni sebeke+tarih icin Bounty yuklenmis olmasi Solgar yuklemesini
+    # engellememeli (ornek VITA_SAMARA / ASNA: once Bounty, sonra Solgar).
+    # Bu yuzden re-upload kontrolu markaya (product_type) gore daraltilir.
+    _batch_ptypes = sorted({
+        _PH_BRAND_TO_PTYPE.get((d.brand or "").upper(), "SL") for d in drafts
+    })
+
     # --- re-upload kontrolu: ayni sebeke+tarih + ayni TUR (satis/stok)
-    # sales_pharmacy'de zaten var mi? ---
+    # + ayni MARKA sales_pharmacy'de zaten var mi? ---
     try:
+        _pt_ph = ",".join(["%s"] * len(_batch_ptypes))
         with connections["refdb"].cursor() as cur:
             for rd in report_dates:
                 if _batch_is_stock:
-                    # Stok yuklemesi: ayni sebeke+tarih icin STOK (remaining>0)
-                    # kaydi var mi? Satis kayitlari (remaining=0) bloklamaz.
+                    # Stok yuklemesi: ayni sebeke+tarih+marka icin STOK
+                    # (remaining>0) kaydi var mi? Satis kayitlari (remaining=0)
+                    # ve diger markalar bloklamaz.
                     cur.execute(
                         "SELECT 1 FROM solgar_tst.sales_pharmacy "
                         "WHERE main_group = %s AND DATE(sales_date) = %s "
+                        f"  AND product_type IN ({_pt_ph}) "
                         "  AND remaining_count > 0 LIMIT 1",
-                        [chain_name, str(rd)],
+                        [chain_name, str(rd), *_batch_ptypes],
                     )
                     _kind = "остатки"
                 else:
-                    # Satis yuklemesi: ayni sebeke+tarih icin SATIS (count>0)
-                    # kaydi var mi? Stok kayitlari bloklamaz.
+                    # Satis yuklemesi: ayni sebeke+tarih+marka icin SATIS
+                    # (count>0) kaydi var mi? Stok kayitlari ve diger markalar
+                    # bloklamaz.
                     cur.execute(
                         "SELECT 1 FROM solgar_tst.sales_pharmacy "
                         "WHERE main_group = %s AND DATE(sales_date) = %s "
+                        f"  AND product_type IN ({_pt_ph}) "
                         "  AND sales_count > 0 LIMIT 1",
-                        [chain_name, str(rd)],
+                        [chain_name, str(rd), *_batch_ptypes],
                     )
                     _kind = "продажи"
                 if cur.fetchone():
