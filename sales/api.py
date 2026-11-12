@@ -4510,6 +4510,7 @@ def _fetch_corner_rows(pharmacy_id, brand):
             "promo": eq.promo or "",
             "subtype": eq.subtype or "",
             "size": eq.size or "",
+            "imidzh": eq.imidzh or "",
             "photos": _equipment_photo_list(eq),
             "status": st,
             "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
@@ -4627,28 +4628,38 @@ def pharmacy_equipment_save_api(request):
     """
     from .models import PharmacyEquipment, PharmacyEquipmentPhoto
     from sales import blob_storage as _blob
+    from .equipment_catalog import promo_requires_imidzh, brand_from_email
 
-    brand = (request.POST.get("brand") or "SOLGAR").strip()
     obj_id = request.POST.get("id")
     promo = (request.POST.get("promo") or "").strip()
     subtype = (request.POST.get("subtype") or "").strip()
     size = (request.POST.get("size") or "").strip()
+    imidzh = (request.POST.get("imidzh") or "").strip()
 
     if not obj_id:
         return Response({"error": "id gerekli."}, status=400)
     if not (promo or subtype):
         return Response({"error": "Выберите промо и подтип."}, status=400)
 
-    legacy_pid = _legacy_pharmacy_id(obj_id, brand)
+    # Brand kullanicinin e-posta alan adindan belirlenir (Olga: Solgar hesaplari
+    # @solgarvitamin.ru, Bounty hesaplari @naturesbounty.ru). Frontend'den gelen
+    # brand'e GUVENILMEZ; _legacy_pharmacy_id ve kayit bu brand'e gore.
+    brand_key = brand_from_email(getattr(request.user, "email", "") or "")
+
+    # Must-have имидж (presence_image=1 promo'lari: Ролл-ап/Лайтбокс/
+    # Антикражные ворота/Плакат) icin имидж ZORUNLU.
+    if promo_requires_imidzh(promo) and not imidzh:
+        return Response(
+            {"error": "Для этого промо необходимо выбрать имидж."}, status=400)
+
+    legacy_pid = _legacy_pharmacy_id(obj_id, brand_key)
     if legacy_pid is None:
         return Response({"error": "Аптека не найдена."}, status=404)
-
-    brand_key = "BOUNTY" if ("BOUNTY" in brand.upper() or brand.upper() == "BN") else "SOLGAR"
 
     try:
         eq = PharmacyEquipment.objects.create(
             pharmacy_id=legacy_pid, brand=brand_key,
-            promo=promo, subtype=subtype, size=size, status=1,
+            promo=promo, subtype=subtype, size=size, imidzh=imidzh, status=1,
             created_by=(getattr(request.user, "email", "") or
                         getattr(request.user, "username", "") or ""),
         )
@@ -4679,6 +4690,7 @@ def pharmacy_equipment_save_api(request):
     row = {
         "id": eq.id, "source": "new", "apteka_id": legacy_pid,
         "promo": eq.promo, "subtype": eq.subtype, "size": eq.size,
+        "imidzh": eq.imidzh,
         "photos": _equipment_photo_list(eq),
         "status": st, "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
         "hardware_status": "", "hardware_status_label": "",
@@ -4720,6 +4732,31 @@ def pharmacy_equipment_delete_api(request):
             context=f"equipment delete id={eq_id}",
         )
     return Response({"ok": True})
+
+
+@api_view(["GET"])
+@permission_classes([IsEquipmentDemoUser])  # Оборудование DEMO: sadece Olga + Caner
+def pharmacy_equipment_meta_api(request):
+    """Оборудование demo metasi — frontend bir cagrida alir:
+      - brand: kullanicinin markasi (e-posta alan adindan; @naturesbounty->BOUNTY)
+      - promos: [{name, requires_imidzh}]  (secilebilir promo + must-have bayragi)
+      - imidzh: o brand'in POS имидж ADLARI (frontend ad->static gorsel esler)
+    Gorsellerin kendisi frontend repo'sunda; backend yalniz ad + must-have bilir.
+    """
+    from .equipment_catalog import (
+        EQUIPMENT_PROMOS, promo_requires_imidzh, pos_images_for_brand,
+        brand_from_email,
+    )
+    brand = brand_from_email(getattr(request.user, "email", "") or "")
+    promos = [
+        {"name": p, "requires_imidzh": promo_requires_imidzh(p)}
+        for p in EQUIPMENT_PROMOS
+    ]
+    return Response({
+        "brand": brand,
+        "promos": promos,
+        "imidzh": pos_images_for_brand(brand),
+    })
 
 
 @api_view(["GET", "POST"])

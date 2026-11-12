@@ -602,6 +602,11 @@ class PharmacyEquipment(models.Model):
     promo = models.CharField("Промо", max_length=120, blank=True)
     subtype = models.CharField("Подтип", max_length=200, blank=True)
     size = models.CharField("Размер", max_length=120, blank=True)
+    # Имидж (POS gorseli): promo 'must have имидж' ise (presence_image=1)
+    # kullanici brand'ine gore (POS_SL / POS_NB) bir urun imidji secer; secilen
+    # imidj ADI burada tutulur (gorselin kendisi Blob'da, imidj katalogunda ad->
+    # url eslemesi). Must-have degilse bos kalir.
+    imidzh = models.CharField("Имидж", max_length=255, blank=True)
     # Genel durum (0/1). Yeni kayitlar varsayilan 1 (aktif).
     status = models.PositiveSmallIntegerField("Статус", default=1)
     created_by = models.CharField("Создал", max_length=255, blank=True)
