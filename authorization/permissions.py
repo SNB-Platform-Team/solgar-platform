@@ -77,3 +77,32 @@ class IsSuperOrStaff(BasePermission):
             return False
         return bool(getattr(user, "is_superuser", False)
                     or getattr(user, "is_staff", False))
+
+
+# Оборудование (ekipman) DEMO: ozellik henuz demo asamasinda, sadece bu iki
+# hesap ekleyip/cikartip gorebilsin — diger kullanicilar (admin/menecer dahil)
+# goremesin. Mail adresleri kucuk harfe cevrilip karsilastirilir. Demo bitince
+# bu liste genisletilir ya da endpoint'ler HasScreen'e dondurulur.
+EQUIPMENT_DEMO_EMAILS = frozenset({
+    "ofedorova@solgarvitamin.ru",
+    "ccevik@solgarvitamin.ru",
+})
+
+
+class IsEquipmentDemoUser(BasePermission):
+    """Оборудование demo: yalniz EQUIPMENT_DEMO_EMAILS'deki hesaplar erisebilir.
+
+    is_staff/is_superuser TEK BASINA yetmez — demo kasten yalniz Olga ve
+    Caner'e aciktir. (Superuser'a yine de izin verilir ki yonetim/bakim
+    kilitlenmesin.)"""
+
+    message = "Раздел «Оборудование» пока доступен только в демо-режиме."
+
+    def has_permission(self, request, view) -> bool:
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        email = (getattr(user, "email", "") or "").strip().lower()
+        return email in EQUIPMENT_DEMO_EMAILS
