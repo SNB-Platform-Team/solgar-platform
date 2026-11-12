@@ -631,6 +631,18 @@ class MatrixParser:
                 while dsc < h_limit and not _ne2(_read2(sheet, dsc, pidx).strip()):
                     dsc += 1
 
+        def _is_matrix_total(prod):
+            # ИТОГО/toplam satiri: pivot ciktilarinda son satir urun adi yerine
+            # urun SAYISINI ('81') ya da bir toplam kelimesini tutar; miktar
+            # sutunlari tum sutunlarin toplamini icerir. Urun hucresi SADECE
+            # sayiysa (gercek urun adi asla salt sayi degildir) ya da bilinen
+            # toplam kelimesiyse bu satir atlanir — aksi halde toplam ikiye
+            # katlaniyordu (ornek VITA_SAMARA BOUNTY: 5700 -> 11400).
+            if is_total_product(prod):
+                return True
+            s = str(prod).strip().replace(" ", "").replace(".", "").replace(",", "")
+            return bool(s) and s.isdigit()
+
         out = []
         rmax = v_limit - (1 if skip_last_row else 0)
         cmax = h_limit - (1 if skip_last_col else 0)
@@ -639,6 +651,8 @@ class MatrixParser:
             for i in range(dsr, rmax):
                 product = _read2(sheet, pidx, i).strip()
                 if not _ne2(product):
+                    continue
+                if _is_matrix_total(product):
                     continue
                 for j in range(dsc, cmax):
                     aptek = _read2(sheet, j, aidx).strip()
@@ -653,6 +667,8 @@ class MatrixParser:
             for j in range(dsc, cmax):
                 product = _read2(sheet, j, pidx).strip()
                 if not _ne2(product):
+                    continue
+                if _is_matrix_total(product):
                     continue
                 for i in range(dsr, rmax):
                     aptek = _read2(sheet, aidx, i).strip()
