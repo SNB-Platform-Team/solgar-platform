@@ -2922,6 +2922,23 @@ from datetime import datetime as _ph_dt
 _PHARM_PAGE_SIZE = 200
 
 
+def _ph_match_sheet(sheet_name, names):
+    """Istenen sheet adini mevcut adlar icinde bul. Once TAM eslesme, sonra
+    bosluk-duyarsiz (strip) eslesme dener. Excel sayfa adlarinda bazen bas/son
+    boslugu olur (ornek FARMAIMPEKS -> 'Возраст остатков в АО '); frontend
+    dropdown'u boslugu kirpip gonderebilir, bu da tam eslesmeyi kacirip yanlis
+    (ilk) sayfanin okunmasina yol aciyordu. Eslesme yoksa None."""
+    if not sheet_name:
+        return None
+    if sheet_name in names:
+        return sheet_name
+    _t = sheet_name.strip()
+    for n in names:
+        if (n or "").strip() == _t:
+            return n
+    return None
+
+
 def _ph_open_sheet(excel_file, sheet_name=None):
     """xlsx (openpyxl) / xls (xlrd) oku. sheet_name verilirse o sayfa, yoksa ilk sayfa.
     (sheet, err) doner."""
@@ -2937,8 +2954,9 @@ def _ph_open_sheet(excel_file, sheet_name=None):
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-        if sheet_name and sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
+        _pick = _ph_match_sheet(sheet_name, wb.sheetnames)
+        if _pick is not None:
+            ws = wb[_pick]
         else:
             ws = wb.active
         grid = [list(r) for r in ws.iter_rows(values_only=True)]
@@ -2949,8 +2967,9 @@ def _ph_open_sheet(excel_file, sheet_name=None):
     try:
         import xlrd
         book = xlrd.open_workbook(file_contents=data)
-        if sheet_name and sheet_name in book.sheet_names():
-            s = book.sheet_by_name(sheet_name)
+        _pick = _ph_match_sheet(sheet_name, book.sheet_names())
+        if _pick is not None:
+            s = book.sheet_by_name(_pick)
         else:
             s = book.sheet_by_index(0)
         grid = [[s.cell_value(r, c) for c in range(s.ncols)] for r in range(s.nrows)]
@@ -2963,7 +2982,7 @@ def _ph_open_sheet(excel_file, sheet_name=None):
         from python_calamine import CalamineWorkbook
         cwb = CalamineWorkbook.from_filelike(io.BytesIO(data))
         names = cwb.sheet_names
-        pick = sheet_name if (sheet_name and sheet_name in names) else names[0]
+        pick = _ph_match_sheet(sheet_name, names) or names[0]
         grid = cwb.get_sheet_by_name(pick).to_python()
         return _GridSheet(grid), None
     except Exception as exc:
