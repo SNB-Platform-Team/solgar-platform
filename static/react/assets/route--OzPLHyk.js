@@ -1,0 +1,1 @@
+import{t as e}from"./authenticated-layout-1_sQ_oAi.js";var t=e;export{t as component};
