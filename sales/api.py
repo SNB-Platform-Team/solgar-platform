@@ -3080,10 +3080,15 @@ def pharmacy_upload_preview_api(request):
         # (ALOE -> 'остаток', FARMAIMPEKS -> 'Лист2') ve bu ilk sayfa DEGILDIR.
         # Frontend genelde ilk sayfayi (ornek ALOE'de 'закуп') secip gonderir,
         # bu da yanlis sayfadan 0 satir dondururdu. Bu yuzden config bir stok
-        # sayfasi tanimliyorsa kullanicinin secimini EZERIZ; tanimli degilse
-        # kullanicinin (ya da ilk) sayfasi kullanilir.
+        # sayfasi tanimliyorsa SABIT sayfayi kullaniriz.
+        # ANCAK: kullanici artik 'Лист' dropdown'undan ACIKCA bir sayfa
+        # secebiliyor. Kullanici bir sayfa SECTIYSE onun secimi onceliklidir;
+        # sabit stok sayfasi (ornek FARMAIMPEKS -> 'Лист2') secimi EZMEZ.
+        # Boylece formati degisen / farkli sayfada veri tutan dosyalar
+        # (ornek FARMAIMPEKS'in eczane satisi 'Лист1'de) dogru sayfadan okunur.
+        # Sabit sayfa yalnizca kullanici hic secim yapmadiginda devreye girer.
         _open_sheet = sheet_name or None
-        if is_stock:
+        if is_stock and not sheet_name:
             from .pharmacy_all_configs import get_stock_sheet
             _stock_sheet = get_stock_sheet(chain_name or file_name)
             if _stock_sheet:

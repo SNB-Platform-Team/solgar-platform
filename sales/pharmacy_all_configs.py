@@ -323,9 +323,12 @@ def get_config(chain_or_file, country="", is_stock=False):
     nhay = _norm_key(chain_or_file)
 
     if is_stock:
-        # FARMAIMPEKS: eczanesiz urun-bazli roll-up (ozel motor)
-        if "FARMAIMPEKS" in nhay or "FARMIMPEKS" in nhay:
-            return None, "farmaimpeks_stock"
+        # NOT: FARMAIMPEKS eskiden ozel 'farmaimpeks_stock' motoruna (eczanesiz
+        # roll-up, sabit 'Лист2' sayfasi) gidiyordu. Eylul 2026 formatinda stok
+        # verisi eczane kirilimli 'Возраст остатков в АО' sayfasinda ('Остатки,
+        # шт') ve kullanici sayfayi 'Лист' dropdown'undan seciyor. Bu yuzden
+        # FARMAIMPEKS artik normal SIMPLE config ile okunur (asagi akis);
+        # ozel motor + sabit 'Лист2' dayatmasi kaldirildi.
         # 1) STOCK matrix/pivot
         for _sk in sorted(STOCK_MATRIX_CONFIGS, key=lambda k: len(_norm_key(k)), reverse=True):
             if _norm_key(_sk) in nhay:
@@ -405,9 +408,10 @@ def get_stock_sheet(chain_or_file):
     if not chain_or_file:
         return None
     nhay = _norm_key(chain_or_file)
-    # FARMAIMPEKS: stok 'Лист2' sayfasinda
-    if "FARMAIMPEKS" in nhay or "FARMIMPEKS" in nhay:
-        return "Лист2"
+    # NOT: FARMAIMPEKS eskiden sabit 'Лист2' stok sayfasina zorlaniyordu. Eylul
+    # 2026 formatinda stok 'Возраст остатков в АО' sayfasinda ve kullanici
+    # sayfayi 'Лист' dropdown'undan seciyor; sabit dayatma kaldirildi (ayrica
+    # preview artik kullanici bir sayfa sectiyse get_stock_sheet'i ezmiyor).
     # STOCK_MATRIX_CONFIGS icinde 'sheet' tanimli olanlar (ALOE -> остаток)
     for _sk in sorted(STOCK_MATRIX_CONFIGS, key=lambda k: len(_norm_key(k)), reverse=True):
         if _norm_key(_sk) in nhay:

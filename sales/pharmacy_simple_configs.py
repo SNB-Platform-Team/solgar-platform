@@ -78,7 +78,18 @@ SIMPLE_CONFIGS = {
     "APTEKA.RU": _sv("APTEKA.RU", 'Товар', 'Филиал', 'Apteka.ru. Продажи, шт.|Продажи, шт.', '', '', 'Филиал', '', '', 'Apteka.ru. Продажи, шт.|Продажи, шт.'),
     "KALINA_PHARMA": _sv("KALINA_PHARMA", 'Название товара', 'Адрес', 'Кол-во', 'Сумма закупки с НДС', 'Отдел', '', '', '', 'Сумма закупки с НДС'),
     "VASHA№1": _sv("VASHA№1", 'Товар СА', 'Узел сети СА', 'Кол-во Пр СА', '', 'Код аналога СА', '', 'Остаток кол-во СА', '', 'Остаток кол-во СА'),
-    "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', '', '', 'СуммаЗак'),
+    # FARMAIMPEKS (Eylul 2026 formati): eczane kirilimli dikey liste. Ayni
+    # dosyada 2 veri sayfasi olabilir: satis ('Лист1' -> 'Продажи, шт') ve stok
+    # ('Возраст остатков в АО' -> 'Остатки, шт'). Kullanici 'Лист' dropdown'undan
+    # sayfayi secer. Tek config ikisini de okur: satis sayfasinda 'Остатки, шт'
+    # yok (REMAINING=0), stok sayfasinda 'Продажи, шт' yok (COUNT=0). is_stock
+    # (dosya adi '_STOCK') miktarin satis mi stok mu sayilacagini belirler.
+    # last_column BOS: 'Наименование'/'Продажи, шт'/'Остатки, шт' kolonlari
+    # 'Город'un SAGINDA; last_column='Город' verilseydi parser basligi 'Город'da
+    # bulup taramayi erken durdurur (break_for) ve urun/miktar kolonlarini
+    # goremezdi. Bos birakilinca tum baslik satiri taranir. Eski 'Лист2'
+    # sabit-sayfa + ozel farmaimpeks_stock motoru kaldirildi.
+    "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', 'Остатки, шт', '', ''),
     "SHAH": _sv("SHAH", 'Наименование ИРИС', 'Адрес', 'Количество в упак', 'Сумма в ценах закупки от первичных дист с НДС', '', 'Город', '', '', 'Сумма в ценах закупки от первичных дист с НДС'),
     "ZOLOTOE_YABLOKO": _sv("ZOLOTOE_YABLOKO", 'Наименование товара', 'Адрес', 'Продано упаковок', 'Сумма оборота, руб.', '', '', '', '', 'Сумма оборота, руб.'),
     # Dropdown'daki ad RU_ZOLOTOE_YOBLOKO (COUNTRY_CHAINS), parse config ise
