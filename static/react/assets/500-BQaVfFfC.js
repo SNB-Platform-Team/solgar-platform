@@ -1,1 +1,0 @@
-import{b as e}from"./index-Bf2EIJgl.js";var t=e;export{t as component};

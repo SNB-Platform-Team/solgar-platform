@@ -1,0 +1,1 @@
+import{t as e}from"./authenticated-layout-CwlDUSPt.js";var t=e;export{t as component};
