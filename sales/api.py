@@ -3157,11 +3157,41 @@ def pharmacy_upload_preview_api(request):
                 "закуп",          # Закупки (alimlar) - satis degil
                 "остат",          # Остатки / Остаток (stok) - satis degil
                 "приход", "поставк",  # giris/teslimat - satis degil
+                "квартал",        # Продажи_квартал - ceyreklik TOPLAM (aggregate),
+                                  #   aylik satisla CAKISIR; birlestirmeye girerse
+                                  #   satirlar milyonlarca kez katlanir (GARMONIYA
+                                  #   Eylul: Продажи_квартal 12k satir, basligsiz,
+                                  #   parser urun KODUNU count sanip milyar uretir).
             )
 
             def _is_aux_sheet(name: str) -> bool:
                 n = (name or "").strip().lower()
                 return any(tok in n for tok in _SKIP_SHEET_TOKENS)
+
+            import re as _re_sheet
+
+            def _sheet_base(name: str) -> str:
+                # 'Продажи (2)' -> 'продажи'  (sondaki '(N)' / '(исходн)' vs atilir)
+                n = (name or "").strip().lower()
+                return _re_sheet.sub(r"\s*\(.*?\)\s*$", "", n).strip()
+
+            def _drop_dup_plain(names):
+                # Ayni base-isimden HEM duz 'X' HEM parantezli 'X (N)' varsa, duz
+                # 'X'i at. GARMONIYA formatinda duz 'Продажи' basliksizdir (parser
+                # urun kodunu count sanar), temiz/basligli versiyon ise
+                # 'Продажи (2)'dir. Ikisi birlestirince ayni satirlar hem dogru
+                # hem bozuk okunup toplanir. Yalniz ikisi de varken birini
+                # eledigimiz icin tek-sheet'li dosyalar etkilenmez.
+                _bases_with_paren = set()
+                for n in names:
+                    if "(" in n:
+                        _bases_with_paren.add(_sheet_base(n))
+                out = []
+                for n in names:
+                    if "(" not in n and _sheet_base(n) in _bases_with_paren:
+                        continue  # duz kopyayi at, parantezli olani tut
+                    out.append(n)
+                return out
 
             # _ph_sheet_names basarisiz olursa (_nerr set / _all_names None)
             # iterate etme — aksi halde 'NoneType is not iterable' (ornek: AVE
@@ -3171,6 +3201,7 @@ def pharmacy_upload_preview_api(request):
             _sales_names = []
             if not _nerr and _all_names:
                 _sales_names = [n for n in _all_names if not _is_aux_sheet(n)]
+                _sales_names = _drop_dup_plain(_sales_names)
             # Filtreden sonra tek sayfa kaldiysa klasik tek-sayfa akisa birak.
             if not _nerr and _sales_names and len(_sales_names) > 1:
                 parsed = []
