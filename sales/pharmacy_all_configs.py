@@ -23,7 +23,10 @@ _g('AVESTOCK', {'product': 'SKU Наименование', 'pharmacy': 'Адре
 _g('RADUGAKARISIK', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('URAZMANOV', {'product': 'Наименование', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Наименование'})
 _g('A5', {'product': 'Товар', 'pharmacy': 'Аптека', 'count': '', 'amount': 'ПродажиД Кол-во упак с учетом разбивок', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'ПродажиД Кол-во упак с учетом разбивок'})
-_g('RIGLA', {'product': 'Наименование', 'pharmacy': 'Сайт', 'count': 'Продажи, уп', 'amount': 'Продажи, закуп', 'pharmacyNo': 'Код АП', 'city': '', 'remCount': '', 'remAmount': '', 'lastColumn': 'Продажи, закуп'})
+# RIGLA: eczane ADRESI 'Адрес аптеки' kolonunda (onceki 'Сайт' bu dosya
+# formatinda YOK -> pharmacy bos/yanlis kolona dusup 'Аптека' sutununa sayi
+# yaziyordu). pharmacyNo 'Код АП' (aptek kodu) ayri kalir.
+_g('RIGLA', {'product': 'Наименование', 'pharmacy': 'Адрес аптеки', 'count': 'Продажи, уп', 'amount': 'Продажи, закуп', 'pharmacyNo': 'Код АП', 'city': '', 'remCount': '', 'remAmount': '', 'lastColumn': 'Продажи, закуп'})
 _g('RIIGLA', {'product': 'Наименование', 'pharmacy': 'Сайт', 'count': 'Продажи, уп', 'amount': 'Продажи, закуп', 'pharmacyNo': 'Код АП', 'city': '', 'remCount': '', 'remAmount': '', 'lastColumn': 'Продажи, закуп'})
 _g('UNIVERSTITETSKIE', {'product': 'Номенклатура', 'pharmacy': '', 'count': '', 'amount': '', 'pharmacyNo': '', 'city': '', 'remCount': '', 'remAmount': '', 'subgroup': '', 'lastColumn': 'Номенклатура'})
 _g('PLANETZDOROVIYA', {'product': 'Наименование товара', 'pharmacy': '', 'count': 'Продажи (кол-во)', 'amount': 'Продажи (сумма прих)', 'pharmacyNo': '', 'city': 'Регион', 'remCount': 'Остатки (кол-во)', 'remAmount': 'Остатки (сумма прих)', 'subgroup': '', 'lastColumn': 'Остатки (сумма прих)'})
