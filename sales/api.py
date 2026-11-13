@@ -1770,6 +1770,13 @@ def distributor_upload_save_api(request):
     except ValueError:
         return Response({"error": "Неверный формат даты."}, status=400)
 
+    # Bitis tarihi baslangictan ONCE olamaz (bozuk rep_end < rep_begin kaydini
+    # engelle).
+    if begin_date and end_date and end_date < begin_date:
+        return Response(
+            {"error": "Дата окончания не может быть раньше даты начала."},
+            status=400)
+
     try:
         rows = [
             ParsedRow(
@@ -2688,6 +2695,13 @@ def depo_upload_preview_api(request):
             end_date = _dt.strptime(end_date_str, "%Y-%m-%d").date()
     except ValueError:
         return Response({"error": "Неверный формат даты."}, status=400)
+
+    # Bitis tarihi baslangictan ONCE olamaz (Olga: boyle bozuk kayitlar eski
+    # veride vardi, rep_end < rep_begin; yuklemeyi engelle).
+    if begin_date and end_date and end_date < begin_date:
+        return Response(
+            {"error": "Дата окончания не может быть раньше даты начала."},
+            status=400)
 
     # --- Dosya ac + parse + kayit: hepsini try/except'e sar. Hata olursa
     # kullaniciya ANLASILIR Rusca mesaj doner; tam traceback sunucu log'una
@@ -5107,6 +5121,12 @@ def distributor_report_api(request):
 
             where = ["rep_begin_date >= %s", "rep_begin_date <= %s"]
             params = [str(d_begin), str(d_end)]
+            # Bozuk kayitlari ATLA: eski veride rep_end_date < rep_begin_date
+            # olan satirlar var (ornek ГРАНД КАПИТАЛ: begin=01.07, end=30.04).
+            # Rapor sadece rep_begin_date'e baktigi icin bunlari yanlis aya
+            # koyuyordu (Olga: "странные цифры, загрузки не было"). Boyle
+            # tutarsiz satirlari rapora alma.
+            where.append("rep_end_date >= rep_begin_date")
             if op:
                 where.append("optype = %s")
                 params.append(_op2legacy.get(op, op))
