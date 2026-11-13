@@ -121,7 +121,12 @@ SIMPLE_CONFIGS = {
     # kolonunda. pharmacy=Адрес yapildi ('Аптека' idi -> adres yerine sayi
     # goruluyordu). city=Нас.Пункт (sehir) dogru.
     "FARMLEND": _sv("FARMLEND", 'Product', 'Адрес', 'ПРОДАЖИ УП', '', '', 'Нас.Пункт', '', '', 'ПРОДАЖИ УП'),
-    "GARMONIYA_ZDOROVIYA": _sv("GARMONIYA_ZDOROVIYA", 'Продукт', 'Аптека', 'Продажи', 'СумПроизв', '', 'Адрес', '', '', 'СумПроизв'),
+    # GARMONIYA: eczane ADRESI 'Адрес' kolonunda (Тюмень, Новгородская, 9Б);
+    # 'Аптека' kolonu aptek ADI (Тмн Аптека №24). Diger setlerdeki gibi
+    # pharmacy=ADRES olsun; ayri sehir kolonu yok (Адрес sehri de iceriyor),
+    # city bos. (Onceden pharmacy='Аптека' + city='Адрес' idi -> adres yanlis
+    # 'Город' sutununda goruluyordu.)
+    "GARMONIYA_ZDOROVIYA": _sv("GARMONIYA_ZDOROVIYA", 'Продукт', 'Адрес', 'Продажи', 'СумПроизв', '', '', '', '', 'СумПроизв'),
     "PLANET_ZDOROVYIA_SM": _sv("PLANET_ZDOROVYIA_SM", 'Наименование товара', 'Аптека', 'Продажи (кол-во)', 'Продажи (сумма прих)', '', 'Регион', '', '', 'Продажи (сумма прих)'),
     "FARMACEVT_PLYUS": _sv("FARMACEVT_PLYUS", 'Номенклатура', 'Аптека Краткое наименование', 'Продажи упаковки', 'Продажи в ценах поставщика с НДС', '', '', '', '', 'Продажи в ценах поставщика с НДС'),
     "PERVAYA_POMOSH_BARNAUL": _sv("PERVAYA_POMOSH_BARNAUL", 'Наименование', 'аптечный пункт', 'продано', '', '', '', 'Остаток', '', 'аптечный пункт'),
