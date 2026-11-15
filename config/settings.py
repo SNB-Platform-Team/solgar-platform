@@ -84,6 +84,10 @@ MIDDLEWARE: list[str] = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    # GUVENLIK: login brute-force kilidi. CSRF'ten sonra (CSRF gecerli
+    # istekleri degerlendirsin), auth'tan once. /login/ ve /admin/login/
+    # POST'larini IP+kullanici sayacindan gecirir.
+    "accounts.middleware.LoginRateLimitMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -185,13 +189,28 @@ DATABASE_ROUTERS = ["config.routers.ReferenceRouter"]
 AUTH_USER_MODEL: str = "accounts.User"
 
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "sono-cache",
-        "OPTIONS": {"MAX_ENTRIES": 500},
+# GUVENLIK NOTU: Rate-limit / hesap-kilitleme sayaclari bu cache'te tutulur.
+# LocMemCache her gunicorn worker'inda AYRIDIR -> cok-worker'li prod'da
+# sayaclar paylasilmaz ve brute-force korumasi guvenilmez olur. Bu yuzden
+# REDIS_URL set edilmisse Redis kullanilir (tum worker'lar ayni sayaci gorur);
+# yoksa LocMem'e duser (local dev / tek-worker). Azure'da REDIS_URL set edince
+# kod degismeden Redis'e gecer.
+_REDIS_URL: str = get_secret("REDIS_URL", "")
+if _REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _REDIS_URL,
+        }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "sono-cache",
+            "OPTIONS": {"MAX_ENTRIES": 500},
+        }
+    }
 
 
 #  Password validation
@@ -213,6 +232,19 @@ RECAPTCHA: dict[str, str] = {
     "SECRET_KEY": get_secret("RECAPTCHA_SECRET_KEY", ""),
     "MIN_SCORE": get_secret("RECAPTCHA_MIN_SCORE", "0.5"),
 }
+# GUVENLIK: CAPTCHA zorunlulugu (fail-closed).
+# Onceden verify_recaptcha, SECRET_KEY bos oldugunda True donuyordu; prod'da
+# anahtar set edilmezse CAPTCHA fiilen devre disi kaliyordu (pentest: "bos
+# token'la gectim"). Artik:
+#   - RECAPTCHA_ENFORCE=True  -> CAPTCHA ZORUNLU. Secret yoksa ya da token
+#     bos/gecersizse login REDDEDILIR (fail-closed).
+#   - RECAPTCHA_ENFORCE ayarlanmazsa: prod'da (DEBUG kapali) otomatik True,
+#     local'de (DEBUG acik) False (gelistirme bloke olmasin).
+# Boylece canlida anahtarin set edildigini varsayar; set edilmemisse giris
+# acilmaz, sessizce bypass OLMAZ.
+RECAPTCHA_ENFORCE: bool = (
+    get_secret("RECAPTCHA_ENFORCE", "True" if not DEBUG else "False") == "True"
+)
 
 #  Azure AD (filled in when SSO is wired up)
 AZURE_AD: dict[str, str] = {

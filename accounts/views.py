@@ -59,21 +59,35 @@ def verify_recaptcha(token: str, remote_ip: str | None = None) -> bool:
     """
     Verify a reCAPTCHA v3 token with Google's siteverify endpoint.
 
-    Returns True automatically when no secret key is configured, so local
-    development is not blocked before keys exist.
+    GUVENLIK (fail-closed): Onceden secret bos oldugunda True donuyordu, bu da
+    prod'da anahtar set edilmezse CAPTCHA'yi tamamen devre disi birakiyordu
+    (pentest: bos token'la giris). Artik davranis settings.RECAPTCHA_ENFORCE'a
+    baglidir:
+      - ENFORCE acik (prod varsayilani): secret yoksa VEYA token bos/gecersizse
+        False (giris reddedilir). CAPTCHA atlanamaz.
+      - ENFORCE kapali (local dev varsayilani): secret yoksa True (gelistirme
+        bloke olmaz). Bu YALNIZCA DEBUG ortaminda otomatik devrededir.
 
     Args:
         token: Client-side reCAPTCHA token.
         remote_ip: Optional client IP address.
 
     Returns:
-        True if verification passes or is skipped, False otherwise.
+        True if verification passes, False otherwise.
     """
+    enforce: bool = getattr(settings, "RECAPTCHA_ENFORCE", not settings.DEBUG)
     secret: str = settings.RECAPTCHA["SECRET_KEY"]
-    if not secret:
-        return True
 
-    payload: dict[str, str] = {"secret": secret, "response": token}
+    # Anahtar yoksa: enforce'ta REDDET (fail-closed), degilse local dev -> gec.
+    if not secret:
+        return not enforce
+
+    # Enforce'ta bos/eksik token dogrudan reddedilir (Google'a gitmeye gerek
+    # yok; zaten basarisiz olur ama acikca kesmek daha net ve hizli).
+    if enforce and not (token or "").strip():
+        return False
+
+    payload: dict[str, str] = {"secret": secret, "response": token or ""}
     if remote_ip:
         payload["remoteip"] = remote_ip
 
@@ -84,7 +98,10 @@ def verify_recaptcha(token: str, remote_ip: str | None = None) -> bool:
         ) as response:
             result: dict[str, Any] = json.loads(response.read().decode())
     except Exception:
-        return False
+        # Google'a ulasilamadi. Enforce'ta fail-closed (giris reddedilir);
+        # degilse gecise izin ver (dev). Prod'da gecici Google kesintisi
+        # girisleri durdurabilir — bu bilincli bir guvenlik tercihidir.
+        return not enforce
 
     min_score = float(settings.RECAPTCHA["MIN_SCORE"])
     return bool(result.get("success")) and result.get("score", 0) >= min_score
@@ -103,25 +120,48 @@ def login_view(request: HttpRequest) -> HttpResponse:
     }
 
     if request.method == "POST" and form.is_valid():
+        from . import ratelimit
+
+        username: str = form.cleaned_data["username"]
+
+        # 1) Brute-force kilidi: IP ya da kullanici sayaci esigi astiysa,
+        #    sifre dogru olsa bile giris penceresi boyunca reddet. Boylece
+        #    sinirsiz deneme yapilamaz (pentest: "bir brute baslatirim").
+        if ratelimit.is_locked(request, username):
+            messages.error(
+                request,
+                "Слишком много попыток входа. Попробуйте позже.",  # Too many attempts
+            )
+            return render(request, "accounts/login.html", context, status=429)
+
+        # 2) CAPTCHA (fail-closed; verify_recaptcha enforce'a gore davranir).
         token: str = form.cleaned_data["recaptcha_token"]
-        if not verify_recaptcha(token, request.META.get("REMOTE_ADDR")):
+        if not verify_recaptcha(token, ratelimit.client_ip(request)):
+            # Basarisiz CAPTCHA da bir deneme olarak sayilir (token olmadan
+            # brute-force denemesi sayaci yesin).
+            ratelimit.register_failure(request, username)
             messages.error(request, "reCAPTCHA verification failed. Please try again.")
             return render(request, "accounts/login.html", context)
 
         user = authenticate(
             request,
-            username=form.cleaned_data["username"],
+            username=username,
             password=form.cleaned_data["password"],
         )
 
         if user is None:
+            ratelimit.register_failure(request, username)
             messages.error(request, "Invalid username or password.")
             return render(request, "accounts/login.html", context)
 
         if not user.is_enabled:
+            # Devre disi hesap: sayaci artirmiyoruz (kimlik bilgisi dogru),
+            # ama girise de izin yok.
             messages.error(request, "This account is disabled.")
             return render(request, "accounts/login.html", context)
 
+        # Basarili: bu kullanici+IP sayaclarini temizle.
+        ratelimit.reset(request, username)
         login(request, user)
         return redirect("accounts:home")
 

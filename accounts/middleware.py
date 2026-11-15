@@ -1,5 +1,6 @@
 """Middleware that records user activity (page views and actions)."""
 
+from django.http import HttpResponse
 from django.utils.deprecation import MiddlewareMixin
 
 
@@ -114,3 +115,57 @@ class ActivityLogMiddleware(MiddlewareMixin):
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR")
+
+
+# --- Login brute-force korumasi ---------------------------------------------
+# accounts.ratelimit sayaclarini login POST'larina uygular. Iki login yolu
+# korunur:
+#   - /login/        -> accounts.views.login_view (kendi sayim akisi da var)
+#   - /admin/login/  -> Django admin'in kendi formu (baska koruma YOK)
+# Pentest bulgusu: admin paneli brute-force ile alinmis; admin login hic hiz
+# siniri gormuyordu. Bu middleware admin login dahil tum login POST'larini
+# ayni IP + kullanici sayacindan gecirir. Cift sayimi onlemek icin form
+# login'inin (/login/) sayimini login_view'a birakir (orada CAPTCHA/disabled
+# ayrimi daha dogru); middleware yalnizca admin login'i sayar. KILIT kontrolu
+# her iki yolda da uygulanir.
+_FORM_LOGIN_PATHS = ("/login/",)
+_ADMIN_LOGIN_PATHS = ("/admin/login/",)
+
+
+class LoginRateLimitMiddleware:
+    """Login POST'larina IP+kullanici bazli kilit uygular."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from . import ratelimit
+
+        path = request.path
+        is_form = request.method == "POST" and path in _FORM_LOGIN_PATHS
+        is_admin = request.method == "POST" and path in _ADMIN_LOGIN_PATHS
+
+        if not (is_form or is_admin):
+            return self.get_response(request)
+
+        username = (request.POST.get("username") or "").strip()
+
+        # 1) Kilitliyse view'a hic gitme (hem form hem admin icin).
+        if ratelimit.is_locked(request, username):
+            return HttpResponse(
+                "Слишком много попыток входа. Попробуйте позже.",
+                status=429,
+                content_type="text/plain; charset=utf-8",
+            )
+
+        response = self.get_response(request)
+
+        # 2) Sayim: SADECE admin login (form login'i login_view kendi sayar).
+        #    Django admin: basari -> 3xx redirect; basarisiz -> 200 (form).
+        if is_admin:
+            if 300 <= response.status_code < 400:
+                ratelimit.reset(request, username)
+            else:
+                ratelimit.register_failure(request, username)
+
+        return response
