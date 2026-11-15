@@ -6,12 +6,13 @@ from .pharmacy_parser import PharmacyConfig, Layout
 
 
 def _sv(company, product, pharmacy, count, amount, pharmacy_no, city,
-        rem_count, rem_amount, last_column):
+        rem_count, rem_amount, last_column, pharmacy_prefix=""):
     return PharmacyConfig(
         company=company, operation="SALES", layout=Layout.VERTICAL,
         product=product, pharmacy=pharmacy, count=count, amount=amount,
         pharmacy_no=pharmacy_no, city=city, remains_count=rem_count,
         remains_amount=rem_amount, last_column=last_column,
+        pharmacy_prefix=pharmacy_prefix,
     )
 
 
@@ -118,9 +119,13 @@ SIMPLE_CONFIGS = {
     "POLZA.RU": _sv("POLZA.RU", 'Продукт', '', 'Сумма по полю Продано шт.', '', '', '', '', '', 'Сумма по полю Продано шт.'),
     "EDELVES": _sv("EDELVES", 'Наименование', 'Аптека', 'Количество продаж, шт', '', '', '', '', '', 'Количество продаж, шт'),
     # FARMLEND: 'Аптека' kolonu aptek KODU (sayi), eczane ADRESI 'Адрес'
-    # kolonunda. pharmacy=Адрес yapildi ('Аптека' idi -> adres yerine sayi
-    # goruluyordu). city=Нас.Пункт (sehir) dogru.
-    "FARMLEND": _sv("FARMLEND", 'Product', 'Адрес', 'ПРОДАЖИ УП', '', '', 'Нас.Пункт', '', '', 'ПРОДАЖИ УП'),
+    # kolonunda. ANCAK 'Адрес' SEHIRSIZ (sadece sokak+ev, ornek
+    # "Голубятникова ул., 5"); sehir AYRI 'Нас.Пункт' kolonunda (Казань). Tek
+    # basina 'Адрес' -> sehirsiz adres -> belirsiz adrese dusuyordu (Olga).
+    # Cozum: pharmacy='Адрес' + pharmacy_prefix='Нас.Пункт' -> parser sehri
+    # adresin onune ekler ("Казань, Голубятникова ул., 5"). city bosaltildi:
+    # sehir artik pharmacy icinde, ayrica city kolonunda tekrar edilmesin.
+    "FARMLEND": _sv("FARMLEND", 'Product', 'Адрес', 'ПРОДАЖИ УП', '', '', '', '', '', 'ПРОДАЖИ УП', pharmacy_prefix='Нас.Пункт'),
     # GARMONIYA: eczane ADRESI 'Адрес' kolonunda (Тюмень, Новгородская, 9Б);
     # 'Аптека' kolonu aptek ADI (Тмн Аптека №24). Diger setlerdeki gibi
     # pharmacy=ADRES olsun; ayri sehir kolonu yok (Адрес sehri de iceriyor),

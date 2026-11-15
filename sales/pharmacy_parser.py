@@ -119,6 +119,12 @@ class PharmacyConfig:
     # SimpleVertical alanlari (Java UkVerticalSimpleParser parametreleri)
     product: str = ""
     pharmacy: str = ""       # prmAddress
+    # pharmacy_prefix: doluysa, pharmacy (adres) degerinin ONUNE bu kolonun
+    # degeri + ", " eklenir. FARMLEND gibi adresin SEHIRSIZ oldugu (sadece
+    # sokak+ev) ve sehrin AYRI bir kolonda ('Нас.Пункт') durdugu dosyalar
+    # icin: pharmacy='Адрес', pharmacy_prefix='Нас.Пункт' ->
+    # "Казань, Голубятникова ул., 5". Bos ise davranis degismez (concat yok).
+    pharmacy_prefix: str = ""
     count: str = ""
     amount: str = ""
     pharmacy_no: str = ""
@@ -174,7 +180,11 @@ class PharmacyParser:
         p = cfg
         start_row = 0
         col = {"product": 0, "pharmacy": 0, "count": 0, "amount": 0,
-               "pharmacy_no": 0, "city": 0, "remains_count": 0, "remains_amount": 0}
+               "pharmacy_no": 0, "city": 0, "remains_count": 0, "remains_amount": 0,
+               "pharmacy_prefix": 0}
+        # pharmacy_prefix kolonu GERCEKTEN bulundu mu? (0 varsayilan kolon
+        # indeksiyle karismasin diye ayri bayrak). Yalniz bulunursa concat edilir.
+        _has_prefix = False
         break_for = False
 
         for row_no in range(v_limit):
@@ -188,6 +198,9 @@ class PharmacyParser:
                     start_row = row_no + 1
                 if self._hmatch(cell, p.pharmacy):
                     col["pharmacy"] = col_no
+                if p.pharmacy_prefix and self._hmatch(cell, p.pharmacy_prefix):
+                    col["pharmacy_prefix"] = col_no
+                    _has_prefix = True
                 if self._hmatch(cell, p.count):
                     col["count"] = col_no
                 if self._hmatch(cell, p.amount):
@@ -220,8 +233,20 @@ class PharmacyParser:
 
             if p.pharmacy:
                 v = self._read(sheet, col["pharmacy"], i)
-                rec["SALESREADER"] = v if self._ne(v) else ""
-                rec["PHARMACY"] = v if self._ne(v) else ""
+                v = v if self._ne(v) else ""
+                # pharmacy_prefix doluysa ve kolonu bulunduysa: sehir + ", " + adres.
+                # FARMLEND: 'Нас.Пункт' (Казань) + 'Адрес' (sadece sokak+ev) ->
+                # tam adres. Prefix bos ya da adres bos ise tek deger kalir
+                # (cift virgul / bosta virgul uretmeyiz).
+                if _has_prefix:
+                    pv = self._read(sheet, col["pharmacy_prefix"], i)
+                    pv = pv.strip() if self._ne(pv) else ""
+                    if pv and v:
+                        v = pv + ", " + v
+                    elif pv:
+                        v = pv
+                rec["SALESREADER"] = v
+                rec["PHARMACY"] = v
             else:
                 rec["SALESREADER"] = ""
                 rec["PHARMACY"] = ""
