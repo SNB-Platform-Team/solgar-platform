@@ -4829,6 +4829,78 @@ def pharmacy_equipment_meta_api(request):
     })
 
 
+@api_view(["GET"])
+@permission_classes([IsEquipmentDemoUser])  # Оборудование DEMO
+def pharmacy_equipment_subtypes_api(request):
+    """Bir promo'nun ПОДТИП (subtype) + РАЗМЕР (size) listesi, markaya gore.
+
+    Kaynak: solgar_prm.prm_pos_classification (refdb). Kolon eslesmesi (tablo
+    adlandirmasi tuhaf):
+      marketing  -> promo        (ornek 'Стойка', 'Ролл-ап')
+      medrep     -> подтип       (ornek 'Стойка закрытая узкая белая')
+      dimensions -> размер       (ornek '210х75х37', 'индивидуальные')
+      brand      -> SL / BN
+
+    Marka kullanicinin e-postasindan belirlenir (SOLGAR->SL, BOUNTY->BN).
+    Olga: Стойка подтip'leri markaya gore FARKLI (SL 8, BN 3). Frontend подтип'i
+    GORSELLE sectirir (ad -> frontend static gorsel), secilince размер otomatik
+    dolar ve disable olur. Bu yuzden размер'i kullanici GIRMEZ; buradan gelir.
+
+    Parametre: ?promo=Стойка  (zorunlu). Donen:
+      {promo, brand, subtypes: [{podtip, razmer}, ...]}
+    подтип'e gore A-Z sirali; ayni подтип birden fazla satirda ise ilk размер.
+    """
+    from .equipment_catalog import brand_from_email
+
+    promo = (request.GET.get("promo") or "").strip()
+    if not promo:
+        return Response({"error": "promo gerekli."}, status=400)
+
+    brand_full = brand_from_email(getattr(request.user, "email", "") or "")
+    # prm_pos_classification.brand: 'SL' / 'BN'. Katalog brand'i SOLGAR/BOUNTY.
+    brand_code = "BN" if "BOUNTY" in brand_full.upper() else "SL"
+
+    sql = (
+        "SELECT medrep AS podtip, dimensions AS razmer "
+        "FROM solgar_prm.prm_pos_classification "
+        "WHERE TRIM(marketing) = %s AND UPPER(TRIM(brand)) = %s "
+        "AND medrep IS NOT NULL AND TRIM(medrep) <> '' "
+        "ORDER BY medrep"
+    )
+    from django.db import connections
+    rows = []
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(sql, [promo, brand_code])
+            rows = cur.fetchall() or []
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger("sales.equipment").warning(
+            "equipment_subtypes sorgu hatasi (promo=%s brand=%s): %s",
+            promo, brand_code, exc,
+        )
+        return Response({"error": "Не удалось получить подтипы."}, status=500)
+
+    # Ayni подтип birden fazla gelirse ilkini tut (размер ayni olmali zaten).
+    seen = set()
+    subtypes = []
+    for podtip, razmer in rows:
+        p = (str(podtip).strip() if podtip else "")
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        subtypes.append({
+            "podtip": p,
+            "razmer": (str(razmer).strip() if razmer else ""),
+        })
+
+    return Response({
+        "promo": promo,
+        "brand": brand_full,
+        "subtypes": subtypes,
+    })
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def blob_selftest_api(request):
