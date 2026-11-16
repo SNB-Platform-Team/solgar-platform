@@ -4342,6 +4342,24 @@ def pharmacy_create_api(request):
         obj.save(using="refdb")
     except Exception as exc:
         return Response({"error": f"Ошибка сохранения: {exc}"}, status=500)
+
+    # pharmacy_id doldur: legacy tabloda her kaydin bir pharmacy_id'si var ve
+    # DUZGUN kayitlarda pharmacy_id == id (Кучин'in kayitlari boyle). Ama model
+    # default'u 0 oldugu icin, kullanici/form pharmacy_id gondermezse yeni kayit
+    # pharmacy_id=0 ile kaliyordu (Нечаева: id=361942 ama pharmacy_id=0).
+    # Bu durumda corner/ekipman eslesmesi (_legacy_pharmacy_id ... WHERE id=%s
+    # -> pharmacy_id) 0 doner ve "ID calismiyor" gorunur. Cozum: pharmacy_id
+    # bos/0 ise yeni atanan PK id ile esitle (pharmacy_id = id). Kullanici
+    # acikca bir pharmacy_id girdiyse ona dokunmayiz.
+    try:
+        if not getattr(obj, "pharmacy_id", 0):
+            obj.pharmacy_id = obj.id
+            obj.save(using="refdb", update_fields=["pharmacy_id"])
+    except Exception:
+        # pharmacy_id doldurulamazsa kayit yine de olustu; sessiz gec
+        # (eslesme _legacy_pharmacy_id fallback'iyle PK'ya duser).
+        pass
+
     return Response({"id": obj.id, "error": ""})
 
 
