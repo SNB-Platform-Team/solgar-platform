@@ -1,0 +1,1 @@
+import{y as e}from"./index-BWT53Lt2.js";var t=e;export{t as component};
