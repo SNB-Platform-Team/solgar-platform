@@ -86,6 +86,9 @@ class IsSuperOrStaff(BasePermission):
 EQUIPMENT_DEMO_EMAILS = frozenset({
     "ofedorova@solgarvitamin.ru",
     "ccevik@solgarvitamin.ru",
+    # Yonetici (iki hesabi da: hangisiyle girerse Оборудование'yi gorsun).
+    "hkayakutlu@solgarvitamin.ru",
+    "h.kayakutlu@aztekteknoloji.com",
 })
 
 
