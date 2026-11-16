@@ -2146,13 +2146,20 @@ def me_api(request):
         except Exception:
             screens = []
 
-        # Мед. представитель: medrep (Сотрудник, is_staff=False) kullanicinin
+        # Мед. представитель: SADECE saf saha temsilcisi (medrep) kullanicinin
         # SSO maili solgar_org.employees'teki ACTIVE bir medrep ile eslesirse
-        # EMPLOYEE_NAME doner. Frontend bu ismi doktor sayfasinda otomatik
-        # doldurup disable eder. Eslesme yoksa "" (bos ama yine disable).
-        # Admin/Menecer (is_staff=True) icin gonderilmez -> onlar serbest secer.
+        # EMPLOYEE_NAME doner. Frontend bu ismi apteka/doktor sayfasinda
+        # otomatik doldurup disable eder. Eslesme yoksa "" (bos ama yine
+        # disable).
+        #
+        # Ayrim is_staff'a DEGIL, ekran yetkisine baglidir (_is_row_restricted
+        # ile ayni kaynak). Territoryal menecer gibi is_staff=False olan ama
+        # "Аптеки Обзор" (PHARM_MGR) ekrani olan kullanicilar medrep DEGILDIR:
+        # onlara ФИО gonderilmez, medrep'i SERBEST secerler (Olga: Нечаева
+        # territoryal menecer, kendi FIO'su kilitleniyordu — secebilmeli).
+        # Sadece gercek medrep (PHARM_MGR'a gore satir-kisitli) icin doldurulur.
         medrep_name = ""
-        if not request.user.is_staff:
+        if _is_row_restricted(request.user, "PHARM_MGR"):
             try:
                 medrep_name = _medrep_name_from_email(
                     getattr(request.user, "email", "") or ""
