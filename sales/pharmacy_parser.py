@@ -242,7 +242,7 @@ class PharmacyParser:
                     pv = self._read(sheet, col["pharmacy_prefix"], i)
                     pv = pv.strip() if self._ne(pv) else ""
                     if pv and v:
-                        v = pv + ", " + v
+                        v = pv + "," + v
                     elif pv:
                         v = pv
                 rec["SALESREADER"] = v
