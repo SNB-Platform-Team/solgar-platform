@@ -216,6 +216,17 @@ C1_CONFIGS = {
 }
 
 MATRIX_CONFIGS = {
+    # ALOE (= eski sunucuda EDIFARM adiyla yuklenen ag; PBI/raporda ALOE
+    # gorunur). SATIS dosyasi: sheet 'продажи', MATRIS layout — EDIFARM satis
+    # formatiyla AYNI (product=col0, aptek basliklari row4, veri row7+,
+    # data_start_col=2). ALOE'nun ayri STOCK config'i (STOCK_MATRIX_CONFIGS,
+    # sheet 'остаток') zaten vardi ama SATIS config'i yoktu -> ALOE satis
+    # dosyasi yuklenemiyordu (Victoria: "не удалось загрузить АС Алоэ").
+    # header_marker 'Номенклатура' ile dinamik baslik: aylik dosyalarda baslik
+    # satiri kayabilir (STOCK config'iyle ayni gerekce). col son=Итого ve son
+    # satir=Итого skip_last ile atlanir.
+    "ALOE": {"product_axis": "col", "header_marker": "Номенклатура",
+             "skip_last_col": True, "skip_last_row": True, "sheet": "продажи"},
     "SALAMAT": {"product_axis": "col", "product_index": 0, "aptek_index": 0, "data_start_row": 2, "data_start_col": 1},
     "ASNA": {"product_axis": "col", "product_index": 0, "aptek_index": 1, "data_start_row": 2, "data_start_col": 4},
     "IMPLOSIA": {"product_axis": "row", "product_index": 3, "aptek_index": 1, "data_start_row": 4, "data_start_col": 7, "skip_last_col": True},
