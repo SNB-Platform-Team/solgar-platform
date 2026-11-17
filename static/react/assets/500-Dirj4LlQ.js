@@ -1,0 +1,1 @@
+import{b as e}from"./index-Kfsck_VU.js";var t=e;export{t as component};
