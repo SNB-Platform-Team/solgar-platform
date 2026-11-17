@@ -1871,6 +1871,9 @@ def pharmacy_filter_options_api(request):
         "assortiments": _safe(repo.assortiments, brand),
         "skus": _safe(repo.skus, brand),
         "statuses": _safe(repo.pharmacy_statuses, brand, country=country),
+        # Активность (Актив / Не Актив / Закрыта) — Olga: Аптека Управление
+        # данными filtre grubuna eklendi. pharmacy_activeness distinct.
+        "activenesses": _safe(repo.pharmacy_activenesses, brand),
         # Kaskadsiz tam cografi listeler (ust secime bagli degil):
         # metros() country/area/region almaz (prm_sales_district tam liste).
         "areas": _safe(repo.areas, brand, country=country),
@@ -1943,6 +1946,9 @@ def doctor_filter_options_api(request):
         "unified_specialties": _safe(repo.unified_specialties),
         "medreps": _safe(repo.medreps),
         "clinics": _safe(repo.clinic_names),
+        # Активность (Актив / Не Актив / Закрыта) — Olga: Врачи Управление
+        # данными filtre grubuna eklendi (eczane ile ayni). activeness distinct.
+        "activenesses": _safe(repo.activenesses),
         # Kaskadsiz tam cografi listeler (ust secime bagli degil):
         "areas": _safe(repo.areas),
         "regions": _safe(repo.regions),

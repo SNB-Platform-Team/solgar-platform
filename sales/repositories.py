@@ -598,6 +598,13 @@ class DoctorRepository:
         except Exception:
             return self._distinct("clinic_name")
 
+    def activenesses(self) -> list:
+        """Активность (activeness) secenekleri: Актив / Не Актив / Закрыта.
+        Olga: Врачи Управление данными filtre grubuna da Актив\\Не Актив\\
+        Закрыта filtresi eklenecek (eczane ile ayni). doctor_data.activeness
+        distinct; bos/NULL atlanir."""
+        return self._distinct("activeness")
+
 
 class PharmacyRepository:
     """
@@ -794,6 +801,13 @@ class PharmacyRepository:
             return vals
         except Exception:
             return ["VIP", "GOLD", "INACTIVE", "STANDARD"]
+
+    def pharmacy_activenesses(self, brand: str = "") -> list:
+        """Активность (pharmacy_activeness) secenekleri: Актив / Не Актив /
+        Закрыта. Olga: Аптека Управление данными ekraninin filtre grubuna
+        Актив\\Не Актив\\Закрыта filtresi eklenecek. Degerler DB'den distinct
+        gelir (sabit degil); bos/NULL atlanir."""
+        return self._distinct(brand, "pharmacy_activeness")
 
     def pharmacy_categories(self, brand: str = "") -> list:
         """Distinct pharmacy categories."""

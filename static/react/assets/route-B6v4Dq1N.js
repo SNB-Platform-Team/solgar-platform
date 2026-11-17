@@ -1,0 +1,1 @@
+import{t as e}from"./authenticated-layout-BsEPAAMS.js";var t=e;export{t as component};
