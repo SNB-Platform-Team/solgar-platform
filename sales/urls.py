@@ -82,6 +82,7 @@ urlpatterns = [
     path("api/pharmacy/detail/", api.pharmacy_detail_api, name="pharmacy_detail_api"),
     path("api/pharmacy/corner-log/", api.pharmacy_corner_log_api, name="pharmacy_corner_log_api"),
     path("api/pharmacy/equipment/save/", api.pharmacy_equipment_save_api, name="pharmacy_equipment_save_api"),
+    path("api/pharmacy/equipment/update/", api.pharmacy_equipment_update_api, name="pharmacy_equipment_update_api"),    
     path("api/pharmacy/equipment/delete/", api.pharmacy_equipment_delete_api, name="pharmacy_equipment_delete_api"),
     path("api/pharmacy/equipment/meta/", api.pharmacy_equipment_meta_api, name="pharmacy_equipment_meta_api"),
     path("api/pharmacy/equipment/subtypes/", api.pharmacy_equipment_subtypes_api, name="pharmacy_equipment_subtypes_api"),

@@ -4804,6 +4804,124 @@ def pharmacy_equipment_delete_api(request):
     return Response({"ok": True})
 
 
+@api_view(["POST"])
+@permission_classes([IsEquipmentDemoUser])  # Оборудование DEMO: sadece Olga + Caner
+def pharmacy_equipment_update_api(request):
+    """
+    Var olan ekipman kaydini DUZENLE (multipart). Kullanici yanlis secimi ya da
+    eksik/fazla fotografi tabloda 'Редактировать' ile duzeltir.
+
+    multipart alanlar:
+      equipment_id        (zorunlu) - duzenlenecek kaydin PK'si
+      promo, subtype, size, imidzh  - yeni degerler (save ile ayni)
+      delete_photo_ids    - silinecek foto id'leri (virgulle ayrili ya da coklu alan)
+      photos              - EKLENECEK yeni dosyalar (0+)
+
+    Must-have имидж kurali save ile ayni: promo must-have ise имидж zorunlu.
+    Fotograf kurali: silme + ekleme sonrasi EN AZ 1 fotograf kalmali (tum
+    promo'larda kurulum fotografi zorunlu — frontend'le tutarli).
+    Doner: {row} (save ile ayni format).
+    """
+    from .models import PharmacyEquipment, PharmacyEquipmentPhoto
+    from sales import blob_storage as _blob
+    from .equipment_catalog import promo_requires_imidzh
+
+    eq_id = request.POST.get("equipment_id")
+    if not eq_id:
+        return Response({"error": "equipment_id gerekli."}, status=400)
+
+    try:
+        eq = PharmacyEquipment.objects.prefetch_related("photos").get(pk=eq_id)
+    except PharmacyEquipment.DoesNotExist:
+        return Response({"error": "Запись не найдена."}, status=404)
+
+    promo = (request.POST.get("promo") or "").strip()
+    subtype = (request.POST.get("subtype") or "").strip()
+    size = (request.POST.get("size") or "").strip()
+    imidzh = (request.POST.get("imidzh") or "").strip()
+
+    if not (promo or subtype):
+        return Response({"error": "Выберите промо и подтип."}, status=400)
+
+    # Must-have имидж (save ile ayni kural).
+    if promo_requires_imidzh(promo) and not imidzh:
+        return Response(
+            {"error": "Для этого промо необходимо выбрать имидж."}, status=400)
+
+    # Silinecek foto id'leri: 'delete_photo_ids' coklu alan ya da virgulle.
+    _del_raw = request.POST.getlist("delete_photo_ids")
+    if not _del_raw:
+        _one = request.POST.get("delete_photo_ids")
+        _del_raw = _one.split(",") if _one else []
+    del_ids = set()
+    for x in _del_raw:
+        x = str(x).strip()
+        if x.isdigit():
+            del_ids.add(int(x))
+
+    new_files = request.FILES.getlist("photos")
+
+    # Silme + ekleme SONRASI kac foto kalacak? En az 1 olmali.
+    remaining = [p for p in eq.photos.all() if p.id not in del_ids]
+    if len(remaining) + len(new_files) < 1:
+        return Response(
+            {"error": "Необходимо хотя бы одно фото с места установки."},
+            status=400)
+
+    try:
+        # 1) Alanlari guncelle.
+        eq.promo = promo
+        eq.subtype = subtype
+        eq.size = size
+        eq.imidzh = imidzh
+        eq.save(update_fields=["promo", "subtype", "size", "imidzh"])
+
+        # 2) Istenen fotolari sil (Blob + DB).
+        if del_ids:
+            for ph in eq.photos.all():
+                if ph.id in del_ids:
+                    try:
+                        if _blob.blob_configured():
+                            _blob.delete_blob(ph.blob_name)
+                    except Exception:
+                        pass
+                    ph.delete()
+
+        # 3) Yeni fotolari ekle (Blob'a yukle).
+        if new_files and _blob.blob_configured():
+            for f in new_files:
+                data = f.read()
+                ct = getattr(f, "content_type", "") or "image/jpeg"
+                name = getattr(f, "name", "") or ""
+                blob_name, _url = _blob.upload_photo(
+                    data, name, content_type=ct,
+                    prefix=f"equipment/{eq.pharmacy_id}",
+                )
+                PharmacyEquipmentPhoto.objects.create(
+                    equipment=eq, blob_name=blob_name, content_type=ct,
+                    original_name=name, size=len(data),
+                )
+    except Exception as exc:
+        import logging as _logging
+        return _upload_error_response(
+            _logging.getLogger("sales.equipment"), exc,
+            "Не удалось обновить оборудование.",
+            context=f"equipment update id={eq_id}",
+        )
+
+    eq.refresh_from_db()
+    st = int(eq.status or 0)
+    row = {
+        "id": eq.id, "source": "new", "apteka_id": eq.pharmacy_id,
+        "promo": eq.promo, "subtype": eq.subtype, "size": eq.size,
+        "imidzh": eq.imidzh,
+        "photos": _equipment_photo_list(eq),
+        "status": st, "status_label": _CORNER_STATUS_LABELS.get(st, str(st)),
+        "hardware_status": "", "hardware_status_label": "",
+    }
+    return Response({"row": row})
+
+
 @api_view(["GET"])
 @permission_classes([IsEquipmentDemoUser])  # Оборудование DEMO: sadece Olga + Caner
 def pharmacy_equipment_meta_api(request):
