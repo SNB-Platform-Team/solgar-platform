@@ -73,12 +73,26 @@ class ChainParser:
         records. Active brands are checked in priority order; the first
         whose keyword appears in the name wins. If none match, the default
         brand is used. Fully parametric — no brand is hard-coded.
+
+        ISTISNA (Olga 18.11.2026): urun adinda NEREDE olursa olsun 'Остео' /
+        'Osteo' geciyorsa marka HER ZAMAN OS'tur — urun adinda 'Нэйчес Баунти'
+        gecse bile (orn. "Нэйчес Баунти Остео Би-Флекс таб.№120" -> OS, BN degil).
+        Bu kural kesindir, bu yuzden BrandDefinition priority/keyword
+        taramasindan ONCE, sabit olarak uygulanir. Donen kod: varsa DB'deki
+        OS-kodlu BrandDefinition'un kodu, yoksa duz 'OS'.
         """
         name = product_name.lower()
         for apo in ("’", "‘", "`", "'"):
             name = name.replace(apo, "")
 
         brands = self._active_brands()
+
+        # --- Остео/Osteo -> HER ZAMAN OS (DB taramasindan once, kesin kural) ---
+        if "остео" in name or "osteo" in name:
+            for brand in brands:
+                if str(brand.code).upper() == "OS":
+                    return brand.code
+            return "OS"
 
         default_code = SalesRecord.Brand.SOLGAR  # fallback if no default set
         for brand in brands:
