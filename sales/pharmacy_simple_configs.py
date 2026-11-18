@@ -94,13 +94,14 @@ SIMPLE_CONFIGS = {
     # bulup taramayi erken durdurur (break_for) ve urun/miktar kolonlarini
     # goremezdi. Bos birakilinca tum baslik satiri taranir. Eski 'Лист2'
     # sabit-sayfa + ozel farmaimpeks_stock motoru kaldirildi.
-    "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', 'Остатки, шт', '', ''),
+    "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', 'Остатки, шт', '', 'Формат аптеки'),
     "SHAH": _sv("SHAH", 'Наименование ИРИС', 'Адрес', 'Количество в упак', 'Сумма в ценах закупки от первичных дист с НДС', '', 'Город', '', '', 'Сумма в ценах закупки от первичных дист с НДС'),
     "ZOLOTOE_YABLOKO": _sv("ZOLOTOE_YABLOKO", 'Наименование товара', 'Адрес', 'Продано упаковок', 'Сумма оборота, руб.', '', '', '', '', 'Сумма оборота, руб.'),
     # Dropdown'daki ad RU_ZOLOTOE_YOBLOKO (COUNTRY_CHAINS), parse config ise
     # ZOLOTOE_YABLOKO adiyla kayitliydi -> transliterasyon farki (YOBLOKO/YABLOKO)
     # yuzunden eslesmiyordu. Ayni config'i dropdown adiyla da ekliyoruz.
-    "RU_ZOLOTOE_YOBLOKO": _sv("RU_ZOLOTOE_YOBLOKO", 'Товар', '', 'Количество продаж, шт.', 'Выручка с НДС, руб.|Выручка, руб.', '', '', '', '', 'Выручка с НДС, руб.|Выручка, руб.'),    "FARM_HAB": _sv("FARM_HAB", 'Сматченное название', 'Адрес точки', 'Количество в шт.', 'Сумма в руб.', '', '', '', '', 'Сумма в руб.'),
+    "RU_ZOLOTOE_YOBLOKO": _sv("RU_ZOLOTOE_YOBLOKO", 'Товар', '', 'Количество продаж, шт.', 'Выручка с НДС, руб.|Выручка, руб.', '', '', '', '', 'Выручка с НДС, руб.|Выручка, руб.'),
+    "FARM_HAB": _sv("FARM_HAB", 'Сматченное название', 'Адрес точки', 'Количество в шт.', 'Сумма в руб.', '', '', '', '', 'Сумма в руб.'),
     "AC_SEMEINAYA": _sv("AC_SEMEINAYA", 'Товар', 'Аптека', 'Расход', '', '', '', '', 'КонОст', 'КонОст'),
     "SERDCE_ROSSII": _sv("SERDCE_ROSSII", 'Наименование', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
     "PETERBURGSKIYE": _sv("PETERBURGSKIYE", 'Номенклатура', 'Адрес', 'Продажи количество', 'Продажи стоимость', '', '', 'Остатки количество', 'Остатки стоимость', 'Остатки стоимость'),
