@@ -4540,6 +4540,33 @@ def _legacy_pharmacy_id(pharmacy_id, brand):
         return None
 
 
+def _pharmacy_address_by_legacy(legacy_pid, brand):
+    """legacy pharmacy_id -> aptek'in tam adresi (Оборудование tablosunda
+    gosterilsin diye). full_address (Yandex geocode) oncelikli; bos ise
+    pharmacy_address (medrep elle yazdigi) fallback. Hicbiri yoksa ''."""
+    if legacy_pid is None:
+        return ""
+    b = (brand or "SOLGAR").upper()
+    is_bounty = ("BOUNTY" in b or b == "BN")
+    data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
+    from django.db import connections
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                f"SELECT full_address, pharmacy_address FROM solgar_tst.{data_table} "
+                f"WHERE pharmacy_id = %s LIMIT 1",
+                [legacy_pid],
+            )
+            r = cur.fetchone()
+            if r:
+                full = (r[0] or "").strip()
+                pharm = (r[1] or "").strip()
+                return full or pharm
+    except Exception:
+        pass
+    return ""        
+
+
 def _equipment_photo_list(eq):
     """Bir PharmacyEquipment'in fotograf url listesi (SAS link'li)."""
     from sales import blob_storage as _blob
@@ -4683,8 +4710,15 @@ def pharmacy_corner_log_api(request):
         resolved_pid = int(legacy_pid)
     else:
         resolved_pid = int(obj_id) if str(obj_id).isdigit() else obj_id
+    # Оборудование tablosunda yonetici ID + tam adres gormek istiyor (Olga/Victoria).
+    address = ""
+    try:
+        address = _pharmacy_address_by_legacy(resolved_pid, brand)
+    except Exception:
+        address = ""
     return Response({
         "pharmacy_id": resolved_pid,
+        "address": address,
         "rows": rows,
         "demo": False,
     })
