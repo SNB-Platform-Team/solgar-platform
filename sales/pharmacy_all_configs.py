@@ -235,7 +235,7 @@ MATRIX_CONFIGS = {
     "ZHIVIKA": {"product_axis": "col", "product_index": 0, "aptek_index": 6, "data_start_row": 7, "data_start_col": 1},
     "OVITA": {"product_axis": "col", "product_index": 2, "aptek_index": 2, "data_start_row": 3, "data_start_col": 3},
     "VITA_SAMARA": {"product_axis": "col", "product_index": 1, "aptek_index": 1, "data_start_row": 2, "data_start_col": 6},
-    "DOCTOR_STOLETOV": {"product_axis": "col", "product_index": 1, "aptek_index": 4, "data_start_row": 6, "data_start_col": 9},
+    "DOCTOR_STOLETOV": {"product_axis": "col", "product_index": 1, "aptek_index": 4, "data_start_row": 6, "data_start_col": 9, "skip_zero": True},
     "EDIFARM": {"product_axis": "col", "product_index": 0, "aptek_index": 4, "data_start_row": 7, "data_start_col": 2},
     "FIALKA": {"product_axis": "col", "product_index": 0, "aptek_index": 5, "data_start_row": 7, "data_start_col": 1},
     "MELODIJA_ZDOROVJA": {"product_axis": "row", "product_index": 6, "aptek_index": 0, "data_start_row": 7, "data_start_col": 2},

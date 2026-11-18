@@ -234,10 +234,10 @@ class PharmacyParser:
             if p.pharmacy:
                 v = self._read(sheet, col["pharmacy"], i)
                 v = v if self._ne(v) else ""
-                # pharmacy_prefix doluysa ve kolonu bulunduysa: sehir + ", " + adres.
+                # pharmacy_prefix doluysa ve kolonu bulunduysa: sehir + "," + adres.
                 # FARMLEND: 'Нас.Пункт' (Казань) + 'Адрес' (sadece sokak+ev) ->
-                # tam adres. Prefix bos ya da adres bos ise tek deger kalir
-                # (cift virgul / bosta virgul uretmeyiz).
+                # tam adres (boskuksuz, Olga: "Казань,Чистопольская"). Prefix bos
+                # ya da adres bos ise tek deger kalir (cift virgul uretmeyiz).
                 if _has_prefix:
                     pv = self._read(sheet, col["pharmacy_prefix"], i)
                     pv = pv.strip() if self._ne(pv) else ""
@@ -668,6 +668,18 @@ class MatrixParser:
             s = str(prod).strip().replace(" ", "").replace(".", "").replace(",", "")
             return bool(s) and s.isdigit()
 
+        skip_zero = cfg.get("skip_zero", False)
+
+        def _is_zero(v):
+            # '0', '0.0', '0,00', ' 0 ' vb. hepsini 0 say; sayi degilse False.
+            s = str(v).strip().replace(" ", "").replace(",", ".")
+            if not s:
+                return False
+            try:
+                return float(s) == 0.0
+            except (TypeError, ValueError):
+                return False
+
         out = []
         rmax = v_limit - (1 if skip_last_row else 0)
         cmax = h_limit - (1 if skip_last_col else 0)
@@ -686,6 +698,8 @@ class MatrixParser:
                     val = _read2(sheet, j, i)
                     if not _ne2(val):
                         continue
+                    if skip_zero and _is_zero(val):
+                        continue
                     out.append(self._rec(product, aptek, val, main_group))
         else:
             # urun = ust satir (pidx) boyunca sutunlar; aptek = sol sutun (aidx) boyunca satirlar
@@ -701,6 +715,8 @@ class MatrixParser:
                         continue
                     val = _read2(sheet, j, i)
                     if not _ne2(val):
+                        continue
+                    if skip_zero and _is_zero(val):
                         continue
                     out.append(self._rec(product, aptek, val, main_group))
         return out
