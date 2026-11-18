@@ -101,14 +101,18 @@ def get_parser_config(file_name: str, is_sales: bool) -> Optional[DepoParserConf
 def classify_brand(product: str) -> str:
     """
     Urun adindan marka/tip belirle:
+      ОСТЕО/OSTEO          -> OS  (Olga 18.11.2026: Остео Би-Флекс gecen her
+                                   urun OS olmali — urun adinda 'Нэйчес Баунти'
+                                   gecse bile. Bu yuzden ОСТЕО kontrolu НЭЙЧЕС/
+                                   BOUNTY kontrolunden ONCE gelir ve OS doner.)
       БАУНТИ/BOUNTY/НЭЙЧЕС -> BN
-      ОСТЕО/OSTEO          -> BN  (Olga: Остео Би-Флекс her zaman Natures
-                                   Bounty sayilir; eskiden ayri 'OS' idi)
       diger                -> SL (Solgar)
+    Not: OS downstream'de Bounty toplamina katilir (product_type in (BN,OS)).
     """
     p = (product or "").upper()
-    if ("БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p
-            or "ОСТЕО" in p or "OSTEO" in p):
+    if "ОСТЕО" in p or "OSTEO" in p:
+        return "OS"
+    if "БАУНТИ" in p or "BOUNTY" in p or "НЭЙЧЕС" in p:
         return "BN"
     return "SL"
 
