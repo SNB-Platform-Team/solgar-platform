@@ -251,7 +251,7 @@ def azure_callback_view(request: HttpRequest) -> HttpResponse:
 
         level = level_for_email(email)
         if level is None:
-            level = AccessLevel.objects.filter(rank=1).order_by("rank").first()
+            level = AccessLevel.objects.filter(name__iexact="Medrep").first()
         if level:
             user.access_level = level
             user.save(update_fields=["access_level"])
