@@ -1,1 +1,0 @@
-import{b as e}from"./index-C-ZPr7JN.js";var t=e;export{t as component};
