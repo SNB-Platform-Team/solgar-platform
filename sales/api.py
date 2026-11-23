@@ -343,6 +343,7 @@ _PHARMACY_API_COLUMNS = [
     ("city", "City"),
     ("district", "District"),
     ("metro", "METRO"),
+    ("pharmacy_id", "PHARMACY_ID"),
     ("group_company", "GROUP COMPANY"),
     ("subgroup_company", "SUBGROUP COMPANY"),
     ("marketing_staff", "Marketing Staff"),
@@ -370,7 +371,6 @@ _PHARMACY_API_COLUMNS = [
     ("pharmacy_group", "Pharm Group"),
     ("sku", "SKU"),
     ("cornerNo", "Corner No"),
-    ("pharmacy_id", "PHARMACY_ID"),
     ("entry_user", "Entry User"),
     ("entry_date", "Entry Date"),
     ("pharmacist_name_1", "Pharmacist Name 1"),
@@ -457,7 +457,13 @@ def pharmacy_api(request):
     col_labels = [c[1] for c in _PHARMACY_API_COLUMNS]
     rows = []
     for rec in result["records"]:
-        rows.append([_json_safe(getattr(rec, k, "")) for k in col_keys])
+        row = []
+        for k in col_keys:
+            v = getattr(rec, k, "")
+            if k == "brand" and not (v or "").strip():
+                v = brand
+            row.append(_json_safe(v))
+        rows.append(row)
 
     return Response({
         "brands": PHARMACY_API_BRANDS,
