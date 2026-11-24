@@ -4806,11 +4806,11 @@ def pharmacy_equipment_save_api(request):
     # (status=0 bekliyor, pos_id kalici kimlik, equip_id/image_id siniflandirma
     # lookup'i). Bu yazim BASARISIZ olsa bile ekipman kaydi gecerli kalir
     # (sessiz loglanir), kullaniciya satir yine doner.
-    _write_corner_history(
-        eq, legacy_pid, brand_key,
-        (getattr(request.user, "email", "") or
-         getattr(request.user, "username", "") or ""),
-    )
+    #_write_corner_history(
+    #    eq, legacy_pid, brand_key,
+    #    (getattr(request.user, "email", "") or
+    #     getattr(request.user, "username", "") or ""),
+    #)
 
     st = int(eq.status or 0)
     row = {
