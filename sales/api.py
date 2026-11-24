@@ -4573,6 +4573,150 @@ def _pharmacy_address_by_legacy(legacy_pid, brand):
     return ""        
 
 
+def _equip_brand_code(brand_full) -> str:
+    """Equipment brand'i (SOLGAR/BOUNTY) -> legacy sinif kodu (SL/BN).
+    prm_pos_classification ve image_classification 'SL'/'BN' kullanir."""
+    b = (brand_full or "SOLGAR").strip().upper()
+    return "BN" if ("BOUNTY" in b or b == "BN") else "SL"
+
+
+def _norm_match(s) -> str:
+    """Eslesme icin normalize: strip + lower + ic bosluklari tek bosluga indir +
+    tire etrafindaki bosluklari kaldir. image_classification.descr_image ile
+    equipment imidzh adlari arasinda bosluk farklari var; ozellikle tire
+    etrafinda ('Омега-комплекс' vs 'Омега- комплекс', 'Эстер-С' vs 'Эстер- С')."""
+    import re as _re
+    v = _re.sub(r"\s+", " ", (s or "").strip()).lower()
+    v = _re.sub(r"\s*-\s*", "-", v)  # tire etrafi bosluk -> bitisik
+    return v
+
+
+def _lookup_equip_id(promo, subtype, size, brand_code):
+    """prm_pos_classification.id'yi bul: marketing=promo, medrep=подтип,
+    dimensions=размер, brand=SL/BN. Normalize (TRIM+bosluk+lower) eslesme.
+    Bulunamazsa None (cagiran NULL yazar + loglar)."""
+    from django.db import connections
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                "SELECT id, marketing, medrep, dimensions "
+                "FROM solgar_prm.prm_pos_classification "
+                "WHERE UPPER(TRIM(brand)) = %s",
+                [brand_code],
+            )
+            np, ns, nz = _norm_match(promo), _norm_match(subtype), _norm_match(size)
+            # once promo+подтип+размер tam (normalize) eslesme; yoksa promo+подтип.
+            cand_full = None
+            cand_ps = None
+            for rid, mk, md, dm in cur.fetchall():
+                if _norm_match(mk) == np and _norm_match(md) == ns:
+                    if cand_ps is None:
+                        cand_ps = rid
+                    if _norm_match(dm) == nz:
+                        cand_full = rid
+                        break
+            return cand_full or cand_ps
+    except Exception:
+        return None
+
+
+def _lookup_image_id(imidzh, brand_code):
+    """image_classification.id'yi bul: descr_image=имидж adi, brand=SL/BN.
+    Normalize eslesme. imidzh bos ya da bulunamazsa None."""
+    if not (imidzh or "").strip():
+        return None
+    from django.db import connections
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                "SELECT id, descr_image FROM solgar_cor.image_classification "
+                "WHERE UPPER(TRIM(brand)) = %s",
+                [brand_code],
+            )
+            ni = _norm_match(imidzh)
+            for rid, descr in cur.fetchall():
+                if _norm_match(descr) == ni:
+                    return rid
+            return None
+    except Exception:
+        return None
+
+
+def _country_by_legacy(legacy_pid, brand_full):
+    """legacy pharmacy_id -> aptek ulkesi (corner_history.country icin)."""
+    if legacy_pid is None:
+        return ""
+    b = (brand_full or "SOLGAR").upper()
+    is_bounty = ("BOUNTY" in b or b == "BN")
+    data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
+    from django.db import connections
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                f"SELECT country FROM solgar_tst.{data_table} "
+                f"WHERE pharmacy_id = %s LIMIT 1",
+                [legacy_pid],
+            )
+            r = cur.fetchone()
+            if r and r[0]:
+                return str(r[0]).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _write_corner_history(eq, legacy_pid, brand_full, entry_user):
+    """Bir ekipman kaydini solgar_cor.corner_history'ye yazar.
+
+    - status=0 (bekliyor; lifecycle gelince ilerleyecek)
+    - brand: SL/BN (legacy ile tutarli)
+    - pos_id: YENI uretilir (MAX(pos_id)+1) — ekipmanin kalici kimligi; ileride
+      ayni ekipmanin перемещение/смена имиджа kayitlari ayni pos_id'yi kullanir.
+    - equip_id/image_id: siniflandirma tablolarindan lookup; bulunamazsa NULL+log.
+    - approv_status/approv_person: bos (lifecycle yok).
+
+    Hata olursa SESSIZ loglar ve False doner — ekipman kaydi bozulmaz.
+    """
+    import logging as _logging
+    from django.db import connections
+    log = _logging.getLogger("sales.corner_history")
+    try:
+        brand_code = _equip_brand_code(brand_full)
+        equip_id = _lookup_equip_id(eq.promo, eq.subtype, eq.size, brand_code)
+        image_id = _lookup_image_id(eq.imidzh, brand_code)
+        country = _country_by_legacy(legacy_pid, brand_full)
+        if equip_id is None:
+            log.warning(
+                "corner_history: equip_id bulunamadi promo=%r podtip=%r razmer=%r brand=%s",
+                eq.promo, eq.subtype, eq.size, brand_code)
+        if image_id is None and (eq.imidzh or "").strip():
+            log.warning(
+                "corner_history: image_id bulunamadi imidzh=%r brand=%s",
+                eq.imidzh, brand_code)
+        with connections["refdb"].cursor() as cur:
+            # pos_id: ekipmanin kalici kimligi. Ilk установка -> yeni uret.
+            cur.execute("SELECT COALESCE(MAX(pos_id), 0) + 1 "
+                        "FROM solgar_cor.corner_history")
+            pos_id = (cur.fetchone() or [1])[0] or 1
+            cur.execute(
+                "INSERT INTO solgar_cor.corner_history "
+                "(status, country, brand, pos_id, equip_id, image_id, "
+                " activation_date, pharm_id, entry_user, approv_status, approv_person) "
+                "VALUES (%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,%s)",
+                [0, country[:20], brand_code, pos_id, equip_id, image_id,
+                 legacy_pid, (entry_user or "")[:255], None, None],
+            )
+        # refdb autocommit'e guvenme: INSERT'i acikca commit et (aksi halde
+        # connection kapaninca geri alinabilir, satir hic yazilmamis gorunur).
+        try:
+            connections["refdb"].commit()
+        except Exception:
+            pass
+        return True
+    except Exception as exc:
+        log.warning("corner_history yazilamadi (eq_id=%s): %s", getattr(eq, "id", "?"), exc)
+        return False
+
 def _equipment_photo_list(eq):
     """Bir PharmacyEquipment'in fotograf url listesi (SAS link'li)."""
     from sales import blob_storage as _blob
@@ -4803,14 +4947,14 @@ def pharmacy_equipment_save_api(request):
         )
 
     # Ekipman kaydi + fotolar BASARILI -> solgar_cor.corner_history'ye de yaz.
-    # (status=0 bekliyor, pos_id kalici kimlik, equip_id/image_id siniflandirma
+     #(status=0 bekliyor, pos_id kalici kimlik, equip_id/image_id siniflandirma
     # lookup'i). Bu yazim BASARISIZ olsa bile ekipman kaydi gecerli kalir
     # (sessiz loglanir), kullaniciya satir yine doner.
-    #_write_corner_history(
-    #    eq, legacy_pid, brand_key,
-    #    (getattr(request.user, "email", "") or
-    #     getattr(request.user, "username", "") or ""),
-    #)
+    _write_corner_history(
+        eq, legacy_pid, brand_key,
+        (getattr(request.user, "email", "") or
+         getattr(request.user, "username", "") or ""),
+    )
 
     st = int(eq.status or 0)
     row = {
