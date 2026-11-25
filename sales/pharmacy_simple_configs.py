@@ -6,13 +6,13 @@ from .pharmacy_parser import PharmacyConfig, Layout
 
 
 def _sv(company, product, pharmacy, count, amount, pharmacy_no, city,
-        rem_count, rem_amount, last_column, pharmacy_prefix=""):
+        rem_count, rem_amount, last_column, pharmacy_prefix="", manufacturer=""):
     return PharmacyConfig(
         company=company, operation="SALES", layout=Layout.VERTICAL,
         product=product, pharmacy=pharmacy, count=count, amount=amount,
         pharmacy_no=pharmacy_no, city=city, remains_count=rem_count,
         remains_amount=rem_amount, last_column=last_column,
-        pharmacy_prefix=pharmacy_prefix,
+        pharmacy_prefix=pharmacy_prefix, manufacturer=manufacturer,
     )
 
 
@@ -33,7 +33,13 @@ SIMPLE_CONFIGS = {
     "APTEKARU_RB": _sv("APTEKARU_RB", 'Товар', 'Адрес', 'Продажи', '', '', '', '', '', 'Продажи'),
     "OXYMED": _sv("OXYMED", 'Товар', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
     "TABLETKA": _sv("TABLETKA", 'Наименование', 'Аптека', 'Кол-во', '', '', '', 'Остатки', '', 'Остатки'),
-    "STU": _sv("STU", 'Товар', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
+    # STU (Olga 25.11.2026): marka URUN ADINDAN degil 'Производитель' sutunundan
+    # belirlenmeli. Mayis 2026'da tek sheet'te (SL) hem Solgar hem Bounty urunu
+    # vardi; bir Bounty urunu ("Бездрожжевой пиколинат хрома", uretici=Nature's
+    # Bounty) urun adinda 'Bounty' gecmedigi icin yanlislikla Solgar sayiliyordu
+    # (Solgar'da 1 fazla / Bounty'de 1 eksik). manufacturer='Производитель' ->
+    # upload _brand() uretiye bakip dogru markayi verir.
+    "STU": _sv("STU", 'Товар', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во', manufacturer='Производитель'),
     "AZERIMED": _sv("AZERIMED", 'Наименование', 'Адрес', 'Продажи кол-во', '', 'Номер Аптеки', '', '', '', 'Продажи кол-во'),
     "NATALI_PHARM": _sv("NATALI_PHARM", 'Наименование', 'Адрес', 'Количество (в базовых единицах)', '', '', '', '', '', 'Количество (в базовых единицах)'),
     "AKG": _sv("AKG", 'Наименование продукта|Наим.', 'Аптека (адрес)|адрес', 'Количество|ПРОДАЖИ', '', '', '', '', '', 'Количество|ПРОДАЖИ'),
@@ -69,7 +75,12 @@ SIMPLE_CONFIGS = {
     "MFO": _sv("MFO", 'Номенклатура', 'Адрес грузополучателя', 'Продажи', '', '', 'Город', 'Остаток на конец периода', '', 'Остаток на конец периода'),
     "FARMADOM": _sv("FARMADOM", 'Номенклатура', 'Аптека', 'Продажи количество', '', '', '', '', '', 'Продажи количество'),
     "E-APTEKA": _sv("E-APTEKA", 'Товар', 'Склад', 'Продажи Кол-во', 'Продажи Себестоимость', '', '', '', '', 'Продажи Себестоимость'),
-    "RAHMAT": _sv("RAHMAT", 'Наименование', '', 'Общ. Продажа', '', '', '', 'Остаток', '', 'Остаток'),    "NEVIS": _sv("NEVIS", 'Номенклатура', 'Адрес', 'Количество', '', 'Номер аптеки', '', '', '', 'Количество'),
+    # RAHMAT (Olga 25.11.2026): zincirde ADRES YOK (dosyada 'Адрес' sutunu yok,
+    # sadece Наименование | Общ. Продажа | Остаток). Onceden pharmacy='Адрес' idi;
+    # parser o basligi bulamayinca col=0'a (Наименование) dusuyor ve URUN ADINI
+    # adres/eczane sanip oraya yaziyordu. pharmacy='' -> eczane alani BOS kalir.
+    "RAHMAT": _sv("RAHMAT", 'Наименование', '', 'Общ. Продажа', '', '', '', 'Остаток', '', 'Остаток'),
+    "NEVIS": _sv("NEVIS", 'Номенклатура', 'Адрес', 'Количество', '', 'Номер аптеки', '', '', '', 'Количество'),
     "VITA_TOMSK": _sv("VITA_TOMSK", 'Товар/Наименование', 'Склад/Название', 'Продажи по чекам/Кол-во(шт)', '', '', '', 'Остаток на конец периода шт.', '', 'Склад/Название'),
     "APTEKA24": _sv("APTEKA24", 'Название товара', 'Отдел', 'Количество', 'Сумма по закупке с НДС', '', '', '', '', 'Количество'),
     "FARMAGRANT": _sv("FARMAGRANT", 'Товар', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
@@ -88,19 +99,22 @@ SIMPLE_CONFIGS = {
     # sayfayi secer. Tek config ikisini de okur: satis sayfasinda 'Остатки, шт'
     # yok (REMAINING=0), stok sayfasinda 'Продажи, шт' yok (COUNT=0). is_stock
     # (dosya adi '_STOCK') miktarin satis mi stok mu sayilacagini belirler.
-    # last_column BOS: 'Наименование'/'Продажи, шт'/'Остатки, шт' kolonlari
-    # 'Город'un SAGINDA; last_column='Город' verilseydi parser basligi 'Город'da
-    # bulup taramayi erken durdurur (break_for) ve urun/miktar kolonlarini
-    # goremezdi. Bos birakilinca tum baslik satiri taranir. Eski 'Лист2'
-    # sabit-sayfa + ozel farmaimpeks_stock motoru kaldirildi.
+    # last_column='Формат аптеки': baslik satirinin EN SAGINDAKI kolon (tum config
+    # basliklarinin -Наименование/Продажи/СуммаЗак/Город/Остатки- sagINDA). Bununla
+    # parser baslik taramasini 1. satirin sonunda durdurur. ZORUNLU: veri satirlarinda
+    # 'Формат аптеки' degeri bazen tam olarak 'Аптека' oluyor (orn. Новосибирск Печора);
+    # last_column bos birakilinca parser tum satirlari tarar, bu stray 'Аптека' hucrelerini
+    # baslik sanip pharmacy kolonunu A(0)'dan H(7)'ye kaydiriyordu -> adresler H sutunundan
+    # ('Социалочка'/'Аптека Фармаимпекс') aliniyordu. Victoria: adres A sutunundan alinmali.
+    # 'Формат аптеки' en sagda oldugu icin urun/miktar kolonlari tam bulunduktan sonra durur.
+    # Eski 'Лист2' sabit-sayfa + ozel farmaimpeks_stock motoru kaldirildi.
     "FARMAIMPEKS": _sv("FARMAIMPEKS", 'Наименование', 'Аптека', 'Продажи, шт', 'СуммаЗак', '', 'Город', 'Остатки, шт', '', 'Формат аптеки'),
     "SHAH": _sv("SHAH", 'Наименование ИРИС', 'Адрес', 'Количество в упак', 'Сумма в ценах закупки от первичных дист с НДС', '', 'Город', '', '', 'Сумма в ценах закупки от первичных дист с НДС'),
     "ZOLOTOE_YABLOKO": _sv("ZOLOTOE_YABLOKO", 'Наименование товара', 'Адрес', 'Продано упаковок', 'Сумма оборота, руб.', '', '', '', '', 'Сумма оборота, руб.'),
     # Dropdown'daki ad RU_ZOLOTOE_YOBLOKO (COUNTRY_CHAINS), parse config ise
     # ZOLOTOE_YABLOKO adiyla kayitliydi -> transliterasyon farki (YOBLOKO/YABLOKO)
     # yuzunden eslesmiyordu. Ayni config'i dropdown adiyla da ekliyoruz.
-    "RU_ZOLOTOE_YOBLOKO": _sv("RU_ZOLOTOE_YOBLOKO", 'Товар', '', 'Количество продаж, шт.', 'Выручка с НДС, руб.|Выручка, руб.', '', '', '', '', 'Выручка с НДС, руб.|Выручка, руб.'),
-    "FARM_HAB": _sv("FARM_HAB", 'Сматченное название', 'Адрес точки', 'Количество в шт.', 'Сумма в руб.', '', '', '', '', 'Сумма в руб.'),
+    "RU_ZOLOTOE_YOBLOKO": _sv("RU_ZOLOTOE_YOBLOKO", 'Товар', '', 'Количество продаж, шт.', 'Выручка с НДС, руб.|Выручка, руб.', '', '', '', '', 'Выручка с НДС, руб.|Выручка, руб.'),    "FARM_HAB": _sv("FARM_HAB", 'Сматченное название', 'Адрес точки', 'Количество в шт.', 'Сумма в руб.', '', '', '', '', 'Сумма в руб.'),
     "AC_SEMEINAYA": _sv("AC_SEMEINAYA", 'Товар', 'Аптека', 'Расход', '', '', '', '', 'КонОст', 'КонОст'),
     "SERDCE_ROSSII": _sv("SERDCE_ROSSII", 'Наименование', 'Аптека', 'Кол-во', '', '', '', '', '', 'Кол-во'),
     "PETERBURGSKIYE": _sv("PETERBURGSKIYE", 'Номенклатура', 'Адрес', 'Продажи количество', 'Продажи стоимость', '', '', 'Остатки количество', 'Остатки стоимость', 'Остатки стоимость'),
@@ -135,7 +149,12 @@ SIMPLE_CONFIGS = {
     "PLANET_ZDOROVYIA_SM": _sv("PLANET_ZDOROVYIA_SM", 'Наименование товара', 'Аптека', 'Продажи (кол-во)', 'Продажи (сумма прих)', '', 'Регион', '', '', 'Продажи (сумма прих)'),
     "FARMACEVT_PLYUS": _sv("FARMACEVT_PLYUS", 'Номенклатура', 'Аптека Краткое наименование', 'Продажи упаковки', 'Продажи в ценах поставщика с НДС', '', '', '', '', 'Продажи в ценах поставщика с НДС'),
     "PERVAYA_POMOSH_BARNAUL": _sv("PERVAYA_POMOSH_BARNAUL", 'Наименование', 'аптечный пункт', 'продано', '', '', '', 'Остаток', '', 'аптечный пункт'),
-    "PROAPTEKA": _sv("PROAPTEKA", 'Наименование товара', 'Адрес АУ', 'Продажи. Кол-во', 'Продажи. Сумма', '', '', '', '', 'Продажи. Сумма'),    # --- UKRAYNA zincirleri (prm_ukraine_chains; column_map ornek dosyalardan
+    # PROAPTEKA (Victoria 25.11.2026): eczane olarak 'Адрес АУ' (E sutunu, tam
+    # adres) alinmali. ONCEDEN pharmacy='Наименование АУ' (D, eczane ADI) idi ->
+    # Аптека sutununa partner eczane ADI, Город sutununa asil adres dusuyordu.
+    # Simdi pharmacy='Адрес АУ'; city BOS (adres zaten pharmacy'de, tekrar yok).
+    "PROAPTEKA": _sv("PROAPTEKA", 'Наименование товара', 'Адрес АУ', 'Продажи. Кол-во', 'Продажи. Сумма', '', '', '', '', 'Продажи. Сумма'),
+    # --- UKRAYNA zincirleri (prm_ukraine_chains; column_map ornek dosyalardan
     #     cikarildi, lokalde parse_chain ile test edilecek). ASTARTA (nested)
     #     ve SIRIUS-95 (horizontal) zaten baska motorlarda tanimli, burada yok.
     "3І": _sv("3І", 'Назва', 'Аптека', 'Реалізація', '', '', '', '', '', 'Реалізація'),

@@ -132,6 +132,11 @@ class PharmacyConfig:
     remains_count: str = ""
     remains_amount: str = ""
     last_column: str = ""    # prmLastColumn - baslik taramasini durdurur
+    # manufacturer: doluysa, bu KOLON basligindan uretici okunur ve kayda
+    # 'MANUFACTURER' olarak konur. Upload _brand() marka belirlerken urun
+    # adindan ONCE uretiye bakar (STU: urun adi markayi icermiyor, marka
+    # 'Производитель' sutunundadir -> Nature's Bounty / Solgar).
+    manufacturer: str = ""
     extract_rules: list[ExtractRule] = field(default_factory=list)
 
     def rule(self, r: ExtractRule) -> "PharmacyConfig":
@@ -181,10 +186,12 @@ class PharmacyParser:
         start_row = 0
         col = {"product": 0, "pharmacy": 0, "count": 0, "amount": 0,
                "pharmacy_no": 0, "city": 0, "remains_count": 0, "remains_amount": 0,
-               "pharmacy_prefix": 0}
+               "pharmacy_prefix": 0, "manufacturer": 0}
         # pharmacy_prefix kolonu GERCEKTEN bulundu mu? (0 varsayilan kolon
         # indeksiyle karismasin diye ayri bayrak). Yalniz bulunursa concat edilir.
         _has_prefix = False
+        # manufacturer kolonu gercekten bulundu mu? (STU: 'Производитель')
+        _has_mfr = False
         break_for = False
 
         for row_no in range(v_limit):
@@ -201,6 +208,9 @@ class PharmacyParser:
                 if p.pharmacy_prefix and self._hmatch(cell, p.pharmacy_prefix):
                     col["pharmacy_prefix"] = col_no
                     _has_prefix = True
+                if p.manufacturer and self._hmatch(cell, p.manufacturer):
+                    col["manufacturer"] = col_no
+                    _has_mfr = True
                 if self._hmatch(cell, p.count):
                     col["count"] = col_no
                 if self._hmatch(cell, p.amount):
@@ -236,8 +246,10 @@ class PharmacyParser:
                 v = v if self._ne(v) else ""
                 # pharmacy_prefix doluysa ve kolonu bulunduysa: sehir + "," + adres.
                 # FARMLEND: 'Нас.Пункт' (Казань) + 'Адрес' (sadece sokak+ev) ->
-                # tam adres (boskuksuz, Olga: "Казань,Чистопольская"). Prefix bos
-                # ya da adres bos ise tek deger kalir (cift virgul uretmeyiz).
+                # tam adres. Ayirici: virgul, BOSLUKSUZ ("Казань,Чистопольская
+                # ул., 38"). Olga: "Слеплять запятая адрес, без пробела" = sehir
+                # ile adresi virgulle yapistir, araya BOSLUK koyma. Prefix bos
+                # ya da adres bos ise tek deger kalir (bosta/cift virgul yok).
                 if _has_prefix:
                     pv = self._read(sheet, col["pharmacy_prefix"], i)
                     pv = pv.strip() if self._ne(pv) else ""
@@ -286,6 +298,12 @@ class PharmacyParser:
                 rec["REMAINING_AMOUNT"] = v if self._ne(v) else "0.00"
             else:
                 rec["REMAINING_AMOUNT"] = "0.00"
+
+            # Uretici (STU: 'Производитель'). _has_mfr True ise oku; marka
+            # belirlemede upload _brand() urun adindan ONCE buna bakar.
+            if _has_mfr:
+                v = self._read(sheet, col["manufacturer"], i)
+                rec["MANUFACTURER"] = v.strip() if self._ne(v) else ""
 
             rec["SUBGROUP"] = main_group
             rec["MAINGROUP"] = main_group
@@ -668,6 +686,10 @@ class MatrixParser:
             s = str(prod).strip().replace(" ", "").replace(".", "").replace(",", "")
             return bool(s) and s.isdigit()
 
+        # skip_zero: True ise satis miktari 0 olan hucreler kayit URETMEZ.
+        # Olga (DOCTOR_STOLETOV): sales_count=0 AND remaining_count=0 olan satirlar
+        # sayilmamali. Matris motoru tek deger (satis) okur, remaining zaten hep 0,
+        # dolayisiyla "ikisi de 0" = "satis 0" demektir -> 0'lari atla.
         skip_zero = cfg.get("skip_zero", False)
 
         def _is_zero(v):
@@ -814,17 +836,15 @@ class Nested1CParser:
                     pharmacy = cell
                 else:
                     prod = _read2(sheet, sc + 1, i).strip()
-                                    else:
-                    prod = _read2(sheet, sc + 1, i).strip()
                     # pharmacy BOS ise atla: gecerli ALFA eczane blogu 'А-ф №'/
                     # 'Онлайн' ile baslar (aptek_markers) ve pharmacy'yi doldurur.
                     # TANINMAYAN kanal (Olga 25.11.2026: 'Wildberries (реализация)'
                     # Nisan'da cikti, aptek_marker degil) pharmacy'yi set etmez;
                     # altindaki urunler BOS pharmacy ile sayilip '2 paket fazla'
-                    # getiriyordu. pharmacy bos iken urun kaydi URETILMEZ.
+                    # getiriyordu. pharmacy bos iken urun kaydi URETILMEZ -> bu
+                    # kanallar (online realizasyon) ALFA eczane satisina dahil
+                    # edilmez.
                     if prod and len(prod) >= 8 and pharmacy:
-                        cnt = num(_read2(sheet, sc + 2, i))
-                        out.append(self._rec(prod, pharmacy, cnt, main_group))
                         cnt = num(_read2(sheet, sc + 2, i))
                         out.append(self._rec(prod, pharmacy, cnt, main_group))
             elif mode == "gedeon":

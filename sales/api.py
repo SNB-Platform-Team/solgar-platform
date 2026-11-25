@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from authorization.permissions import HasScreen, HasAnyScreen, IsSuperOrStaff, IsEquipmentDemoUser
 from .views import OneCService
 
+
 ONEC_API_TABS = [
     {"key": "orders", "label": "Заказы"},
     {"key": "shipments", "label": "Поставки"},
@@ -342,6 +343,8 @@ _PHARMACY_API_COLUMNS = [
     ("city", "City"),
     ("district", "District"),
     ("metro", "METRO"),
+    # PHARMACY_ID GROUP COMPANY'nin ONUNDE (Olga: ilk sayfada gorunsun).
+    # Eski yeri (cornerNo'dan sonra, tablonun cok saginda) idi.
     ("pharmacy_id", "PHARMACY_ID"),
     ("group_company", "GROUP COMPANY"),
     ("subgroup_company", "SUBGROUP COMPANY"),
@@ -454,6 +457,10 @@ def pharmacy_api(request):
     # Model instance'larini satir listesine cevir (secili kolonlar)
     col_keys = [c[0] for c in _PHARMACY_API_COLUMNS]
     col_labels = [c[1] for c in _PHARMACY_API_COLUMNS]
+    # BRAND kolonu: PharmacySolgar modelinde 'brand' alani YOK (sadece Bounty'de
+    # var) -> getattr bos/None doner, kolon bos gorunurdu (Olga). Bu ekran zaten
+    # brand'e gore filtreli (sagdaki dropdown), yani hangi marka oldugu bellidir:
+    # satir brand'i bos ise secili brand'i goster (SOLGAR/OBF/BOUNTY).
     rows = []
     for rec in result["records"]:
         row = []
@@ -3255,9 +3262,20 @@ def pharmacy_upload_preview_api(request):
         if not parsed:
             return Response({"error": "В файле не найдено ни одной строки с данными."}, status=400)
 
-        def _brand(product):
+        def _brand(product, manufacturer=""):
             if _file_brand:
                 return _file_brand
+            # Uretici ('Производитель') varsa marka ONCE ondan belirlenir
+            # (STU: urun adi markayi icermiyor; uretici 'Nature's Bounty, Inc' /
+            # 'Solgar, Inc'). Diger zincirlerde manufacturer bos -> eski davranis.
+            m = (manufacturer or "").upper()
+            if m:
+                if ("BOUNTY" in m or "БАУНТИ" in m or "НЭЙЧЕС" in m
+                        or "NATURE" in m):
+                    return "BOUNTY"
+                if "SOLGAR" in m or "СОЛГАР" in m:
+                    return "SOLGAR"
+                # uretici dolu ama taninmadi -> urun adina dus (asagi)
             p = (product or "").upper()
             # Остео Би-Флекс (Osteo Bi-Flex) her zaman Natures Bounty sayilir
             # (Olga). Urun adinda "Солгар" gecmedigi icin eskiden Solgar'a
@@ -3295,7 +3313,7 @@ def pharmacy_upload_preview_api(request):
         total_solgar_c = total_bounty_c = 0
         objs = []
         for r in parsed:
-            brand = _brand(r.get("PRODUCT"))
+            brand = _brand(r.get("PRODUCT"), r.get("MANUFACTURER"))
             if is_stock:
                 # STOK: parse edilen miktar COUNT/AMOUNT'ta gelir -> REMAINING'e
                 # tasi, satis alanlarini 0 yap. (Vertical config'leri miktari
@@ -3874,6 +3892,10 @@ def doctor_detail_api(request):
 
 
 @api_view(["POST"])
+# Geocode ORTAK arac: hem Doktor hem Apteka ekraninda 'Найти адрес' bunu cagirir.
+# Onceden HasScreen("DOCTOR") idi -> sadece eczane yetkisi olan medrep (orn. bir
+# NB medrep'i, DOCTOR ekrani yok) adres ararken 403 aliyordu. Artik DOCTOR *veya*
+# PHARMACY yeten biri cagirabilir.
 @permission_classes([HasAnyScreen("DOCTOR", "PHARMACY")])
 def doctor_geocode_api(request):
     """
@@ -4569,7 +4591,7 @@ def _pharmacy_address_by_legacy(legacy_pid, brand):
                 return full or pharm
     except Exception:
         pass
-    return ""        
+    return ""
 
 
 def _equip_brand_code(brand_full) -> str:
@@ -4715,6 +4737,7 @@ def _write_corner_history(eq, legacy_pid, brand_full, entry_user):
     except Exception as exc:
         log.warning("corner_history yazilamadi (eq_id=%s): %s", getattr(eq, "id", "?"), exc)
         return False
+
 
 def _equipment_photo_list(eq):
     """Bir PharmacyEquipment'in fotograf url listesi (SAS link'li)."""
@@ -4946,9 +4969,11 @@ def pharmacy_equipment_save_api(request):
         )
 
     # Ekipman kaydi + fotolar BASARILI -> solgar_cor.corner_history'ye de yaz.
-     #(status=0 bekliyor, pos_id kalici kimlik, equip_id/image_id siniflandirma
-    # lookup'i). Bu yazim BASARISIZ olsa bile ekipman kaydi gecerli kalir
-    # (sessiz loglanir), kullaniciya satir yine doner.
+    # (status=0 bekliyor, pos_id kalici kimlik, equip_id/image_id siniflandirma
+    # lookup'i). Olga 24.11.2026 refdb (solgar_cor) icin INSERT izni verdi;
+    # izin testinde INSERT 16 ms'de calisti (onceki 504 izin eksikligindendi).
+    # Yazim BASARISIZ olsa bile ekipman kaydi gecerli kalir (sessiz loglanir),
+    # kullaniciya satir yine doner.
     _write_corner_history(
         eq, legacy_pid, brand_key,
         (getattr(request.user, "email", "") or
