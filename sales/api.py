@@ -2,8 +2,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from authorization.permissions import HasScreen, IsSuperOrStaff, IsEquipmentDemoUser
-from .views import OneCService
+from authorization.permissions import HasScreen, HasAnyScreen, IsSuperOrStaff, IsEquipmentDemoUserfrom .views import OneCService
 
 
 ONEC_API_TABS = [
@@ -3875,7 +3874,7 @@ def doctor_detail_api(request):
 
 
 @api_view(["POST"])
-@permission_classes([HasScreen("DOCTOR")])
+@permission_classes([HasAnyScreen("DOCTOR", "PHARMACY")])
 def doctor_geocode_api(request):
     """
     Adres -> koordinat (point_x/y) + adres bilesenleri.

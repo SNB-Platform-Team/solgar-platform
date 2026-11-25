@@ -62,6 +62,35 @@ def HasScreen(screen_code: str):
     return _HasScreen
 
 
+
+def HasAnyScreen(*screen_codes: str):
+    """Build a DRF permission class requiring ANY of `screen_codes`.
+
+    Kullanici verilen ekranlardan EN AZ BIRINE erisebiliyorsa gecer. Ortak
+    araclar icin: ornek 'Найти адрес' (geocode) hem Doktor hem Apteka ekraninda
+    kullanilir; o yuzden DOCTOR *veya* PHARMACY yeten biri cagirabilmeli —
+    tek-ekran HasScreen('DOCTOR') sadece eczane yetkisi olan medrep'i 403'le
+    engelliyordu."""
+
+    codes = tuple(screen_codes)
+
+    class _HasAnyScreen(BasePermission):
+        message = "У вас нет доступа к этому разделу."
+        required_screens = codes
+
+        def has_permission(self, request, view) -> bool:
+            user = getattr(request, "user", None)
+            if not user or not user.is_authenticated:
+                return False
+            if user.is_superuser:
+                return True
+            have = _user_screen_codes(user)
+            return any(c in have for c in codes)
+
+    _HasAnyScreen.__name__ = "HasAnyScreen_" + "_".join(codes)
+    return _HasAnyScreen
+
+
 class IsSuperOrStaff(BasePermission):
     """Sadece superuser ya da is_staff (admin/menecer) erisebilir.
 
