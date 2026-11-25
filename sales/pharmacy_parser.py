@@ -577,6 +577,17 @@ class NestedKgParser:
     cfg beklenen alanlar (dict):
       mode: 'pharmacy_header' | 'product_header'
       aptek_marker: aptek satirini taniyan metin (orn 'Аптека' veya 'Неман')
+      product_markers: (ops) urun satirini taniyan marka listesi (orn
+        ['СОЛГАР','NATURE'S BOUNTY']). product_header modunda VERILIRSE,
+        urun/eczane ayrimi aptek_marker yerine BUNUNLA yapilir: bir satir
+        herhangi bir marker iceriyorsa URUN (aktif urun), ICERMIYORSA eczane
+        (kayit). NEMAN icin kritik: eczaneler 'Неман ...' ve 'АП ...' gibi
+        farkli on-eklerle gelir; tek bir aptek_marker ('Неман') 'АП ...'
+        eczanelerini kacirip altindaki kayitlari yanlis urune bagliyordu.
+        Urunu marka adiyla tanimak hem СОЛГАР hem NATURE'S BOUNTY sheet'inde
+        calisir. Urun satirinin kendi B degeri = altindaki eczanelerin
+        toplamidir (Olga dogruladi); urun satiri KAYIT URETMEZ, yalniz
+        aktif urunu set eder -> cift sayim olmaz.
       data_start: ilk veri satiri (baslik satir sayisi)
       count_col: adet sutunu index (varsayilan 1)
       name_col: ad sutunu index (varsayilan 0)
@@ -584,6 +595,7 @@ class NestedKgParser:
     def parse(self, sheet, cfg, main_group, v_limit, h_limit):
         mode = cfg.get("mode", "pharmacy_header")
         marker = cfg.get("aptek_marker", "Аптека")
+        prod_marks = cfg.get("product_markers", [])
         start = cfg.get("data_start", 2)
         ccol = cfg.get("count_col", 1)
         ncol = cfg.get("name_col", 0)
@@ -594,19 +606,31 @@ class NestedKgParser:
             name = _read2(sheet, ncol, i).strip()
             if not _ne2(name):
                 continue
-            is_aptek = marker.lower() in name.lower()
             val = _read2(sheet, ccol, i)
             if mode == "pharmacy_header":
                 # aptek satiri -> aktif aptek; diger -> urun kaydi
+                is_aptek = marker.lower() in name.lower()
                 if is_aptek:
                     cur_aptek = name
                 else:
                     out.append(self._rec(name, cur_aptek, val, main_group))
             else:  # product_header: urun satiri -> aktif urun; aptek satiri -> kayit
-                if is_aptek:
-                    out.append(self._rec(cur_product, name, val, main_group))
+                if prod_marks:
+                    # URUN = herhangi bir marka marker'i iceren satir; aksi
+                    # halde eczane (NEMAN: 'Неман ...' + 'АП ...' hepsi eczane).
+                    u = name.upper()
+                    is_prod = any(m.upper() in u for m in prod_marks)
+                    if is_prod:
+                        cur_product = name
+                    elif cur_product:
+                        out.append(self._rec(cur_product, name, val, main_group))
                 else:
-                    cur_product = name
+                    # eski davranis: aptek_marker iceren satir kayit, digeri urun
+                    is_aptek = marker.lower() in name.lower()
+                    if is_aptek:
+                        out.append(self._rec(cur_product, name, val, main_group))
+                    else:
+                        cur_product = name
         return out
 
     @staticmethod

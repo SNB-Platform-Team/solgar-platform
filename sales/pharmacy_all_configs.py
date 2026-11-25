@@ -235,6 +235,8 @@ MATRIX_CONFIGS = {
     "ZHIVIKA": {"product_axis": "col", "product_index": 0, "aptek_index": 6, "data_start_row": 7, "data_start_col": 1},
     "OVITA": {"product_axis": "col", "product_index": 2, "aptek_index": 2, "data_start_row": 3, "data_start_col": 3},
     "VITA_SAMARA": {"product_axis": "col", "product_index": 1, "aptek_index": 1, "data_start_row": 2, "data_start_col": 6},
+    # Olga: bu sette satis miktari 0 olan hucreler sayilmamali (sales_count=0 AND
+    # remaining_count=0 satirlari). skip_zero -> MatrixParser 0 degerli hucreyi atlar.
     "DOCTOR_STOLETOV": {"product_axis": "col", "product_index": 1, "aptek_index": 4, "data_start_row": 6, "data_start_col": 9, "skip_zero": True},
     "EDIFARM": {"product_axis": "col", "product_index": 0, "aptek_index": 4, "data_start_row": 7, "data_start_col": 2},
     "FIALKA": {"product_axis": "col", "product_index": 0, "aptek_index": 5, "data_start_row": 7, "data_start_col": 1},
@@ -271,7 +273,16 @@ STOCK_MATRIX_CONFIGS = {
 }
 
 KG_CONFIGS = {
-    "NEMAN": {"mode": "product_header", "aptek_marker": "Неман", "data_start": 2, "count_col": 1, "name_col": 0},
+    # NEMAN (KG): tek sheet (солгар / аптеки). A sutununda urun satirlari ve
+    # eczane satirlari ic ice. Urun satiri karsisindaki B degeri o urunun
+    # TOPLAMI (= altindaki eczanelerin toplami, Olga dogruladi); altindaki
+    # 'Неман ...' ve 'АП ...' satirlari eczane, her birinin B degeri o eczane
+    # satisi. Eczaneler iki farkli on-ekle geldigi icin aptek_marker yetmez;
+    # urunu MARKA adiyla taniyoruz (product_markers) -> СОЛГАР ve NATURE'S
+    # BOUNTY sheet'leri ikisi de dogru parse edilir. 07/2026: Solgar=1420,
+    # NB=253 (urun satirlari sayilmaz -> cift sayim yok).
+    "NEMAN": {"mode": "product_header", "data_start": 2, "count_col": 1, "name_col": 0,
+              "product_markers": ["СОЛГАР", "SOLGAR", "NATURE'S BOUNTY", "NATURES BOUNTY", "БАУНТИ", "BOUNTY", "НЭЙЧЕС"]},
     "PHARMAMIR": {"mode": "pharmacy_header", "aptek_marker": "Аптека", "data_start": 2, "count_col": 1, "name_col": 0},
 }
 
