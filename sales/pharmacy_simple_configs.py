@@ -136,8 +136,7 @@ SIMPLE_CONFIGS = {
     "PLANET_ZDOROVYIA_SM": _sv("PLANET_ZDOROVYIA_SM", 'Наименование товара', 'Аптека', 'Продажи (кол-во)', 'Продажи (сумма прих)', '', 'Регион', '', '', 'Продажи (сумма прих)'),
     "FARMACEVT_PLYUS": _sv("FARMACEVT_PLYUS", 'Номенклатура', 'Аптека Краткое наименование', 'Продажи упаковки', 'Продажи в ценах поставщика с НДС', '', '', '', '', 'Продажи в ценах поставщика с НДС'),
     "PERVAYA_POMOSH_BARNAUL": _sv("PERVAYA_POMOSH_BARNAUL", 'Наименование', 'аптечный пункт', 'продано', '', '', '', 'Остаток', '', 'аптечный пункт'),
-    "PROAPTEKA": _sv("PROAPTEKA", 'Наименование товара', 'Наименование АУ', 'Продажи. Кол-во', 'Продажи. Сумма', '', 'Адрес АУ', '', '', 'Продажи. Сумма'),
-    # --- UKRAYNA zincirleri (prm_ukraine_chains; column_map ornek dosyalardan
+    "PROAPTEKA": _sv("PROAPTEKA", 'Наименование товара', 'Адрес АУ', 'Продажи. Кол-во', 'Продажи. Сумма', '', '', '', '', 'Продажи. Сумма'),    # --- UKRAYNA zincirleri (prm_ukraine_chains; column_map ornek dosyalardan
     #     cikarildi, lokalde parse_chain ile test edilecek). ASTARTA (nested)
     #     ve SIRIUS-95 (horizontal) zaten baska motorlarda tanimli, burada yok.
     "3І": _sv("3І", 'Назва', 'Аптека', 'Реалізація', '', '', '', '', '', 'Реалізація'),
