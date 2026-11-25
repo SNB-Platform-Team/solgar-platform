@@ -814,7 +814,17 @@ class Nested1CParser:
                     pharmacy = cell
                 else:
                     prod = _read2(sheet, sc + 1, i).strip()
-                    if len(prod) >= 8:
+                                    else:
+                    prod = _read2(sheet, sc + 1, i).strip()
+                    # pharmacy BOS ise atla: gecerli ALFA eczane blogu 'А-ф №'/
+                    # 'Онлайн' ile baslar (aptek_markers) ve pharmacy'yi doldurur.
+                    # TANINMAYAN kanal (Olga 25.11.2026: 'Wildberries (реализация)'
+                    # Nisan'da cikti, aptek_marker degil) pharmacy'yi set etmez;
+                    # altindaki urunler BOS pharmacy ile sayilip '2 paket fazla'
+                    # getiriyordu. pharmacy bos iken urun kaydi URETILMEZ.
+                    if prod and len(prod) >= 8 and pharmacy:
+                        cnt = num(_read2(sheet, sc + 2, i))
+                        out.append(self._rec(prod, pharmacy, cnt, main_group))
                         cnt = num(_read2(sheet, sc + 2, i))
                         out.append(self._rec(prod, pharmacy, cnt, main_group))
             elif mode == "gedeon":
