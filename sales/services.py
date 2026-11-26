@@ -973,6 +973,7 @@ class PharmacyViewService:
               marketing_staff: str = "", pharmacy_activeness: str = "",
               pharmacy_address: str = "", search: str = "",
               country_in=None, country_not_in=None,
+              id_in=None, id_not_in=None,
               page: int = 1) -> dict:
         """
         Return pharmacy rows for a brand matching the filters (empty ignored).
@@ -983,6 +984,11 @@ class PharmacyViewService:
           country_not_in -> bu ulkeler HARIC (liste).
         Bunlar dropdown 'country' filtresinden ayridir ve onunla birlikte
         uygulanir (ikisi de daraltir).
+
+        id_in / id_not_in: PK id kisiti (coklu). «Оборудование» filtresi icin —
+        cagiran taraf (api.py) ekipmani OLAN aptekalarin PK id kumesini hesaplar
+        ve 'Есть' icin id_in, 'Нет' icin id_not_in olarak gecer. Bos kume ile
+        id_in -> hicbir satir (dogru: ekipmanli apteka yok demek).
         """
         model = self.repository._model_for(brand)
         qs = model.objects.filter(status=1)
@@ -992,6 +998,13 @@ class PharmacyViewService:
             qs = qs.filter(country__in=list(country_in))
         if country_not_in:
             qs = qs.exclude(country__in=list(country_not_in))
+
+        # PK id kisiti (Оборудование filtresi). id_in None -> filtre yok;
+        # id_in=[] (bos liste) -> hicbir satir (ekipmanli apteka yok).
+        if id_in is not None:
+            qs = qs.filter(id__in=list(id_in))
+        if id_not_in:
+            qs = qs.exclude(id__in=list(id_not_in))
 
         if country:
             qs = qs.filter(country=country)
@@ -1061,6 +1074,7 @@ class PharmacyViewService:
             pharmacy_category, pharmacy_type, promo, marketing_staff,
             pharmacy_activeness, pharmacy_address, search,
             country_in, country_not_in,
+            id_in is not None, id_not_in,
         ])
         total = self._paged_count(qs, model, has_filter, brand)
         return self._paginate(qs, page, total)

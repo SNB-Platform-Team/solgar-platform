@@ -353,7 +353,9 @@ _PHARMACY_API_COLUMNS = [
     ("assortiment", "ASSORTMENT"),
     ("pharmacy_category", "PHARMACY CATEGORY"),
     ("pharmacy_type", "PHARMACY_TYPE"),
-    ("promo", "PROMO"),
+    # PROMO kolonu tablodan kaldirildi (Olga: onemli degil). Filtrelerde ve
+    # diger akislarda promo alani durmaya devam ediyor; sadece bu listede
+    # (tablo + «Скачать в Excel») gosterilmiyor.
     ("pharmacy_activeness", "Pharmacy Activeness"),
     ("pharmacy_activation_date", "Pharmacy Activation Date"),
     ("pharmacy_response_person", "PHARM HEAD NAME"),
@@ -448,9 +450,19 @@ def pharmacy_api(request):
     elif _cmode == "except":
         _country_kw["country_not_in"] = _ccountries
 
+    # «Оборудование» filtresi: "" (Все) / "yes" (Есть) / "no" (Нет).
+    # Ekipmani olan aptekalarin PK id kumesi TEK SEFERDE hesaplanir (satir
+    # basina sorgu yok) ve service'e id_in / id_not_in olarak gecer.
+    _equip = (request.GET.get("equipment") or "").strip().lower()
+    _equip_kw = {}
+    if _equip in ("yes", "y", "1", "true", "есть"):
+        _equip_kw["id_in"] = list(_equipment_pharmacy_pk_ids(brand))
+    elif _equip in ("no", "n", "0", "false", "нет"):
+        _equip_kw["id_not_in"] = list(_equipment_pharmacy_pk_ids(brand))
+
     try:
         result = service.query(brand=brand, search=search, page=page,
-                               **_country_kw, **filters)
+                               **_country_kw, **_equip_kw, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -4752,6 +4764,79 @@ def _equipment_photo_list(eq):
             url = ""
         out.append({"id": ph.id, "url": url, "name": ph.original_name})
     return out
+
+
+def _equipment_pharmacy_pk_ids(brand):
+    """«Оборудование» filtresi: EKIPMANI OLAN aptekalarin PLATFORM PK id
+    kumesini (set) dondurur. /pharmacies listesindeki 'Оборудование: Есть/Нет'
+    filtresi icin — tek seferde (satir-satir degil) hesaplanir.
+
+    Ekipman iki kaynaktan gelir (bkz. _fetch_corner_rows):
+      1) Yeni tablo  : PharmacyEquipment.pharmacy_id  (legacy pharmacy_id)
+      2) Eski tablo  : solgar_cor.corner_info.{solgar|bounty}_pharm_id
+                       (= pharmacy_data_{brand}.pharmacy_id, legacy)
+    Ikisinin birlesimi = ekipmani olan LEGACY pharmacy_id kumesi. Bu legacy
+    id'ler pharmacy_data_{brand} uzerinden PLATFORM PK id'ye cevrilir (liste
+    sorgusu PK id ile filtreler). Hicbiri yoksa bos set doner.
+    """
+    from django.db import connections
+    b = (brand or "SOLGAR").upper()
+    is_bounty = ("BOUNTY" in b or b == "BN")
+    pharm_col = "bounty_pharm_id" if is_bounty else "solgar_pharm_id"
+    data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
+    brand_key = "BOUNTY" if is_bounty else "SOLGAR"
+
+    legacy_ids = set()
+
+    # 1) Yeni tablo (PharmacyEquipment) — tek distinct sorgu.
+    try:
+        from .models import PharmacyEquipment
+        for pid in (PharmacyEquipment.objects
+                    .filter(brand=brand_key)
+                    .values_list("pharmacy_id", flat=True).distinct()):
+            if pid:
+                legacy_ids.add(int(pid))
+    except Exception:
+        pass
+
+    # 2) Eski tablo (corner_info) — tek distinct sorgu.
+    try:
+        with connections["refdb"].cursor() as cur:
+            cur.execute(
+                f"SELECT DISTINCT {pharm_col} FROM solgar_cor.corner_info "
+                f"WHERE {pharm_col} IS NOT NULL AND {pharm_col} > 0"
+            )
+            for (pid,) in cur.fetchall():
+                if pid:
+                    legacy_ids.add(int(pid))
+    except Exception:
+        pass
+
+    if not legacy_ids:
+        return set()
+
+    # Legacy pharmacy_id -> platform PK id (pharmacy_data_{brand}). Buyuk IN
+    # listesini parcalara bolerek sorgula (MySQL IN limiti / paket boyutu).
+    pk_ids = set()
+    legacy_list = list(legacy_ids)
+    CH = 5000
+    try:
+        with connections["refdb"].cursor() as cur:
+            for i in range(0, len(legacy_list), CH):
+                chunk = legacy_list[i:i + CH]
+                placeholders = ",".join(["%s"] * len(chunk))
+                cur.execute(
+                    f"SELECT id FROM solgar_tst.{data_table} "
+                    f"WHERE pharmacy_id IN ({placeholders})",
+                    chunk,
+                )
+                for (rid,) in cur.fetchall():
+                    if rid is not None:
+                        pk_ids.add(int(rid))
+    except Exception:
+        pass
+
+    return pk_ids
 
 
 def _fetch_corner_rows(pharmacy_id, brand):
