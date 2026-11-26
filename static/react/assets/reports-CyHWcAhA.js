@@ -1,0 +1,1 @@
+import{a as e,t}from"./jsx-runtime-B-hcVAMW.js";import{dt as n}from"./search-provider-BX164SLy.js";import{t as r}from"./placeholder-QjUP4c8Y.js";var i=e(t()),a=()=>(0,i.jsx)(r,{title:`Отчёты`,description:`Раздел в разработке. Здесь появятся сводные отчёты по продажам, аптекам и врачам.`,icon:n});export{a as component};
