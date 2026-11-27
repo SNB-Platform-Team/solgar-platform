@@ -101,23 +101,69 @@ class GeocodeSettingsAdmin(admin.ModelAdmin):
     list_display = ("provider", "is_active", "updated_at")
     fields = ("provider", "is_active", "dadata_key", "dadata_secret", "yandex_key")
 
+from django.utils.html import format_html
 from .models import PharmacyEquipment, PharmacyEquipmentPhoto
 
 
 class PharmacyEquipmentPhotoInline(admin.TabularInline):
     model = PharmacyEquipmentPhoto
     extra = 0
-    readonly_fields = ("blob_name", "content_type", "original_name", "size", "created_at")
+    # Onizleme (thumbnail) + "Открыть" linki: gorseli admin'den acip bakmak
+    # icin (alakasiz/yanlis foto kontrolu). SAS url 60 dk gecerli.
+    readonly_fields = ("preview", "open_link", "original_name", "content_type",
+                       "size", "blob_name", "created_at")
+    fields = ("preview", "open_link", "original_name", "content_type", "size",
+              "blob_name", "created_at")
     can_delete = True
+
+    def _sas(self, obj):
+        """blob_name icin 60 dk'lik SAS url (blob yapilandirilmamissa None)."""
+        try:
+            from sales import blob_storage as _blob
+            if obj and obj.blob_name and _blob.blob_configured():
+                return _blob.get_sas_url(obj.blob_name, minutes=60)
+        except Exception:
+            return None
+        return None
+
+    @admin.display(description="Превью")
+    def preview(self, obj):
+        url = self._sas(obj)
+        if not url:
+            return "—"
+        # content_type gorsel degilse ( or. pdf) kucuk resim yerine not.
+        ct = (getattr(obj, "content_type", "") or "").lower()
+        if ct.startswith("image/"):
+            return format_html(
+                '<img src="{}" style="max-height:80px;max-width:120px;'
+                'border:1px solid #ccc;border-radius:4px" />', url)
+        return format_html('<span>{}</span>', ct or "файл")
+
+    @admin.display(description="Открыть")
+    def open_link(self, obj):
+        url = self._sas(obj)
+        if not url:
+            return "—"
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">Открыть ↗</a>', url)
 
 
 @admin.register(PharmacyEquipment)
 class PharmacyEquipmentAdmin(admin.ModelAdmin):
-    """Platformun kendi ekipman kayitlari (оборудование). Fotolar Azure Blob'da."""
+    """Platformun kendi ekipman kayitlari (оборудование). Fotolar Azure Blob'da.
+
+    Her kayitta: hangi eczane (pharmacy_id), marka, promo/подтип, KIM ekledi
+    (created_by), NE ZAMAN (created_at) ve fotolar (inline: orijinal dosya adi
+    + onizleme + 'Открыть' linki ile gorseli acip kontrol). Yonetici alakasiz/
+    yanlis yuklenmis gorselleri buradan gorebilir."""
 
     list_display = ("id", "pharmacy_id", "brand", "promo", "subtype", "size",
-                    "status", "created_by", "created_at")
-    list_filter = ("brand", "status")
+                    "status", "photo_count", "created_by", "created_at")
+    list_filter = ("brand", "status", "promo")
     search_fields = ("pharmacy_id", "promo", "subtype", "created_by")
     ordering = ("-created_at",)
     inlines = [PharmacyEquipmentPhotoInline]
+
+    @admin.display(description="Фото")
+    def photo_count(self, obj):
+        return obj.photos.count() if hasattr(obj, "photos") else 0
