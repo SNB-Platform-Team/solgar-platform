@@ -6533,7 +6533,7 @@ def _tm_filter_options(scope_regions, brand):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("TM_DASHBOARD")])
 def territory_manager_dashboard_api(request):
     """Territory manager dashboard: 4 tablo + filtre secenekleri.
 
@@ -6542,15 +6542,11 @@ def territory_manager_dashboard_api(request):
       region, medrep, activeness, category   (filtre)
       search      tum tablolarda arama
 
-    Yalniz access_level.name == 'territory_manager' VEYA is_staff erisebilir.
-    Kapsamsiz (district/region atanmamis) TM icin bos veri doner (uyari ile).
+    Erisim: TM_DASHBOARD ekranina sahip AccessLevel (admin panelde
+    territory_manager level'ina atanir) veya superuser. Kapsamsiz
+    (district/region atanmamis) kullanici icin bos veri + uyari doner.
     """
     user = request.user
-    if not (_tm_is_territory_manager(user) or getattr(user, "is_staff", False)):
-        return Response(
-            {"error": "Доступ только для территориальных менеджеров."},
-            status=403,
-        )
 
     brand = (request.GET.get("brand") or "").strip()
     region = (request.GET.get("region") or "").strip()
@@ -6617,24 +6613,24 @@ def _tm_export_one(request, table_key, filename):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("TM_DASHBOARD")])
 def tm_dashboard_export_region_api(request):
     return _tm_export_one(request, "by_region", "territory_po_regionam")
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("TM_DASHBOARD")])
 def tm_dashboard_export_medrep_api(request):
     return _tm_export_one(request, "by_medrep", "territory_po_medrepam")
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("TM_DASHBOARD")])
 def tm_dashboard_export_activeness_api(request):
     return _tm_export_one(request, "by_activeness", "territory_po_aktivnosti")
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([HasScreen("TM_DASHBOARD")])
 def tm_dashboard_export_category_api(request):
     return _tm_export_one(request, "by_category", "territory_po_kategoriyam")
