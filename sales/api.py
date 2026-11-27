@@ -448,9 +448,26 @@ def pharmacy_api(request):
     elif _cmode == "except":
         _country_kw["country_not_in"] = _ccountries
 
+    # POS-class (оборудование class) filtresi — coklu, OR mantigi. Frontend
+    # virgulle ayrilmis gonderir (pos_class=Стойка,Корнер). Secilen class'lardan
+    # HERHANGI BIRINE sahip ekipmani olan aptekalarin PK id kumesi -> id_in.
+    # Bos secim -> filtre yok. Secim var ama eslesen apteka yok -> id_in=[] ->
+    # hicbir satir (dogru: o class'ta ekipmanli apteka yok). Sadece YENI
+    # platform ekipmani (intern_pharmacy_equipment); eski corner_info disarida.
+    _pos_class_kw = {}
+    _pos_class_raw = (request.GET.get("pos_class") or "").strip()
+    if _pos_class_raw:
+        _classes = [c.strip() for c in _pos_class_raw.split(",") if c.strip()]
+        if _classes:
+            try:
+                _pk_ids = _pharmacy_pk_ids_by_pos_class(brand, _classes)
+            except Exception:
+                _pk_ids = set()
+            _pos_class_kw["id_in"] = list(_pk_ids)
+
     try:
         result = service.query(brand=brand, search=search, page=page,
-                               **_country_kw, **filters)
+                               **_country_kw, **_pos_class_kw, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -1892,9 +1909,25 @@ def pharmacy_filter_options_api(request):
         "regions": _safe(repo.regions, brand, country=country),
         "cities": _safe(repo.cities, brand, country=country),
         "metros": _safe(repo.metros, brand),
+        # POS-class (оборудование class) filtresi secenekleri: prm_pos_
+        # classification.class distinct (Стойка/Корнер/Хардпостер...). Coklu
+        # secilebilir (frontend), OR mantigi. Brand'e bagli degil — tam liste.
+        "pos_classes": _safe(_pos_class_options),
     }
     cache.set(cache_key, result, 900)
     return Response(result)
+
+
+def _pos_class_options():
+    """prm_pos_classification.class distinct listesi (POS-class filtresi
+    dropdown'u). Bos/NULL atlanir, sirali doner."""
+    from django.db import connections
+    with connections["refdb"].cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT class FROM solgar_prm.prm_pos_classification "
+            "WHERE class IS NOT NULL AND class <> '' ORDER BY class"
+        )
+        return [r[0] for r in cur.fetchall()]
 
 
 
@@ -4639,6 +4672,75 @@ def _lookup_equip_id(promo, subtype, size, brand_code):
             return cand_full or cand_ps
     except Exception:
         return None
+
+
+def _pos_class_norm(s) -> str:
+    """POS-class eslesmesi icin normalize: upper + bosluk sadelestir + sondaki
+    cogul/tekil sesliyi at. prm_pos_classification.class (ornek 'Стойка') ile
+    intern_pharmacy_equipment.promo (ornek 'СТОЙКИ') arasindaki fark SADECE
+    buyuk/kucuk harf ve tekil/cogul son harf (Стойка/СТОЙКИ, и vs а). Son
+    sesliyi ('а','ы','и','я','о','е') atip upper'lamak ikisini de ayni koke
+    indirir: 'СТОЙК'. Digerleri (КОРНЕР, ПЛАКАТ, ...) zaten upper ile birebir;
+    onlarda son harf sessiz oldugu icin atilmaz (regex sadece sondaki sesliyi
+    siler). Kelimeler cok ayri oldugu icin kok-cakismasi olmaz."""
+    import re as _re
+    v = _re.sub(r"\s+", " ", (s or "").strip()).upper()
+    # tek kelimelik class'larda sondaki sesliyi at (СТОЙКА/СТОЙКИ -> СТОЙК).
+    # Birden cok kelimeliler (АНТИКРАЖНЫЕ ВОРОТА) oldugu gibi kalir — zaten upper
+    # ile birebir eslesir.
+    if " " not in v:
+        v = _re.sub(r"[АЫИЯОЕ]$", "", v)
+    return v
+
+
+def _pharmacy_pk_ids_by_pos_class(brand_full, classes):
+    """Secilen POS-class'lardan (prm_pos_classification.class, orn ['Стойка',
+    'Корнер']) HERHANGI BIRINE sahip ekipmani olan aptekalarin, aktif
+    pharmacy_data_* tablosundaki PK id kumesini dondur (OR mantigi).
+
+    Zincir: classes -> intern_pharmacy_equipment.promo (normalize eslesme,
+    _pos_class_norm) -> o ekipman kayitlarinin pharmacy_id (legacy) -> secili
+    brand'in pharmacy_data_* tablosunda status=1 satirlarin PK id'si
+    (pharmacy_id -> id). Sadece YENI platform ekipmani (intern_pharmacy_
+    equipment) kapsanir; eski solgar_cor.corner_info class tutmaz, disaridadir.
+
+    Donen: set[int] (bos olabilir -> hicbir eslesen apteka). Cagiran taraf
+    bunu service.query(id_in=...) olarak gecer.
+    """
+    from .models import PharmacyEquipment
+    from .repositories import PharmacyRepository
+
+    wanted = {_pos_class_norm(c) for c in (classes or []) if (c or "").strip()}
+    if not wanted:
+        return set()
+
+    brand_code = _equip_brand_code(brand_full)  # SL / BN
+    # Ekipman tablosundaki brand degeri 'SOLGAR'/'BOUNTY' (model default). SL->
+    # SOLGAR/OBF, BN->BOUNTY. _equip_brand_code zaten SL/BN veriyor; ekipman
+    # brand'ini de ayni mantikla eslestir.
+    eq_qs = PharmacyEquipment.objects.all()
+    if brand_code == "BN":
+        eq_qs = eq_qs.filter(brand__iexact="BOUNTY") | eq_qs.filter(brand__iexact="BN")
+    else:
+        # SL: SOLGAR / OBF / SL (Bounty olmayan hepsi)
+        eq_qs = eq_qs.exclude(brand__iexact="BOUNTY").exclude(brand__iexact="BN")
+
+    # Secilen class'lara (normalize) uyan ekipman kayitlarinin legacy pharmacy_id'si
+    legacy_ids = set()
+    for pid, promo in eq_qs.values_list("pharmacy_id", "promo"):
+        if _pos_class_norm(promo) in wanted:
+            if pid:
+                legacy_ids.add(pid)
+    if not legacy_ids:
+        return set()
+
+    # legacy pharmacy_id -> pharmacy_data_* PK id (secili brand, status=1)
+    model = PharmacyRepository()._model_for(brand_full)
+    pk_ids = set(
+        model.objects.filter(status=1, pharmacy_id__in=list(legacy_ids))
+        .values_list("id", flat=True)
+    )
+    return pk_ids
 
 
 def _lookup_image_id(imidzh, brand_code):
