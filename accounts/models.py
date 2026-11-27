@@ -97,6 +97,30 @@ class User(AbstractUser):
         help_text="only = только allowed_countries; except = все, кроме "
                   "allowed_countries; none = использовать одно поле country.",
     )
+    # Territory manager kapsami (teritori bolgesi). solgar_address_group
+    # hiyerarsisi: district (buyuk: South, Ural, Volga, Siberia, Moscow...) ->
+    # region (alt: Rostov, Krasnodar, Kazan...). territory_manager seviyesindeki
+    # kullanicinin dashboard'u SADECE bu kapsamdaki eczaneleri gosterir.
+    # allowed_districts bos VE allowed_regions bos ise kapsam yok demektir
+    # (admin/is_staff tumunu gorur; sira disi bir TM icin bos = veri yok).
+    # Ikisi birlikte kullanilabilir: district verilince o district'in TUM
+    # region'lari; region verilince yalniz o region'lar. (Olga: ikisi de.)
+    allowed_districts = models.JSONField(
+        "Разрешённые округа (district, список)",
+        default=list,
+        blank=True,
+        help_text="Список district'ов (как в solgar_address_group.district, "
+                  "напр. ['South','Ural']). Для territory_manager: его "
+                  "территория. Работает вместе с allowed_regions.",
+    )
+    allowed_regions = models.JSONField(
+        "Разрешённые регионы (region, список)",
+        default=list,
+        blank=True,
+        help_text="Список region'ов (как в solgar_address_group.region, "
+                  "напр. ['Rostov','Krasnodar']). Для territory_manager: его "
+                  "территория. Работает вместе с allowed_districts.",
+    )
     is_enabled = models.BooleanField(
         "Is enabled",
         default=True,

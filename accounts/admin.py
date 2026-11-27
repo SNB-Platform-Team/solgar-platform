@@ -32,6 +32,20 @@ class UserAdmin(BaseUserAdmin):
                 ),
             },
         ),
+        (
+            "Территория (territory_manager)",
+            {
+                "fields": ("allowed_districts", "allowed_regions"),
+                "description": (
+                    "Для пользователей уровня territory_manager: их территория. "
+                    "«Разрешённые округа» — список district (напр. [\"South\"]); "
+                    "«Разрешённые регионы» — список region (напр. "
+                    "[\"Rostov\",\"Krasnodar\"]). Можно заполнить оба. Дашборд "
+                    "территориального менеджера показывает только аптеки этой "
+                    "территории."
+                ),
+            },
+        ),
     )
 
 

@@ -33,6 +33,13 @@ urlpatterns = [
     path("api/doctor-managerial/export/", api.doctor_managerial_export_api, name="doctor_managerial_export_api"),
     path("api/pharm-managerial/", api.pharm_managerial_api, name="pharm_managerial_api"),
     path("api/pharm-managerial/export/", api.pharm_managerial_export_api, name="pharm_managerial_export_api"),
+    # Territory manager dashboard (4 tablo + filtre + export). Yalniz
+    # access_level.name == 'territory_manager' / is_staff erisir (view icinde gate).
+    path("api/tm-dashboard/", api.territory_manager_dashboard_api, name="tm_dashboard_api"),
+    path("api/tm-dashboard/export/region/", api.tm_dashboard_export_region_api, name="tm_dashboard_export_region_api"),
+    path("api/tm-dashboard/export/medrep/", api.tm_dashboard_export_medrep_api, name="tm_dashboard_export_medrep_api"),
+    path("api/tm-dashboard/export/activeness/", api.tm_dashboard_export_activeness_api, name="tm_dashboard_export_activeness_api"),
+    path("api/tm-dashboard/export/category/", api.tm_dashboard_export_category_api, name="tm_dashboard_export_category_api"),
     path("api/pharmacy/", api.pharmacy_api, name="pharmacy_api"),
     path("api/pharmacy/export/", api.pharmacy_export_api, name="pharmacy_export_api"),
     path("api/doctor/export/", api.doctor_export_api, name="doctor_export_api"),
@@ -82,7 +89,7 @@ urlpatterns = [
     path("api/pharmacy/detail/", api.pharmacy_detail_api, name="pharmacy_detail_api"),
     path("api/pharmacy/corner-log/", api.pharmacy_corner_log_api, name="pharmacy_corner_log_api"),
     path("api/pharmacy/equipment/save/", api.pharmacy_equipment_save_api, name="pharmacy_equipment_save_api"),
-    path("api/pharmacy/equipment/update/", api.pharmacy_equipment_update_api, name="pharmacy_equipment_update_api"),    
+    path("api/pharmacy/equipment/update/", api.pharmacy_equipment_update_api, name="pharmacy_equipment_update_api"),
     path("api/pharmacy/equipment/delete/", api.pharmacy_equipment_delete_api, name="pharmacy_equipment_delete_api"),
     path("api/pharmacy/equipment/meta/", api.pharmacy_equipment_meta_api, name="pharmacy_equipment_meta_api"),
     path("api/pharmacy/equipment/subtypes/", api.pharmacy_equipment_subtypes_api, name="pharmacy_equipment_subtypes_api"),

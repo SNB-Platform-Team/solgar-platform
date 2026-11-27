@@ -353,9 +353,7 @@ _PHARMACY_API_COLUMNS = [
     ("assortiment", "ASSORTMENT"),
     ("pharmacy_category", "PHARMACY CATEGORY"),
     ("pharmacy_type", "PHARMACY_TYPE"),
-    # PROMO kolonu tablodan kaldirildi (Olga: onemli degil). Filtrelerde ve
-    # diger akislarda promo alani durmaya devam ediyor; sadece bu listede
-    # (tablo + «Скачать в Excel») gosterilmiyor.
+    ("promo", "PROMO"),
     ("pharmacy_activeness", "Pharmacy Activeness"),
     ("pharmacy_activation_date", "Pharmacy Activation Date"),
     ("pharmacy_response_person", "PHARM HEAD NAME"),
@@ -450,19 +448,9 @@ def pharmacy_api(request):
     elif _cmode == "except":
         _country_kw["country_not_in"] = _ccountries
 
-    # «Оборудование» filtresi: "" (Все) / "yes" (Есть) / "no" (Нет).
-    # Ekipmani olan aptekalarin PK id kumesi TEK SEFERDE hesaplanir (satir
-    # basina sorgu yok) ve service'e id_in / id_not_in olarak gecer.
-    _equip = (request.GET.get("equipment") or "").strip().lower()
-    _equip_kw = {}
-    if _equip in ("yes", "y", "1", "true", "есть"):
-        _equip_kw["id_in"] = list(_equipment_pharmacy_pk_ids(brand))
-    elif _equip in ("no", "n", "0", "false", "нет"):
-        _equip_kw["id_not_in"] = list(_equipment_pharmacy_pk_ids(brand))
-
     try:
         result = service.query(brand=brand, search=search, page=page,
-                               **_country_kw, **_equip_kw, **filters)
+                               **_country_kw, **filters)
     except Exception as exc:
         return Response({"error": f"Ошибка загрузки: {exc}"}, status=500)
 
@@ -4766,79 +4754,6 @@ def _equipment_photo_list(eq):
     return out
 
 
-def _equipment_pharmacy_pk_ids(brand):
-    """«Оборудование» filtresi: EKIPMANI OLAN aptekalarin PLATFORM PK id
-    kumesini (set) dondurur. /pharmacies listesindeki 'Оборудование: Есть/Нет'
-    filtresi icin — tek seferde (satir-satir degil) hesaplanir.
-
-    Ekipman iki kaynaktan gelir (bkz. _fetch_corner_rows):
-      1) Yeni tablo  : PharmacyEquipment.pharmacy_id  (legacy pharmacy_id)
-      2) Eski tablo  : solgar_cor.corner_info.{solgar|bounty}_pharm_id
-                       (= pharmacy_data_{brand}.pharmacy_id, legacy)
-    Ikisinin birlesimi = ekipmani olan LEGACY pharmacy_id kumesi. Bu legacy
-    id'ler pharmacy_data_{brand} uzerinden PLATFORM PK id'ye cevrilir (liste
-    sorgusu PK id ile filtreler). Hicbiri yoksa bos set doner.
-    """
-    from django.db import connections
-    b = (brand or "SOLGAR").upper()
-    is_bounty = ("BOUNTY" in b or b == "BN")
-    pharm_col = "bounty_pharm_id" if is_bounty else "solgar_pharm_id"
-    data_table = "pharmacy_data_bounty" if is_bounty else "pharmacy_data_solgar"
-    brand_key = "BOUNTY" if is_bounty else "SOLGAR"
-
-    legacy_ids = set()
-
-    # 1) Yeni tablo (PharmacyEquipment) — tek distinct sorgu.
-    try:
-        from .models import PharmacyEquipment
-        for pid in (PharmacyEquipment.objects
-                    .filter(brand=brand_key)
-                    .values_list("pharmacy_id", flat=True).distinct()):
-            if pid:
-                legacy_ids.add(int(pid))
-    except Exception:
-        pass
-
-    # 2) Eski tablo (corner_info) — tek distinct sorgu.
-    try:
-        with connections["refdb"].cursor() as cur:
-            cur.execute(
-                f"SELECT DISTINCT {pharm_col} FROM solgar_cor.corner_info "
-                f"WHERE {pharm_col} IS NOT NULL AND {pharm_col} > 0"
-            )
-            for (pid,) in cur.fetchall():
-                if pid:
-                    legacy_ids.add(int(pid))
-    except Exception:
-        pass
-
-    if not legacy_ids:
-        return set()
-
-    # Legacy pharmacy_id -> platform PK id (pharmacy_data_{brand}). Buyuk IN
-    # listesini parcalara bolerek sorgula (MySQL IN limiti / paket boyutu).
-    pk_ids = set()
-    legacy_list = list(legacy_ids)
-    CH = 5000
-    try:
-        with connections["refdb"].cursor() as cur:
-            for i in range(0, len(legacy_list), CH):
-                chunk = legacy_list[i:i + CH]
-                placeholders = ",".join(["%s"] * len(chunk))
-                cur.execute(
-                    f"SELECT id FROM solgar_tst.{data_table} "
-                    f"WHERE pharmacy_id IN ({placeholders})",
-                    chunk,
-                )
-                for (rid,) in cur.fetchall():
-                    if rid is not None:
-                        pk_ids.add(int(rid))
-    except Exception:
-        pass
-
-    return pk_ids
-
-
 def _fetch_corner_rows(pharmacy_id, brand):
     """Bir aptek'in ekipman kayitlari: eski solgar_cor.corner_info (salt-okunur)
     + platformun kendi PharmacyEquipment tablosu (silinebilir). Birlikte doner.
@@ -6390,3 +6305,336 @@ def security_dashboard_api(request):
         "recent_activity": recent_activity,
         "error": error,
     })
+
+
+# ============================================================================
+# TERRITORY MANAGER DASHBOARD
+# ----------------------------------------------------------------------------
+# Sadece access_level.name == "territory_manager" (admin panelde 'territory_
+# manager', rank 50) kullanicilar icindir. Alt alta 4 tablo:
+#   1) Region · Category · Активность · Кол-во   (bolge kirilimli)
+#   2) Медреп · Category · Активность · Кол-во   (medrep kirilimli)
+#   3) Активность · Кол-во                        (district geneli toplam)
+#   4) Category · Кол-во                          (kategori geneli)
+# Kol-vo = ECZANE adedi (satis yok). Kaynak: pharmacy_data_solgar +
+# pharmacy_data_bounty (status=1), Django ORM values().annotate(Count).
+# Her iki marka (Solgar + Nature's Bounty); brand filtresiyle daraltilabilir.
+# Aktivnost'un ucu de gosterilir (Актив / Не Актив / Закрыта).
+#
+# KAPSAM (scope): kullanicinin allowed_districts + allowed_regions alanlari.
+# district'ler solgar_address_group uzerinden region listesine cevrilir, sonra
+# eczaneler REGION ile filtrelenir (region kolonu her iki pharmacy tablosunda
+# da guvenilir dolu; district kolonu her zaman dolu olmayabilir). Kapsam
+# BOS ise (hicbir district/region atanmamis) ve kullanici staff DEGILSE veri
+# gosterilmez (guvenlik: kapsamsiz TM her seyi gormesin). is_staff tumunu gorur.
+# ============================================================================
+
+def _tm_is_territory_manager(user) -> bool:
+    """access_level.name (buyuk/kucuk duyarsiz) 'territory_manager' mi?"""
+    level = getattr(user, "access_level", None)
+    name = (getattr(level, "name", "") or "").strip().lower()
+    return name == "territory_manager"
+
+
+def _tm_scope_regions(user):
+    """Kullanicinin kapsamindaki REGION listesi (set). allowed_regions dogrudan;
+    allowed_districts -> solgar_address_group'tan o district'lerin region'lari.
+    Donen deger:
+      None  -> kapsam SINIRSIZ (is_staff): tum veriyi gor.
+      set() (bos) -> kapsam yok: veri gosterme.
+      {..}  -> yalniz bu region'lar.
+    """
+    from django.db import connections
+
+    if getattr(user, "is_staff", False):
+        return None  # sinirsiz
+
+    regions = set()
+    for r in (getattr(user, "allowed_regions", None) or []):
+        r = (str(r) or "").strip()
+        if r:
+            regions.add(r)
+
+    districts = [(str(d) or "").strip() for d in (getattr(user, "allowed_districts", None) or [])]
+    districts = [d for d in districts if d]
+    if districts:
+        # district -> region (solgar_address_group). refdb baglantisi.
+        placeholders = ",".join(["%s"] * len(districts))
+        sql = (
+            "SELECT DISTINCT region FROM solgar_tst.solgar_address_group "
+            "WHERE district IN (" + placeholders + ") "
+            "AND region IS NOT NULL AND region <> ''"
+        )
+        try:
+            with connections["refdb"].cursor() as cur:
+                cur.execute(sql, districts)
+                for row in cur.fetchall():
+                    v = (row[0] or "").strip()
+                    if v:
+                        regions.add(v)
+        except Exception:
+            # address_group okunamazsa district'leri yok say; region'lar kalir.
+            pass
+
+    return regions
+
+
+def _tm_pharmacy_querysets(brand=""):
+    """Kapsama alinacak pharmacy modellerini dondur (status=1 filtreli qs listesi).
+    brand bos -> ikisi; 'SOLGAR'/'BOUNTY' -> yalniz biri. Her eleman
+    (brand_label, queryset)."""
+    from .models import PharmacySolgar, PharmacyBounty
+
+    b = (brand or "").strip().upper()
+    out = []
+    if b in ("", "SOLGAR", "SL", "OBF"):
+        out.append(("SOLGAR", PharmacySolgar.objects.filter(status=1)))
+    if b in ("", "BOUNTY", "NATURES BOUNTY", "NATURE'S BOUNTY", "BN"):
+        out.append(("BOUNTY", PharmacyBounty.objects.filter(status=1)))
+    if not out:  # taninmayan brand -> ikisi
+        out = [
+            ("SOLGAR", PharmacySolgar.objects.filter(status=1)),
+            ("BOUNTY", PharmacyBounty.objects.filter(status=1)),
+        ]
+    return out
+
+
+def _tm_apply_filters(qs, scope_regions, region, medrep, activeness, category, search):
+    """Ortak filtreler. scope_regions: None=sinirsiz, set=yalniz bunlar."""
+    from django.db.models import Q
+
+    if scope_regions is not None:
+        qs = qs.filter(region__in=list(scope_regions))
+    if region:
+        qs = qs.filter(region=region)
+    if medrep:
+        qs = qs.filter(marketing_staff=medrep)
+    if activeness:
+        qs = qs.filter(pharmacy_activeness=activeness)
+    if category:
+        qs = qs.filter(pharmacy_category=category)
+    if search:
+        qs = qs.filter(
+            Q(region__icontains=search)
+            | Q(marketing_staff__icontains=search)
+            | Q(pharmacy_activeness__icontains=search)
+            | Q(pharmacy_category__icontains=search)
+        )
+    return qs
+
+
+def _tm_build_tables(scope_regions, brand, region, medrep, activeness, category, search):
+    """4 tabloyu uretir. Her tablo {columns, rows}. Kol-vo = eczane adedi.
+    Her iki markanin querysetleri uzerinde ayni gruplama yapilip toplanir
+    (ayni (region,cat,act) iki tabloda da varsa adetler toplanir)."""
+    from django.db.models import Count
+
+    qsets = _tm_pharmacy_querysets(brand)
+
+    # Ortak filtre uygulanmis querysetler
+    filtered = [
+        (lbl, _tm_apply_filters(qs, scope_regions, region, medrep,
+                                activeness, category, search))
+        for lbl, qs in qsets
+    ]
+
+    def _blank(v):
+        v = (v or "").strip() if isinstance(v, str) else v
+        return v or "—"
+
+    # --- Tablo 1: Region · Category · Активность · Кол-во ---
+    t1 = {}
+    for _lbl, qs in filtered:
+        rows = (qs.values("region", "pharmacy_category", "pharmacy_activeness")
+                  .annotate(c=Count("id")))
+        for r in rows:
+            key = (_blank(r["region"]), _blank(r["pharmacy_category"]),
+                   _blank(r["pharmacy_activeness"]))
+            t1[key] = t1.get(key, 0) + r["c"]
+    t1_rows = sorted(([k[0], k[1], k[2], v] for k, v in t1.items()),
+                     key=lambda x: (x[0], x[1], x[2]))
+
+    # --- Tablo 2: Медреп · Category · Активность · Кол-во ---
+    t2 = {}
+    for _lbl, qs in filtered:
+        rows = (qs.values("marketing_staff", "pharmacy_category", "pharmacy_activeness")
+                  .annotate(c=Count("id")))
+        for r in rows:
+            key = (_blank(r["marketing_staff"]), _blank(r["pharmacy_category"]),
+                   _blank(r["pharmacy_activeness"]))
+            t2[key] = t2.get(key, 0) + r["c"]
+    t2_rows = sorted(([k[0], k[1], k[2], v] for k, v in t2.items()),
+                     key=lambda x: (x[0], x[1], x[2]))
+
+    # --- Tablo 3: Активность · Кол-во (district geneli) ---
+    t3 = {}
+    for _lbl, qs in filtered:
+        rows = qs.values("pharmacy_activeness").annotate(c=Count("id"))
+        for r in rows:
+            key = _blank(r["pharmacy_activeness"])
+            t3[key] = t3.get(key, 0) + r["c"]
+    t3_rows = sorted(([k, v] for k, v in t3.items()), key=lambda x: x[0])
+
+    # --- Tablo 4: Category · Кол-во ---
+    t4 = {}
+    for _lbl, qs in filtered:
+        rows = qs.values("pharmacy_category").annotate(c=Count("id"))
+        for r in rows:
+            key = _blank(r["pharmacy_category"])
+            t4[key] = t4.get(key, 0) + r["c"]
+    t4_rows = sorted(([k, v] for k, v in t4.items()), key=lambda x: x[0])
+
+    return {
+        "by_region": {
+            "columns": ["Регион", "Категория", "Активность", "Кол-во"],
+            "rows": t1_rows,
+        },
+        "by_medrep": {
+            "columns": ["Медреп", "Категория", "Активность", "Кол-во"],
+            "rows": t2_rows,
+        },
+        "by_activeness": {
+            "columns": ["Активность", "Кол-во"],
+            "rows": t3_rows,
+        },
+        "by_category": {
+            "columns": ["Категория", "Кол-во"],
+            "rows": t4_rows,
+        },
+    }
+
+
+def _tm_filter_options(scope_regions, brand):
+    """Dashboard filtre dropdownlari: region, medrep, activeness, category.
+    Yalniz kapsam icindeki distinct degerler. (brand bos ise ikisinden de.)"""
+    qsets = _tm_pharmacy_querysets(brand)
+    regions, medreps, acts, cats = set(), set(), set(), set()
+    for _lbl, qs in qsets:
+        if scope_regions is not None:
+            qs = qs.filter(region__in=list(scope_regions))
+        for v in qs.exclude(region__isnull=True).exclude(region="").values_list("region", flat=True).distinct():
+            if v and v.strip():
+                regions.add(v.strip())
+        for v in qs.exclude(marketing_staff__isnull=True).exclude(marketing_staff="").values_list("marketing_staff", flat=True).distinct():
+            if v and v.strip():
+                medreps.add(v.strip())
+        for v in qs.exclude(pharmacy_activeness__isnull=True).exclude(pharmacy_activeness="").values_list("pharmacy_activeness", flat=True).distinct():
+            if v and v.strip():
+                acts.add(v.strip())
+        for v in qs.exclude(pharmacy_category__isnull=True).exclude(pharmacy_category="").values_list("pharmacy_category", flat=True).distinct():
+            if v and v.strip():
+                cats.add(v.strip())
+    return {
+        "regions": sorted(regions),
+        "medreps": sorted(medreps),
+        "activenesses": sorted(acts),
+        "categories": sorted(cats),
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def territory_manager_dashboard_api(request):
+    """Territory manager dashboard: 4 tablo + filtre secenekleri.
+
+    Query params (hepsi opsiyonel):
+      brand       '' | SOLGAR | BOUNTY  (bos = ikisi)
+      region, medrep, activeness, category   (filtre)
+      search      tum tablolarda arama
+
+    Yalniz access_level.name == 'territory_manager' VEYA is_staff erisebilir.
+    Kapsamsiz (district/region atanmamis) TM icin bos veri doner (uyari ile).
+    """
+    user = request.user
+    if not (_tm_is_territory_manager(user) or getattr(user, "is_staff", False)):
+        return Response(
+            {"error": "Доступ только для территориальных менеджеров."},
+            status=403,
+        )
+
+    brand = (request.GET.get("brand") or "").strip()
+    region = (request.GET.get("region") or "").strip()
+    medrep = (request.GET.get("medrep") or "").strip()
+    activeness = (request.GET.get("activeness") or "").strip()
+    category = (request.GET.get("category") or "").strip()
+    search = (request.GET.get("search") or "").strip()
+
+    scope_regions = _tm_scope_regions(user)
+
+    # Kapsam yok (bos set) ve staff degil -> veri gosterme.
+    scope_empty = (scope_regions is not None and len(scope_regions) == 0)
+    warning = ""
+    if scope_empty:
+        warning = ("Для вашей учётной записи не задана территория "
+                   "(округа/регионы). Обратитесь к администратору.")
+        empty_tables = {
+            "by_region": {"columns": ["Регион", "Категория", "Активность", "Кол-во"], "rows": []},
+            "by_medrep": {"columns": ["Медреп", "Категория", "Активность", "Кол-во"], "rows": []},
+            "by_activeness": {"columns": ["Активность", "Кол-во"], "rows": []},
+            "by_category": {"columns": ["Категория", "Кол-во"], "rows": []},
+        }
+        return Response({
+            "tables": empty_tables,
+            "options": {"brands": ["SOLGAR", "BOUNTY"], "regions": [], "medreps": [],
+                        "activenesses": [], "categories": []},
+            "f": {"brand": brand, "region": region, "medrep": medrep,
+                  "activeness": activeness, "category": category, "search": search},
+            "warning": warning,
+            "error": "",
+        })
+
+    try:
+        tables = _tm_build_tables(scope_regions, brand, region, medrep,
+                                  activeness, category, search)
+        options = _tm_filter_options(scope_regions, brand)
+    except Exception as exc:
+        return Response({"error": f"Ошибка дашборда: {exc}"}, status=500)
+
+    options["brands"] = ["SOLGAR", "BOUNTY"]
+    return Response({
+        "tables": tables,
+        "options": options,
+        "f": {"brand": brand, "region": region, "medrep": medrep,
+              "activeness": activeness, "category": category, "search": search},
+        "warning": warning,
+        "error": "",
+    })
+
+
+def _tm_export_one(request, table_key, filename):
+    """Dashboard API'sini ic cagiriyla calistirip SECILEN tablonun
+    columns/rows'unu .xlsx'e cevirir (ekrandaki tabloyla birebir)."""
+    http_req = getattr(request, "_request", request)
+    try:
+        resp = territory_manager_dashboard_api(http_req)
+        data = getattr(resp, "data", None) or {}
+    except Exception as exc:
+        return Response({"error": f"Ошибка выгрузки: {exc}"}, status=500)
+    if data.get("error"):
+        return Response({"error": data["error"]}, status=getattr(resp, "status_code", 400))
+    table = (data.get("tables") or {}).get(table_key) or {}
+    return _rows_to_xlsx_response(table.get("columns", []), table.get("rows", []), filename)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def tm_dashboard_export_region_api(request):
+    return _tm_export_one(request, "by_region", "territory_po_regionam")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def tm_dashboard_export_medrep_api(request):
+    return _tm_export_one(request, "by_medrep", "territory_po_medrepam")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def tm_dashboard_export_activeness_api(request):
+    return _tm_export_one(request, "by_activeness", "territory_po_aktivnosti")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def tm_dashboard_export_category_api(request):
+    return _tm_export_one(request, "by_category", "territory_po_kategoriyam")
